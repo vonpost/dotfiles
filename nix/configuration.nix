@@ -34,8 +34,11 @@
     defaultLocale = "en_US.UTF-8";
   };
   # Shell aliases
-  enviroment.shellAliases = {
-    em = "emacsclient -c"
+  environment.shellAliases = {
+    em = "emacsclient -c";
+    editnix = "em ~/dotfiles/nix/configuration.nix";
+    updatenix = "sh ~/dotfiles/nix/updateConfig.sh";
+  };
   # Set your time zone.
   time.timeZone = "Europe/Amsterdam";
 
@@ -110,6 +113,8 @@
       org
       python-mode
       frames-only-mode
+      ivy
+
   ]));
   
   # Enable the OpenSSH daemon.
@@ -125,23 +130,59 @@
   # services.printing.enable = true;
 
   # Enable the X11 and xmonad.
-  services.xserver.enable = true;
-  services.xserver.layout = "us";
-  services.xserver.xkbOptions = "eurosign:e";
-  services.xserver.windowManager.xmonad = {
-	enable = true;
-	enableContribAndExtras = true;
-	extraPackages = haskellPackages: [
-		haskellPackages.xmonad-contrib
-		haskellPackages.xmonad-extras
-		haskellPackages.xmonad
-	];
-  };
-  services.xserver.windowManager.default = "xmonad";
+  # services.xserver.enable = true;
+  # services.xserver.layout = "us";
+  # services.xserver.xkbOptions = "eurosign:e";
+  # services.xserver.windowManager.xmonad = {
+  # 	enable = true;
+  # 	enableContribAndExtras = true;
+  # 	extraPackages = haskellPackages: [
+  # 		haskellPackages.xmonad-contrib
+  # 		haskellPackages.xmonad-extras
+  # 		haskellPackages.xmonad
+  # 	];
+  # };
+  # services.xserver.windowManager.default = "xmonad";
 
-  # Enable touchpad support.
-  services.xserver.libinput.enable = true;
-  services.xserver.displayManager.slim.enable = true;
+  # enable X11
+  services.xserver = {
+    enable = true;
+    layout = "us";
+    xkbOptions = "eurosign:e";
+
+
+    # WINDOW MANAGER
+    windowManager = {
+      default = "xmonad";
+      xmonad = {
+        enable = true;
+        enableContribAndExtras = true;
+        extraPackages = haskellPackages: [
+          haskellPackages.xmonad-contrib
+	  haskellPackages.xmonad-extras
+	  haskellPackages.xmonad
+	];
+       };
+    };
+
+    # ENABLE TOUCHPAD
+    libinput.enable = true;
+
+    # DISPLAY MANAGER
+
+    displayManager.sessionCommands = ''
+        ${pkgs.xlibs.xsetroot}/bin/xsetroot -cursor_name left_ptr # Set cursor
+        ${pkgs.xlibs.xsetroot}/bin/xsetroot -solid pink # Set bg color
+    '';
+
+    displayManager.slim = {
+      enable = true;
+      defaultUser = "dcol";
+      autoLogin = true;    
+    };
+  };
+  # services.xserver.libinput.enable = true;
+  # services.xserver.displayManager.slim.enable = true;
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.extraUsers.dcol = {
