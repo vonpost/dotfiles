@@ -1,0 +1,41 @@
+{ config, pkgs, ... }:
+
+let pulse = pkgs.pulseaudioLight.override { jackaudioSupport = true; };
+in
+{ hardware.pulseaudio = {
+    enable = true;
+    support32Bit = true;
+    package = pulse;
+  };
+
+  environment.systemPackages = with pkgs; [ jack2Full ];
+
+  systemd.user.services = {
+    jackdbus = {
+      description = "Runs jack, and points pulseaudio at it";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = pkgs.writeScript "start_jack.sh" ''
+          #! ${pkgs.bash}/bin/bash
+          . ${config.system.build.setEnvironment}
+          dbus-update-activation-environment --systemd DBUS_SESSION_BUS_ADDRESS DISPLAY XAUTHORITY
+          ${pkgs.jack2Full}/bin/jack_control start
+	  sleep 2
+          ${pulse}/bin/pacmd load-module module-jack-sink channels=2
+	  ${pulse}/bin/pacmd load-module module-jack-source channels=2
+          sleep 3 # give some time for sources/sinks to be created
+          ${pulse}/bin/pacmd set-default-sink jack_out
+          ${pulse}/bin/pacmd set-default-source jack_in
+        '';
+        ExecStop = pkgs.writeScript "stop_jack.sh" ''
+          #! ${pkgs.bash}/bin/bash
+          . ${config.system.build.setEnvironment}
+
+          ${pkgs.jack2Full}/bin/jack_control stop
+        '';
+        RemainAfterExit = true;
+      };
+      wantedBy = [ "default.target" ];
+    };
+  };
+}

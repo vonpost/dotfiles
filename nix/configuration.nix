@@ -8,6 +8,7 @@
   imports =
     [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
+      ./audio.nix
     ];
   # periodic GC
   nix.gc.automatic = true;
@@ -17,9 +18,8 @@
   # Use the GRUB 2 boot loader.
   boot.loader.grub.enable = true;
   boot.loader.grub.version = 2;
-  # boot.loader.grub.efiSupport = true;
-  # boot.loader.grub.efiInstallAsRemovable = true;
-  # boot.loader.efi.efiSysMountPoint = "/boot/efi";
+
+
   # Define on which hard drive you want to install Grub.
   boot.loader.grub.device = "/dev/sda"; # or "nodev" for efi only
   boot.extraModulePackages = [ config.boot.kernelPackages.acpi_call config.boot.kernelPackages.tp_smapi ];
@@ -85,6 +85,12 @@
     tlp
     acpi
 
+    # TIDAL
+    haskellPackages.tidal
+    supercollideR
+    jack2Full
+ 
+    # HASKELL
     # XMONAD stuff
     haskellPackages.xmonad-contrib
     haskellPackages.xmonad-extras
@@ -114,6 +120,7 @@
       python-mode
       frames-only-mode
       ivy
+      tidal
 
   ]));
   
@@ -129,22 +136,7 @@
   # Enable CUPS to print documents.
   # services.printing.enable = true;
 
-  # Enable the X11 and xmonad.
-  # services.xserver.enable = true;
-  # services.xserver.layout = "us";
-  # services.xserver.xkbOptions = "eurosign:e";
-  # services.xserver.windowManager.xmonad = {
-  # 	enable = true;
-  # 	enableContribAndExtras = true;
-  # 	extraPackages = haskellPackages: [
-  # 		haskellPackages.xmonad-contrib
-  # 		haskellPackages.xmonad-extras
-  # 		haskellPackages.xmonad
-  # 	];
-  # };
-  # services.xserver.windowManager.default = "xmonad";
-
-  # enable X11
+  # Enable X11
   services.xserver = {
     enable = true;
     layout = "us";
@@ -190,14 +182,10 @@
     createHome = true;
     home = "/home/dcol/";
     description = "Daniel Collin";
-    extraGroups = [ "wheel" "networkmanager"];
+    extraGroups = ["audio" "wheel" "networkmanager"];
     useDefaultShell = true;
   };
   security.sudo.enable = true;
-  hardware.pulseaudio = {
-     enable = true;
-     support32Bit = true;
-  };
   hardware.opengl = {
      enable = true;
      driSupport = true;

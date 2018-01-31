@@ -1,1 +1,1 @@
-sudo cp -f configuration.nix /etc/nixos/configuration.nix && sudo nixos-rebuild switch
+sudo cp -f ~/dotfiles/nix/*.nix /etc/nixos/ && sudo nixos-rebuild switch
