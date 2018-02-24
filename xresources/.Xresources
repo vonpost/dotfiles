@@ -1,0 +1,103 @@
+!{{{ XFT
+!Xft.dpi:       96
+!Xft.antialias: 1
+!Xft.hinting:   1
+!Xft.hintstyle: hintfull
+!Xft.rgba:      rgb
+!}}}
+ 
+!{{{ URxvt
+! do not scroll with output
+URxvt*scrollTtyOutput: false
+! scroll in relation to buffer (with mouse scroll or Shift+Page Up)
+URxvt*scrollWithBuffer: true
+! scroll back to the bottom on keypress
+URxvt*scrollTtyKeypress: true
+! pers exts and url handling
+URxvt.perl-ext-common: default,matcher,selection-to-clipboard
+URxvt.url-launcher: /usr/bin/xdg-open
+URxvt.matcher.button: 1
+!URxvt.keysym.C-u: perl:matcher:last
+URxvt.keysym.M-u: perl:matcher:list
+! dimensions and color
+urxvt*geometry: 140x40
+URxvt.depth:      32
+URxvt.background: [88]#0d0917
+!URxvt.background: [90]#0c0c0c
+!URxvt.background: [90]#1E1E27
+!URxvt*fading:  30
+ 
+!! fake transparancy
+!URxvt*.transparent: true
+! URxvt*.shading: 0 to 99 darkens, 101 to 200 lightens
+!URxvt*.shading: 35
+ 
+!URxvt.font: xft:DejaVu Sans Mono for Powerline:size=9
+URxvt.font: xft:xos4 Terminess Powerline:size=12
+!URxvt.font: -*-terminesspowerline-medium-*-*-*-*-*-72-*-*-*-*-*
+!URxvt.font: -*-terminesspowerline-medium-*-*-*-*-*-100-*-*-*-*-*
+!URxvt.letterSpace: -1
+ 
+URxvt.scrollBar: false
+!!{{{ colors - brighter jwk:
+!!brighter jwr ! !JWR dark scheme; see:
+!! https://terminal.sexy/#AAAA____MzMzjEZlKHNzfHyZOVVzXkaMMWWMiZyhPT09v02AU6amnp7LR3qzfmKzYJa_wMDA
+ 
+ 
+! special
+*.foreground:   #94aef2
+*.background:   #000000
+*.cursorColor:  #94aef2
+ 
+! black
+*.color0:       #151515
+*.color8:       #3d3d3d
+ 
+! red
+*.color1:       #b92a6a
+*.color9:       #da0c68
+ 
+! green
+*.color2:       #0e9999
+*.color10:      #19c2c2
+ 
+! yellow
+*.color3:       #3b3bab
+*.color11:      #5959e7
+ 
+! blue
+*.color4:       #105bad
+*.color12:      #227cdf
+ 
+! magenta
+*.color5:       #582fa6
+*.color13:      #6737c2
+ 
+! cyan
+*.color6:       #266da2
+*.color14:      #6096bf
+ 
+! white
+*.color7:       #899ca1
+*.color15:      #c0c0c0
+! !}}} /colors
+! !}}} /urxvt
+ 
+!{{{ Rofi config
+rofi.color-enabled: true
+rofi.color-window: #101010, #3991f1, #3991f1
+rofi.color-normal: #101010, #ffffff, #181818, #6833ff, #ffffff
+rofi.color-active: #101010, #6833ff, #181818, #6833ff, #ffffff
+rofi.color-urgent: #101010, #f3843d, #181818, #6833ff, #ffc39c
+rofi.separator-style:solid
+rofi.font:xos4 Terminess Powerline 8
+rofi.bw: 2
+rofi.width: -80
+rofi.scroll-method: 1
+rofi.fixed-num-lines: false
+!rofi.lines: 10
+!}}}
+ 
+ 
+!include local overrides
+!#include ".Xresources.local"
