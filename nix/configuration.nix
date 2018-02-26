@@ -38,6 +38,7 @@
   # Shell aliases
   environment.shellAliases = {
     em = "emacsclient -c";
+    emt = "emacsclient -nw";
     editnix = "em ~/dotfiles/nix/configuration.nix";
     updatenix = "sh ~/dotfiles/nix/updateConfig.sh";
   };

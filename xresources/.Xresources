@@ -29,11 +29,11 @@ URxvt.background: [88]#0d0917
  
 !! fake transparancy
 !URxvt*.transparent: true
-! URxvt*.shading: 0 to 99 darkens, 101 to 200 lightens
+!URxvt*.shading: 0 to 99 darkens, 101 to 200 lightens
 !URxvt*.shading: 35
  
 !URxvt.font: xft:DejaVu Sans Mono for Powerline:size=9
-URxvt.font: xft:xos4 Terminess Powerline:size=12
+URxvt.font: xft:xos4 Terminess Powerline:size=13
 !URxvt.font: -*-terminesspowerline-medium-*-*-*-*-*-72-*-*-*-*-*
 !URxvt.font: -*-terminesspowerline-medium-*-*-*-*-*-100-*-*-*-*-*
 !URxvt.letterSpace: -1

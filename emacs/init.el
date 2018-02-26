@@ -14,6 +14,8 @@
 (menu-bar-mode 0)
 (toggle-scroll-bar 0)
 (tool-bar-mode 0)
+(global-visual-line-mode)
+(setq initial-scratch-message "")
 (defun my/disable-scroll-bars (frame)
   (modify-frame-parameters frame
                            '((vertical-scroll-bars . nil)
