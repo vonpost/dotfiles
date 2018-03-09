@@ -49,8 +49,8 @@
   # $ nix-env -qaP | grep wget
   environment.systemPackages = with pkgs; [
     # BROWSER
-    # would prefer using chromium, but doesnt support native client for chrome remote desktop 
-    google-chrome
+    firefox-bin
+    qutebrowser
     # GAMING
     steam
     discord 
@@ -59,7 +59,12 @@
     mpv
 
     # AUDIO
+    alsaUtils
     pulsemixer
+
+
+    # MATH
+    texlive.combined.scheme-basic
 
     # PROGRAMMING
     emacs
@@ -71,6 +76,7 @@
     #ACCESSORIES
     rxvt_unicode
     screenfetch
+    ghostscript
     wget
     rofi
     xclip
@@ -109,24 +115,34 @@
 		   };
 
   };
+  #urxvt stuff
+  #daemon
+  services.urxvtd.enable = true;
 
+    
   # EMACS configuration stuff
-
   services.emacs.defaultEditor = true;
   services.emacs.enable = true;
   services.emacs.package = with pkgs; (emacsWithPackages (with emacsPackagesNg; [
-      evil
-      haskell-mode
-      intero
-      nix-mode
-      org
-      python-mode
-      frames-only-mode
-      ivy
-      tidal
-
+    auctex
+    ranger
+    visual-regexp-steroids
+    flycheck
+    haskell-mode
+    highlight-parentheses
+    magit
+    nix-mode
+    smartparens
+    smooth-scrolling
+    ivy
+    tidal
+    evil
+    frames-only-mode
+    latex-preview-pane
   ]));
-  
+
+  # Hide cursor when idle.
+  services.unclutter-xfixes.enable = true;
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
 
@@ -165,16 +181,18 @@
 
     # DISPLAY MANAGER
 
-    displayManager.sessionCommands = ''
-        ${pkgs.xlibs.xsetroot}/bin/xsetroot -cursor_name left_ptr # Set cursor
-        ${pkgs.xlibs.xsetroot}/bin/xsetroot -solid pink # Set bg color
-    '';
+    # displayManager.sessionCommands = ''
+    #     ${pkgs.xlibs.xsetroot}/bin/xsetroot -cursor_name left_ptr # Set cursor
+    #     ${pkgs.xlibs.xsetroot}/bin/xsetroot -solid pink # Set bg color
+    # '';
 
     displayManager.slim = {
       enable = true;
       defaultUser = "dcol";
       autoLogin = true;    
     };
+    desktopManager.default = "none";
+    desktopManager.xterm.enable = false;
   };
   # services.xserver.libinput.enable = true;
   # services.xserver.displayManager.slim.enable = true;
