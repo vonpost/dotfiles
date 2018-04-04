@@ -1,0 +1,12 @@
+self: super:
+rec {
+  qt5 = pkgs.qt5.overrideScope (super: self: { 
+    qtwebengine = super.qtwebengine.overrideAttrs (y: { 
+      qmakeFlags = [ 
+        "WEBENGINE_CONFIG+=use_system_ninja"
+        "WEBENGINE_CONFIG+=use_system_ffmpeg"
+        "WEBENGINE_CONFIG+=use_proprietary_codecs"
+      ]; 
+    }); 
+  });
+}

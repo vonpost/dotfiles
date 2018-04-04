@@ -14,9 +14,9 @@ in {
   };
 
   environment.systemPackages = with pkgs; [ 
-   jack2Full
-   supercollider
-   haskellPackages.tidal
+    jack2Full
+    supercollider
+    haskellPackages.tidal
   ];
 
 

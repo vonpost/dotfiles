@@ -8,17 +8,20 @@
     [ <nixpkgs/nixos/modules/installer/scan/not-detected.nix>
     ];
 
-  boot.initrd.availableKernelModules = [ "xhci_pci" "ehci_pci" "ahci" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" "snd-seq" "snd-rawmidi"];
+  boot.initrd.availableKernelModules = [ "xhci_pci" "ehci_pci" "ahci" "usb_storage" "sd_mod" "rtsx_pci_sdmmc" ];
   boot.kernelModules = [ "kvm-intel" ];
   boot.extraModulePackages = [ ];
-  boot.blacklistedKernelModules = ["mei_wdt"];
-
-  #JACK ENABLE
+  boot.blacklistedKernelModules = ["mei_wdt"]; 
   hardware.cpu.intel.updateMicrocode = true; 
+
   fileSystems."/" =
     { device = "/dev/disk/by-uuid/cc14be1d-bda9-4715-be6e-00ec19fe2657";
       fsType = "ext2";
     };
+
+  swapDevices =
+    [ { device = "/dev/disk/by-uuid/d8d4cbbe-3636-4b34-8838-4fec0c25b622"; }
+    ];
 
   nix.maxJobs = lib.mkDefault 4;
  # powerManagement.cpuFreqGovernor = "powersave";

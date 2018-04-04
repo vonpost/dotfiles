@@ -3,7 +3,6 @@
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
 { config, pkgs, ... }:
-
 {
   imports =
     [ # Include the results of the hardware scan.
@@ -18,6 +17,11 @@
   # Use the GRUB 2 boot loader.
   boot.loader.grub.enable = true;
   boot.loader.grub.version = 2;
+  # Steam controller
+  services.udev.extraRules = ''
+    SUBSYSTEM=="usb", ATTRS{idVendor}=="28de", MODE="0666"
+    KERNEL=="uinput", MODE="0660", GROUP="users", OPTIONS+="static_node=uinput"
+  '';
 
 
   # Define on which hard drive you want to install Grub.
@@ -45,17 +49,27 @@
   # Set your time zone.
   time.timeZone = "Europe/Amsterdam";
 
+  nixpkgs.config = {
+		allowUnfree = true;
+		chromium = {
+		   enablePepperFlash = true;
+		  enablePepperPDF = true;
+      enableWildVine = true;
+		   };
+  };
+
   # List packages installed in system profile. To search by name, run:
   # $ nix-env -qaP | grep wget
   environment.systemPackages = with pkgs; [
     # BROWSER
-    firefox-bin
     qutebrowser
+
     # GAMING
     steam
-    discord 
+    discord
 
-    # VIDEO PLAYER
+    # VIDEO 
+    ffmpeg
     mpv
 
     # AUDIO
@@ -64,8 +78,7 @@
 
 
     # MATH
-    texlive.combined.scheme-basic
-
+    texlive.combined.scheme-full
     # PROGRAMMING
     emacs
     vim
@@ -74,6 +87,10 @@
     git
 
     #ACCESSORIES
+    wpa_supplicant_gui
+    rofi-pass
+    pass
+    gnupg
     rxvt_unicode
     screenfetch
     ghostscript
@@ -88,16 +105,11 @@
     pamixer
     feh
     wineStaging
-
+    
     #POWER MANAGEMENT
     powertop
     tlp
     acpi
-
-    # TIDAL
-    haskellPackages.tidal
-    supercollider
-    jack2Full
  
     # HASKELL
     # XMONAD stuff
@@ -107,14 +119,7 @@
     haskellPackages.xmobar
   ];
 
-  nixpkgs.config = {
-		 allowUnfree = true;
-		 chromium = {
-		   # enablePepperFlash = true;
-		   # enablePepperPDF = true;
-		   };
-
-  };
+  
   #urxvt stuff
   #daemon
   services.urxvtd.enable = true;
@@ -125,16 +130,23 @@
   services.emacs.enable = true;
   services.emacs.package = with pkgs; (emacsWithPackages (with emacsPackagesNg; [
     auctex
-    ranger
+    ace-window
+    rainbow-mode
+    rainbow-delimiters
+    treemacs
+    treemacs-evil
+    evil-collection
     visual-regexp-steroids
     flycheck
     haskell-mode
     highlight-parentheses
     magit
     nix-mode
+    pdf-tools
     smartparens
     smooth-scrolling
     ivy
+    ivy-pass
     tidal
     evil
     frames-only-mode
@@ -168,10 +180,10 @@
         enableContribAndExtras = true;
         extraPackages = haskellPackages: [
           haskellPackages.xmonad-contrib
-	  haskellPackages.xmonad-extras
-	  haskellPackages.xmonad
-	];
-       };
+	        haskellPackages.xmonad-extras
+	        haskellPackages.xmonad
+	      ];
+      };
     };
 
     # ENABLE TOUCHPAD
@@ -181,10 +193,9 @@
 
     # DISPLAY MANAGER
 
-    # displayManager.sessionCommands = ''
-    #     ${pkgs.xlibs.xsetroot}/bin/xsetroot -cursor_name left_ptr # Set cursor
-    #     ${pkgs.xlibs.xsetroot}/bin/xsetroot -solid pink # Set bg color
-    # '';
+    displayManager.sessionCommands = ''
+        ${pkgs.xlibs.xsetroot}/bin/xsetroot -cursor_name left_ptr # Set cursor
+    '';
 
     displayManager.slim = {
       enable = true;
@@ -194,8 +205,6 @@
     desktopManager.default = "none";
     desktopManager.xterm.enable = false;
   };
-  # services.xserver.libinput.enable = true;
-  # services.xserver.displayManager.slim.enable = true;
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.extraUsers.dcol = {
@@ -206,14 +215,22 @@
     extraGroups = ["audio" "wheel" "networkmanager"];
     useDefaultShell = true;
   };
+
+  # enable to allow ios connection for tethering
+  services.usbmuxd.enable = true;
   security.sudo.enable = true;
-  hardware.opengl = {
-     enable = true;
-     driSupport = true;
-     driSupport32Bit = true;
+  hardware = {
+    opengl = {
+      enable = true;
+      driSupport = true;
+      driSupport32Bit = true;
+    };
   };
+  
+  powerManagement.enable = true;
+  services.fprintd.enable = true;
   services.tlp.enable = true;
-  services.logind.extraConfig = "HandlePowerKey=ignore";
+  services.acpid.powerEventCommands = "systemctl suspend";
   systemd.user.services.dunst = {
     enable = true;
     description = "dunst daemon";
