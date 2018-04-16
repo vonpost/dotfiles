@@ -87,6 +87,7 @@
     git
 
     #ACCESSORIES
+    xpdf
     wpa_supplicant_gui
     rofi-pass
     pass
@@ -146,6 +147,8 @@
     smartparens
     smooth-scrolling
     ivy
+    swiper
+    counsel
     ivy-pass
     tidal
     evil
