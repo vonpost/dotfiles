@@ -27,7 +27,7 @@
   # Define on which hard drive you want to install Grub.
   boot.loader.grub.device = "/dev/sda"; # or "nodev" for efi only
   boot.extraModulePackages = [ config.boot.kernelPackages.acpi_call config.boot.kernelPackages.tp_smapi ];
-  networking.enableIPv6 = false;
+  #networking.enableIPv6 = false;
   networking.hostName = "LAIN"; # Define your hostname.
   #networking.connman.enable = true;
   # networking.wicd.enable = true;
@@ -45,17 +45,13 @@
     emt = "emacsclient -nw";
     editnix = "em ~/dotfiles/nix/configuration.nix";
     updatenix = "sh ~/dotfiles/nix/updateConfig.sh";
+    updatenixlocal = "sh ~/dotfiles/nix/updateConfigLocalNixpkgs.sh";
   };
   # Set your time zone.
   time.timeZone = "Europe/Amsterdam";
 
   nixpkgs.config = {
 		allowUnfree = true;
-		chromium = {
-		   enablePepperFlash = true;
-		  enablePepperPDF = true;
-      enableWildVine = true;
-		   };
   };
 
   # List packages installed in system profile. To search by name, run:
@@ -67,7 +63,6 @@
     # GAMING
     steam
     discord
-
     # VIDEO 
     ffmpeg
     mpv
@@ -85,8 +80,9 @@
     ghc
     gcc
     git
-
+    
     #ACCESSORIES
+    qbittorrent
     xpdf
     wpa_supplicant_gui
     rofi-pass
@@ -105,7 +101,6 @@
     oblogout
     pamixer
     feh
-    wineStaging
     
     #POWER MANAGEMENT
     powertop
@@ -122,38 +117,39 @@
 
   
   #urxvt stuff
-  #daemon
+  # daemon
+    
   services.urxvtd.enable = true;
 
-    
   # EMACS configuration stuff
   services.emacs.defaultEditor = true;
   services.emacs.enable = true;
+  # services.emacs.install = true;
   services.emacs.package = with pkgs; (emacsWithPackages (with emacsPackagesNg; [
     auctex
-    ace-window
     rainbow-mode
     rainbow-delimiters
-    treemacs
-    treemacs-evil
     evil-collection
     visual-regexp-steroids
     flycheck
     haskell-mode
     highlight-parentheses
     magit
+    dante
+    nix-buffer
+    company
+    projectile
     nix-mode
     pdf-tools
-    smartparens
-    smooth-scrolling
+    ranger
     ivy
     swiper
     counsel
     ivy-pass
-    tidal
     evil
     frames-only-mode
     latex-preview-pane
+    which-key
   ]));
 
   # Hide cursor when idle.
@@ -193,12 +189,12 @@
     libinput.enable = true;
     #horizontal scroll sucks on bad touchpad
     libinput.horizontalScrolling = false;
-
     # DISPLAY MANAGER
 
     displayManager.sessionCommands = ''
-        ${pkgs.xlibs.xsetroot}/bin/xsetroot -cursor_name left_ptr # Set cursor
-    '';
+       ${pkgs.xlibs.xsetroot}/bin/xsetroot -cursor_name left_ptr
+    '' # + ''emacs '' ;
+    ;
 
     displayManager.slim = {
       enable = true;
@@ -229,6 +225,22 @@
       driSupport32Bit = true;
     };
   };
+  # nix.nixPath = [
+  #   "/home/dcol/nixpkgs/"
+  #   "/nix/var/nix/profiles/per-user/root/channels/nixos"
+  #   "nixos-config=/home/dcol/dotfiles/nix/configuration.nix/"
+  # ];
+   nix.nixPath = [
+    "/home/dcol/nixpkgs"
+    "/home/dcol/dotfiles/nix"
+    "/nix/var/nix/profiles/per-user/root/channels/nixos"
+            "nixpkgs=/etc/nixos/nixpkgs"
+            "nixos=/etc/nixos/nixos"
+            "nixos-config=/etc/nixos/configuration.nix"
+            "services=/etc/nixos/services"
+          ];
+  
+    
   
   powerManagement.enable = true;
   services.fprintd.enable = true;
@@ -252,6 +264,6 @@
   # compatible, in order to avoid breaking some software such as database
   # servers. You should change this only after NixOS release notes say you
   # should.
-  system.stateVersion = "17.09"; # Did you read the comment?
+  system.stateVersion = "18.03"; # Did you read the comment?
 
 }
