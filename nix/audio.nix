@@ -4,7 +4,7 @@ let pulse = pkgs.pulseaudioFull;
 in {
 
   boot = {
-    kernelModules = ["snd-seq" "snd-rawmidi"];
+    kernelModules = [];
   };
 
   hardware.pulseaudio = {
@@ -14,9 +14,6 @@ in {
   };
 
   environment.systemPackages = with pkgs; [ 
-    jack2Full
-    supercollider
-    haskellPackages.tidal
   ];
 
 

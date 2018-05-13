@@ -13,6 +13,11 @@
   boot.extraModulePackages = [ ];
   boot.blacklistedKernelModules = ["mei_wdt"];
 
+  # hardware.trackpoint = {
+  #                     enable = true;
+  #                     sensitivity = 255;
+  #                     speed = 255;
+  # };
   #JACK ENABLE
   hardware.cpu.intel.updateMicrocode = true; 
   fileSystems."/" =

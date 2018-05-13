@@ -34,8 +34,7 @@
 (add-hook 'haskell-mode-hook 'flycheck-mode)
 
 
-;; Enable which-key
-(which-key-mode 1)
+
 
 ;; Use pdf-tools to open PDF files
 (setq TeX-view-program-selection '((output-pdf "PDF Tools"))
@@ -44,13 +43,6 @@
 ;; Update PDF buffers after successful LaTeX runs
 (add-hook 'TeX-after-compilation-finished-functions
            #'TeX-revert-document-buffer)
-
-;; Enable pdf tools
-(pdf-tools-install)
-
-
-(setq backup-directory-alist
-      `(("." . ,(concat user-emacs-directory "backups"))))
 
 ;; Remove all gui elements
 (menu-bar-mode 0)

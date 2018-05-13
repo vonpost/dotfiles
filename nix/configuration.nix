@@ -15,6 +15,7 @@
   nix.gc.options = "--delete-older-than 30d";
 
   # Use the GRUB 2 boot loader.
+  boot.kernelPackages = pkgs.linuxPackages_latest;       
   boot.loader.grub.enable = true;
   boot.loader.grub.version = 2;
   # Steam controller
@@ -112,7 +113,6 @@
     haskellPackages.xmonad-contrib
     haskellPackages.xmonad-extras
     haskellPackages.xmonad
-    haskellPackages.xmobar
   ];
 
   
@@ -246,6 +246,8 @@
   services.fprintd.enable = true;
   services.tlp.enable = true;
   services.acpid.powerEventCommands = "systemctl suspend";
+  # Map CAPS to ESC / CTRL
+  services.interception-tools.enable = true;
   systemd.user.services.dunst = {
     enable = true;
     description = "dunst daemon";
@@ -264,6 +266,6 @@
   # compatible, in order to avoid breaking some software such as database
   # servers. You should change this only after NixOS release notes say you
   # should.
-  system.stateVersion = "18.03"; # Did you read the comment?
+  system.nixos.stateVersion = "18.03"; # Did you read the comment?
 
 }
