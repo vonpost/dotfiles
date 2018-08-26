@@ -18,6 +18,9 @@
   boot.kernelPackages = pkgs.linuxPackages_latest;       
   boot.loader.grub.enable = true;
   boot.loader.grub.version = 2;
+  boot.loader.grub.extraConfig = ''
+  GRUB_CMDLINE_LINUX_DEFAULT="quiet splash psmouse.synaptics_intertouch=0"
+  '';
   # Steam controller
   services.udev.extraRules = ''
     SUBSYSTEM=="usb", ATTRS{idVendor}=="28de", MODE="0666"
@@ -64,6 +67,7 @@
     # GAMING
     steam
     discord
+    wine-staging
     # VIDEO 
     ffmpeg
     mpv
@@ -75,6 +79,11 @@
 
     # MATH
     texlive.combined.scheme-full
+    aspell
+    aspellDicts.en
+    aspellDicts.en-computers
+    aspellDicts.en-science
+
     # PROGRAMMING
     emacs
     vim
@@ -138,6 +147,7 @@
     dante
     nix-buffer
     company
+    company-math
     projectile
     nix-mode
     pdf-tools
@@ -150,6 +160,7 @@
     frames-only-mode
     latex-preview-pane
     which-key
+    rust-mode
   ]));
 
   # Hide cursor when idle.
@@ -160,9 +171,6 @@
   # Open ports in the firewall.
   # Or disable the firewall altogether.
   networking.firewall.enable = false;
-
-  # Enable CUPS to print documents.
-  # services.printing.enable = true;
 
   # Enable X11
   services.xserver = {
@@ -187,18 +195,24 @@
 
     # ENABLE TOUCHPAD
     libinput.enable = true;
+    libinput.accelSpeed = "1.0";
+    libinput.accelProfile = "flat";
     #horizontal scroll sucks on bad touchpad
     libinput.horizontalScrolling = false;
     # DISPLAY MANAGER
 
     displayManager.sessionCommands = ''
        ${pkgs.xlibs.xsetroot}/bin/xsetroot -cursor_name left_ptr
-    '' # + ''emacs '' ;
+    '' + ''xinput set-prop 12 305 0, 1'' +  ''xinput set-prop 12 290 1''
     ;
-
-    displayManager.slim = {
+    displayManager.lightdm = {
       enable = true;
-      defaultUser = "dcol";
+      autoLogin.enable = true;
+      autoLogin.user = "dcol";
+      greeter.enable = false;
+    };
+    displayManager.slim = {
+      enable = false;
       autoLogin = true;    
     };
     desktopManager.default = "none";
@@ -266,6 +280,6 @@
   # compatible, in order to avoid breaking some software such as database
   # servers. You should change this only after NixOS release notes say you
   # should.
-  system.nixos.stateVersion = "18.03"; # Did you read the comment?
+   system.stateVersion = "18.03"; # Did you read the comment?
 
 }

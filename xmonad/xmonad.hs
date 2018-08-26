@@ -15,8 +15,9 @@ main :: IO ()
 main =
   xmonad
     $ ewmh
-    $ withNavigation2DConfig def { defaultTiledNavigation = hybridNavigation }
-    $ fullscreenSupport
+--     $ withNavigation2DConfig def { defaultTiledNavigation = hybridOf lineNavigation 
+-- centerNavigation }
+    -- $ fullscreenSupport
     $ myConfig
 
 
@@ -26,11 +27,12 @@ middleColor       = "#000000"
 foregroundColor   = "#000006"
 myConfig = def
   { borderWidth        = 0
-  , startupHook = startupHook def <+> setFullscreenSupported
+  , startupHook = startupHook def
+    -- <+> setFullscreenSupported
   , focusedBorderColor = foregroundColor
   , focusFollowsMouse  = False
   , keys               = myKeys
-  , layoutHook         = spacingWithEdge 0 emptyBSP ||| simpleTabbed 
+  , layoutHook         = emptyBSP ||| simpleTabbed 
   , modMask            = mod4Mask
   , manageHook         = manageSpawn <+> manageHook def <+> scratchpadManageHookDefault 
   , normalBorderColor  = middleColor
@@ -42,6 +44,7 @@ myConfig = def
   --      spawnOn "browse" "google-chrome"
   --      spawnOn "code" "emacs"
   }
+
 
 -- Firefox, etc. for fullscreen support.
 setFullscreenSupported :: X ()
