@@ -15,9 +15,8 @@ main :: IO ()
 main =
   xmonad
     $ ewmh
---     $ withNavigation2DConfig def { defaultTiledNavigation = hybridOf lineNavigation 
--- centerNavigation }
-    -- $ fullscreenSupport
+    -- fullscreenSupport
+    $ withNavigation2DConfig def { defaultTiledNavigation = hybridOf lineNavigation centerNavigation }
     $ myConfig
 
 
@@ -29,12 +28,13 @@ myConfig = def
   { borderWidth        = 0
   , startupHook = startupHook def
     -- <+> setFullscreenSupported
+  , handleEventHook = fullscreenEventHook
   , focusedBorderColor = foregroundColor
   , focusFollowsMouse  = False
   , keys               = myKeys
   , layoutHook         = emptyBSP ||| simpleTabbed 
   , modMask            = mod4Mask
-  , manageHook         = manageSpawn <+> manageHook def <+> scratchpadManageHookDefault 
+  , manageHook         = manageSpawn <+> manageHook def <+> scratchpadManageHookDefault <+> fullscreenManageHook  
   , normalBorderColor  = middleColor
   , terminal           = "urxvtc"
   , workspaces         = [ "browse", "code", "read", "chat", "etc"]

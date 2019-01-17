@@ -1,5 +1,5 @@
 (require 'package)
-
+(set-face-attribute 'default nil :height 110)
 ;; optional. makes unpure packages archives unavailable
 (setq package-archives nil)
 

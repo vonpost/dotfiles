@@ -3,12 +3,22 @@
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
 { config, pkgs, ... }:
+
+let
+  myEmacs = pkgs.emacs.override {
+    withGTK3 = false;
+    withGTK2 = false;
+  };
+  emacsWithPackages = (pkgs.emacsPackagesNgGen myEmacs).emacsWithPackages;
+in
 {
   imports =
     [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
       ./audio.nix
     ];
+  
+
   # periodic GC
   nix.gc.automatic = true;
   nix.gc.dates = "weekly";
@@ -57,9 +67,9 @@
   nixpkgs.config = {
 		allowUnfree = true;
   };
-
   # List packages installed in system profile. To search by name, run:
   # $ nix-env -qaP | grep wget
+
   environment.systemPackages = with pkgs; [
     # BROWSER
     qutebrowser
@@ -68,7 +78,12 @@
     steam
     discord
     wine-staging
+
     # VIDEO 
+    vaapiIntel
+    libva-utils
+    libva-full
+    vaapi-intel-hybrid
     ffmpeg
     mpv
 
@@ -83,9 +98,9 @@
     aspellDicts.en
     aspellDicts.en-computers
     aspellDicts.en-science
-
+    aspellDicts.sv
+    
     # PROGRAMMING
-    emacs
     vim
     ghc
     gcc
@@ -118,6 +133,8 @@
     acpi
  
     # HASKELL
+    haskellPackages.categories
+    
     # XMONAD stuff
     haskellPackages.xmonad-contrib
     haskellPackages.xmonad-extras
@@ -134,6 +151,9 @@
   services.emacs.defaultEditor = true;
   services.emacs.enable = true;
   # services.emacs.install = true;
+   
+
+
   services.emacs.package = with pkgs; (emacsWithPackages (with emacsPackagesNg; [
     auctex
     rainbow-mode
@@ -195,7 +215,6 @@
 
     # ENABLE TOUCHPAD
     libinput.enable = true;
-    libinput.accelSpeed = "1.0";
     libinput.accelProfile = "flat";
     #horizontal scroll sucks on bad touchpad
     libinput.horizontalScrolling = false;
@@ -203,7 +222,7 @@
 
     displayManager.sessionCommands = ''
        ${pkgs.xlibs.xsetroot}/bin/xsetroot -cursor_name left_ptr
-    '' + ''xinput set-prop 12 305 0, 1'' +  ''xinput set-prop 12 290 1''
+    '' + ''xinput set-prop 13 309 1'' +  ''xinput set-prop 13 318 0, 1''
     ;
     displayManager.lightdm = {
       enable = true;
@@ -232,11 +251,17 @@
   # enable to allow ios connection for tethering
   services.usbmuxd.enable = true;
   security.sudo.enable = true;
+  nixpkgs.config.packageOverrides = pkgs: {
+     vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
+   };
   hardware = {
     opengl = {
       enable = true;
       driSupport = true;
       driSupport32Bit = true;
+    extraPackages = with pkgs;
+        [ vaapiIntel libvdpau  libvdpau-va-gl vaapiVdpau ];
+
     };
   };
   # nix.nixPath = [
@@ -247,6 +272,7 @@
    nix.nixPath = [
     "/home/dcol/nixpkgs"
     "/home/dcol/dotfiles/nix"
+    "nixpkgs-overlays=/home/dcol/dotfiles/nix/overlays/"
     "/nix/var/nix/profiles/per-user/root/channels/nixos"
             "nixpkgs=/etc/nixos/nixpkgs"
             "nixos=/etc/nixos/nixos"
