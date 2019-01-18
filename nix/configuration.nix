@@ -219,11 +219,11 @@ in
     #horizontal scroll sucks on bad touchpad
     libinput.horizontalScrolling = false;
     # DISPLAY MANAGER
-
+    # Trackpoint settings
     displayManager.sessionCommands = ''
-       ${pkgs.xlibs.xsetroot}/bin/xsetroot -cursor_name left_ptr
-    '' + ''xinput set-prop 13 309 1'' +  ''xinput set-prop 13 318 0, 1''
-    ;
+    xinput set-prop "TPPS/2 IBM TrackPoint" "libinput Accel Speed" 1
+    xinput set-prop "TPPS/2 IBM TrackPoint" "libinput Accel Profile Enabled" 0, 1
+    '';
     displayManager.lightdm = {
       enable = true;
       autoLogin.enable = true;
@@ -280,12 +280,12 @@ in
             "services=/etc/nixos/services"
           ];
   
-    
-  
+  #H 
+  # Power management
   powerManagement.enable = true;
   services.fprintd.enable = true;
   services.tlp.enable = true;
-  services.acpid.powerEventCommands = "systemctl suspend";
+  services.upower.enable = true;
   # Map CAPS to ESC / CTRL
   services.interception-tools.enable = true;
   systemd.user.services.dunst = {
