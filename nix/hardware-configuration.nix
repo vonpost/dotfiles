@@ -12,6 +12,7 @@
   boot.kernelModules = [ "kvm-intel" ];
   boot.extraModulePackages = [ ];
   boot.blacklistedKernelModules = ["mei_wdt"];
+  boot.extraModprobeConfig = ''options snd slots=snd-usb-audio,snd-hda-intel'';
 
   # hardware.trackpoint = {
   #                     enable = true;

@@ -12,7 +12,8 @@ import XMonad.Util.CustomKeys
 import XMonad.Util.Run
 import XMonad.Util.Scratchpad
 import Graphics.X11.ExtraTypes.XF86
-
+import XMonad.Layout.Hidden
+import qualified XMonad.Util.ExtensibleState as XS
 myKeys = customKeys removedKeys addedKeys
 
 removedKeys :: XConfig l -> [(KeyMask, KeySym)]
@@ -36,7 +37,10 @@ addedKeys conf @ XConfig {modMask = modm} =
 
     -- Switch to last workspace
   , ((modm, xK_Tab), toggleWS)
-
+  , ((modm, xK_u), toggleHidden)
+  , ((modm, xK_b), withFocused hideWindow)
+  , ((modm, xK_n), popNewestHiddenWindow)
+  , ((modm, xK_m), popOldestHiddenWindow)
     -- Rotate windows
   , ((modm, xK_r), sendMessage Rotate)
 
@@ -120,8 +124,12 @@ toggleLight = do brightness:_ <- runProcessWithInput "xbacklight" ["-get"] ""
                  spawn cmd
 
 
-
-
+instance ExtensionClass Bool where
+  initialValue = False
+toggleHidden' state = if state then (popNewestHiddenWindow) >> return False  else (withFocused hideWindow) >> return True
+toggleHidden = do state <- XS.get
+                  state' <- toggleHidden' state
+                  XS.put state'
 
 
 languages = ["se", "us"]

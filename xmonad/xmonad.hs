@@ -11,6 +11,7 @@ import XMonad.Layout.Tabbed
 import XMonad.Hooks.SetWMName
 import XMonad.Hooks.ManageHelpers
 import XMonad.Util.Scratchpad
+import XMonad.Layout.Hidden
 main :: IO ()
 main =
   xmonad
@@ -32,7 +33,7 @@ myConfig = def
   , focusedBorderColor = foregroundColor
   , focusFollowsMouse  = False
   , keys               = myKeys
-  , layoutHook         = emptyBSP ||| simpleTabbed 
+  , layoutHook         = hiddenWindows emptyBSP 
   , modMask            = mod4Mask
   , manageHook         = manageSpawn <+> manageHook def <+> scratchpadManageHookDefault <+> fullscreenManageHook  
   , normalBorderColor  = middleColor

@@ -26,6 +26,7 @@ in
 
   # Use the GRUB 2 boot loader.
   boot.kernelPackages = pkgs.linuxPackages_latest;       
+  boot.kernel.sysctl."net.ipv6.conf.eth0.disable_ipv6" = true;
   boot.loader.grub.enable = true;
   boot.loader.grub.version = 2;
   boot.loader.grub.extraConfig = ''
@@ -60,16 +61,15 @@ in
     editnix = "em ~/dotfiles/nix/configuration.nix";
     updatenix = "sh ~/dotfiles/nix/updateConfig.sh";
     updatenixlocal = "sh ~/dotfiles/nix/updateConfigLocalNixpkgs.sh";
+    parsec = "~/parsec/result/bin/parsecd";
   };
+  environment.variables.TERM = "linux";
   # Set your time zone.
   time.timeZone = "Europe/Amsterdam";
 
   nixpkgs.config = {
 		allowUnfree = true;
   };
-  # List packages installed in system profile. To search by name, run:
-  # $ nix-env -qaP | grep wget
-
   environment.systemPackages = with pkgs; [
     # BROWSER
     qutebrowser
@@ -105,6 +105,7 @@ in
     ghc
     gcc
     git
+    #idris
     
     #ACCESSORIES
     qbittorrent
@@ -133,8 +134,9 @@ in
     acpi
  
     # HASKELL
+    cabal-install
     haskellPackages.categories
-    
+
     # XMONAD stuff
     haskellPackages.xmonad-contrib
     haskellPackages.xmonad-extras
@@ -155,6 +157,8 @@ in
 
 
   services.emacs.package = with pkgs; (emacsWithPackages (with emacsPackagesNg; [
+    idris-mode
+    csharp-mode
     auctex
     rainbow-mode
     rainbow-delimiters
@@ -188,8 +192,6 @@ in
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
 
-  # Open ports in the firewall.
-  # Or disable the firewall altogether.
   networking.firewall.enable = false;
 
   # Enable X11
@@ -223,6 +225,7 @@ in
     displayManager.sessionCommands = ''
     xinput set-prop "TPPS/2 IBM TrackPoint" "libinput Accel Speed" 1
     xinput set-prop "TPPS/2 IBM TrackPoint" "libinput Accel Profile Enabled" 0, 1
+    xsetroot -cursor_name  left_ptr
     '';
     displayManager.lightdm = {
       enable = true;
@@ -264,6 +267,8 @@ in
 
     };
   };
+
+
   # nix.nixPath = [
   #   "/home/dcol/nixpkgs/"
   #   "/nix/var/nix/profiles/per-user/root/channels/nixos"
@@ -282,10 +287,12 @@ in
   
   #H 
   # Power management
+  services.acpid.enable = true;
+  services.acpid.powerEventCommands = "systemctl suspend"; 
   powerManagement.enable = true;
   services.fprintd.enable = true;
   services.tlp.enable = true;
-  services.upower.enable = true;
+  # services.upower.enable = true;
   # Map CAPS to ESC / CTRL
   services.interception-tools.enable = true;
   systemd.user.services.dunst = {
@@ -301,8 +308,23 @@ in
   swapDevices = [
     { device = "/dev/disk/by-label/swap"; }
   ];
+  # Build nixos configs remotely for speed
+	nix.buildMachines = [ {
+	 hostName = "192.168.0.11";
+	 system = "x86_64-linux";
+	 maxJobs = 4;
+	 speedFactor = 2;
+	 supportedFeatures = [ ];
+	 mandatoryFeatures = [ ];
+	}];
+	nix.distributedBuilds = true;
+  fileSystems."/theta" = {
+    device = "192.168.0.11:/theta";
+    fsType = "nfs";
+  };
 
   # This value determines the NixOS release with which your system is to be
+
   # compatible, in order to avoid breaking some software such as database
   # servers. You should change this only after NixOS release notes say you
   # should.
