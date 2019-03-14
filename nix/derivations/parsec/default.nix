@@ -1,10 +1,7 @@
-# { stdenv, fetchurl, makeWrapper
-# , dpkg, patchelf
-# , libX11, SDL, libGL 
-# , libva }
-let pkgs = import ~/nixpkgs {};
-in
-with pkgs;
+{ stdenv, fetchurl, makeWrapper
+, dpkg, patchelf
+, libX11, libGL 
+, libva, xlibs, libudev, pulseaudio}:
 let
   inherit (stdenv) lib;
   tail = lib.makeLibraryPath

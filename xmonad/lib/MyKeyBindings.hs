@@ -109,18 +109,21 @@ addedKeys conf @ XConfig {modMask = modm} =
 
 
 -- some help functions
-readLight = do brightness <- runProcessWithInput "xbacklight" ["-get"] ""
-               let rounded = show . round $ read brightness
+readLight = do brightness <- runProcessWithInput "brightnessctl" ["get"] ""
+               max <- runProcessWithInput "brightnessctl" ["m"] ""
+               let rounded = show . round $ 100*(read brightness)/(read max)
                spawn $ "notify-send \"" ++ rounded ++ "\""
 
 
-incLight = spawn "xbacklight -inc 5" >> readLight
-decLight = spawn "xbacklight -dec 5" >> readLight
+incLight = spawn "brightnessctl set 5%+" >> readLight
+decLight = spawn "brightnessctl set 5%-" >> readLight
 
 switchLight :: Int -> String
-switchLight percent = if percent > 0 then "0" else "5"
-toggleLight = do brightness:_ <- runProcessWithInput "xbacklight" ["-get"] ""
-                 let cmd = "xbacklight -set " ++ (switchLight (read [brightness]))
+switchLight percent = if percent > 0 then "0%" else "100%"
+toggleLight = do brightness <- runProcessWithInput "brightnessctl" ["get"] ""
+                 max <- runProcessWithInput "brightnessctl" ["m"] ""
+                 let currentPercentage = 100*(read brightness)/(read max)
+                 let cmd = "brightnessctl set " ++ (switchLight (read brightness))
                  spawn cmd
 
 

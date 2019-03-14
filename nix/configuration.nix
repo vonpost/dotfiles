@@ -3,27 +3,27 @@
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
 { config, pkgs, ... }:
-
 let
   myEmacs = pkgs.emacs.override {
     withGTK3 = false;
     withGTK2 = false;
   };
   emacsWithPackages = (pkgs.emacsPackagesNgGen myEmacs).emacsWithPackages;
-in
+  overlays = import /home/dcol/dotfiles/nix/overlays/overlay1.nix;
+in 
 {
   imports =
     [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
       ./audio.nix
     ];
-  
+    # Add overlays to path
 
   # periodic GC
+  nixpkgs.overlays = [ overlays ]; 
   nix.gc.automatic = true;
   nix.gc.dates = "weekly";
   nix.gc.options = "--delete-older-than 30d";
-
   # Use the GRUB 2 boot loader.
   boot.kernelPackages = pkgs.linuxPackages_latest;       
   boot.kernel.sysctl."net.ipv6.conf.eth0.disable_ipv6" = true;
@@ -32,23 +32,12 @@ in
   boot.loader.grub.extraConfig = ''
   GRUB_CMDLINE_LINUX_DEFAULT="quiet splash psmouse.synaptics_intertouch=0"
   '';
-  # Steam controller
-  services.udev.extraRules = ''
-    SUBSYSTEM=="usb", ATTRS{idVendor}=="28de", MODE="0666"
-    KERNEL=="uinput", MODE="0660", GROUP="users", OPTIONS+="static_node=uinput"
-  '';
 
-
-  # Define on which hard drive you want to install Grub.
   boot.loader.grub.device = "/dev/sda"; # or "nodev" for efi only
   boot.extraModulePackages = [ config.boot.kernelPackages.acpi_call config.boot.kernelPackages.tp_smapi ];
   #networking.enableIPv6 = false;
   networking.hostName = "LAIN"; # Define your hostname.
-  #networking.connman.enable = true;
-  # networking.wicd.enable = true;
-  networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
-  # networking.networkmanager.enable = true;
-  # Select internationalisation properties.
+  networking.wireless.enable = true;
   i18n = {
     consoleFont = "Lat2-Terminus16";
     consoleKeyMap = "us";
@@ -56,17 +45,18 @@ in
   };
   # Shell aliases
   environment.shellAliases = {
+    ssh = "TERM=xterm ssh";
     em = "emacsclient -c";
     emt = "emacsclient -nw";
     editnix = "em ~/dotfiles/nix/configuration.nix";
     updatenix = "sh ~/dotfiles/nix/updateConfig.sh";
     updatenixlocal = "sh ~/dotfiles/nix/updateConfigLocalNixpkgs.sh";
-    parsec = "~/parsec/result/bin/parsecd";
   };
   environment.variables.TERM = "linux";
   # Set your time zone.
   time.timeZone = "Europe/Amsterdam";
 
+  # New video driver for xorg "modesetting" doesn't work with xbacklight, so we use brightnessctl instead
   nixpkgs.config = {
 		allowUnfree = true;
   };
@@ -75,6 +65,7 @@ in
     qutebrowser
 
     # GAMING
+    parsec
     steam
     discord
     wine-staging
@@ -108,6 +99,7 @@ in
     #idris
     
     #ACCESSORIES
+    brightnessctl
     qbittorrent
     xpdf
     wpa_supplicant_gui
@@ -124,7 +116,6 @@ in
     ranger
     libnotify
     dunst
-    oblogout
     pamixer
     feh
     
@@ -133,10 +124,10 @@ in
     tlp
     acpi
  
-    # HASKELL
-    cabal-install
-    haskellPackages.categories
-
+    # haskell
+    # haskellPackages.categories
+    # haskellPackages.accelerate
+    # haskellPackages.accelerate-llvm-native
     # XMONAD stuff
     haskellPackages.xmonad-contrib
     haskellPackages.xmonad-extras
@@ -146,7 +137,6 @@ in
   
   #urxvt stuff
   # daemon
-    
   services.urxvtd.enable = true;
 
   # EMACS configuration stuff
@@ -157,6 +147,7 @@ in
 
 
   services.emacs.package = with pkgs; (emacsWithPackages (with emacsPackagesNg; [
+    graphviz-dot-mode
     idris-mode
     csharp-mode
     auctex
@@ -233,10 +224,6 @@ in
       autoLogin.user = "dcol";
       greeter.enable = false;
     };
-    displayManager.slim = {
-      enable = false;
-      autoLogin = true;    
-    };
     desktopManager.default = "none";
     desktopManager.xterm.enable = false;
   };
@@ -247,17 +234,18 @@ in
     createHome = true;
     home = "/home/dcol/";
     description = "Daniel Collin";
-    extraGroups = ["audio" "wheel" "networkmanager"];
+    extraGroups = ["video" "audio" "wheel" ];
     useDefaultShell = true;
   };
 
   # enable to allow ios connection for tethering
   services.usbmuxd.enable = true;
   security.sudo.enable = true;
-  nixpkgs.config.packageOverrides = pkgs: {
-     vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
-   };
+  # nixpkgs.config.packageOverrides = pkgs: {
+  #    vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
+  #  };
   hardware = {
+    brightnessctl.enable = true;
     opengl = {
       enable = true;
       driSupport = true;
@@ -267,32 +255,18 @@ in
 
     };
   };
-
-
-  # nix.nixPath = [
-  #   "/home/dcol/nixpkgs/"
-  #   "/nix/var/nix/profiles/per-user/root/channels/nixos"
-  #   "nixos-config=/home/dcol/dotfiles/nix/configuration.nix/"
-  # ];
-   nix.nixPath = [
-    "/home/dcol/nixpkgs"
-    "/home/dcol/dotfiles/nix"
-    "nixpkgs-overlays=/home/dcol/dotfiles/nix/overlays/"
-    "/nix/var/nix/profiles/per-user/root/channels/nixos"
-            "nixpkgs=/etc/nixos/nixpkgs"
-            "nixos=/etc/nixos/nixos"
-            "nixos-config=/etc/nixos/configuration.nix"
-            "services=/etc/nixos/services"
+   nix.nixPath = [ 
+    "nixpkgs-overlays=/home/dcol/dotfiles/nix/overlays-compat/"
+    "nixpkgs=/home/dcol/nixpkgs/"
+    "nixos-config=/home/dcol/dotfiles/nix/configuration.nix"
           ];
   
-  #H 
   # Power management
   services.acpid.enable = true;
   services.acpid.powerEventCommands = "systemctl suspend"; 
   powerManagement.enable = true;
   services.fprintd.enable = true;
   services.tlp.enable = true;
-  # services.upower.enable = true;
   # Map CAPS to ESC / CTRL
   services.interception-tools.enable = true;
   systemd.user.services.dunst = {
@@ -312,16 +286,14 @@ in
 	nix.buildMachines = [ {
 	 hostName = "192.168.0.11";
 	 system = "x86_64-linux";
-	 maxJobs = 4;
-	 speedFactor = 2;
-	 supportedFeatures = [ ];
-	 mandatoryFeatures = [ ];
+	 maxJobs = 10;
 	}];
 	nix.distributedBuilds = true;
-  fileSystems."/theta" = {
-    device = "192.168.0.11:/theta";
-    fsType = "nfs";
-  };
+  # TODO: Find some way to ignore this is not on the network, atm it fucks up --user systemd
+  # fileSystems."/theta" = {
+  #   device = "192.168.0.11:/theta";
+  #   fsType = "nfs";
+  # };
 
   # This value determines the NixOS release with which your system is to be
 

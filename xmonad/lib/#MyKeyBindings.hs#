@@ -13,7 +13,7 @@ import XMonad.Util.Run
 import XMonad.Util.Scratchpad
 import Graphics.X11.ExtraTypes.XF86
 import XMonad.Layout.Hidden
-import XMonad.Util.ExtensibleState
+import qualified XMonad.Util.ExtensibleState as XS
 myKeys = customKeys removedKeys addedKeys
 
 removedKeys :: XConfig l -> [(KeyMask, KeySym)]
@@ -37,6 +37,7 @@ addedKeys conf @ XConfig {modMask = modm} =
 
     -- Switch to last workspace
   , ((modm, xK_Tab), toggleWS)
+  , ((modm, xK_u), toggleHidden)
   , ((modm, xK_b), withFocused hideWindow)
   , ((modm, xK_n), popNewestHiddenWindow)
   , ((modm, xK_m), popOldestHiddenWindow)
@@ -108,27 +109,30 @@ addedKeys conf @ XConfig {modMask = modm} =
 
 
 -- some help functions
-readLight = do brightness <- runProcessWithInput "xbacklight" ["-get"] ""
+readLight = do brightness <- runProcessWithInput "brightnessctl" ["get"] ""
+               max <- runProcessW
                let rounded = show . round $ read brightness
                spawn $ "notify-send \"" ++ rounded ++ "\""
 
 
-incLight = spawn "xbacklight -inc 5" >> readLight
-decLight = spawn "xbacklight -dec 5" >> readLight
+incLight = spawn "brightnessctl set 5%+" >> readLight
+decLight = spawn "brightnessctl set 5%-" >> readLight
 
 switchLight :: Int -> String
-switchLight percent = if percent > 0 then "0" else "5"
-toggleLight = do brightness:_ <- runProcessWithInput "xbacklight" ["-get"] ""
-                 let cmd = "xbacklight -set " ++ (switchLight (read [brightness]))
+switchLight percent = if percent > 0 then "0%" else "5%"
+toggleLight = do brightness <- runProcessWithInput "brightnessctl" ["get"] ""
+                 max <- runProcessWithInput "brightnessctl" ["m"] ""
+                 let currentPercentage = 100*(read brightness)/(read max)
+                 let cmd = "brightnessctl set " ++ (switchLight (read [brightness]))
                  spawn cmd
 
 
-data HiddenState = HiddenState Bool
-instance ExtensionClass HiddenState where
+instance ExtensionClass Bool where
   initialValue = False
-toggleHidd
-toggleHidden = do state <- get
-                  
+toggleHidden' state = if state then (popNewestHiddenWindow) >> return False  else (withFocused hideWindow) >> return True
+toggleHidden = do state <- XS.get
+                  state' <- toggleHidden' state
+                  XS.put state'
 
 
 languages = ["se", "us"]

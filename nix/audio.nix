@@ -11,10 +11,7 @@ in {
     enable = true;
     support32Bit = true;
     package = pulse;
+    extraConfig = "load-module module-switch-on-connect";
   };
-
-  environment.systemPackages = with pkgs; [ 
-  ];
-
 
 }
