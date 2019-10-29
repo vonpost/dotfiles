@@ -10,6 +10,7 @@ let
   };
   emacsWithPackages = (pkgs.emacsPackagesNgGen myEmacs).emacsWithPackages;
   overlays = import /home/dcol/dotfiles/nix/overlays/overlay1.nix;
+
 in 
 {
   imports =
@@ -26,7 +27,7 @@ in
   nix.gc.options = "--delete-older-than 30d";
   # Use the GRUB 2 boot loader.
   boot.kernelPackages = pkgs.linuxPackages_latest;       
-  boot.kernel.sysctl."net.ipv6.conf.eth0.disable_ipv6" = true;
+  # boot.kernel.sysctl."net.ipv6.conf.eth0.disable_ipv6" = true;
   boot.loader.grub.enable = true;
   boot.loader.grub.version = 2;
   boot.loader.grub.extraConfig = ''
@@ -36,8 +37,6 @@ in
   boot.loader.grub.device = "/dev/sda"; # or "nodev" for efi only
   boot.extraModulePackages = [ config.boot.kernelPackages.acpi_call config.boot.kernelPackages.tp_smapi ];
   #networking.enableIPv6 = false;
-  networking.hostName = "LAIN"; # Define your hostname.
-  networking.wireless.enable = true;
   i18n = {
     consoleFont = "Lat2-Terminus16";
     consoleKeyMap = "us";
@@ -60,6 +59,7 @@ in
   nixpkgs.config = {
 		allowUnfree = true;
   };
+  environment.pathsToLink = [ "/share/agda" ];
   environment.systemPackages = with pkgs; [
     # BROWSER
     qutebrowser
@@ -68,7 +68,7 @@ in
     parsec
     steam
     discord
-    wine-staging
+    wineWowPackages.staging
 
     # VIDEO 
     vaapiIntel
@@ -84,6 +84,7 @@ in
 
 
     # MATH
+    openblas
     texlive.combined.scheme-full
     aspell
     aspellDicts.en
@@ -96,6 +97,7 @@ in
     ghc
     gcc
     git
+    octave
     #idris
     
     #ACCESSORIES
@@ -123,12 +125,12 @@ in
     powertop
     tlp
     acpi
- 
     # haskell
     # haskellPackages.categories
     # haskellPackages.accelerate
     # haskellPackages.accelerate-llvm-native
     # XMONAD stuff
+    haskellPackages.Agda
     haskellPackages.xmonad-contrib
     haskellPackages.xmonad-extras
     haskellPackages.xmonad
@@ -142,7 +144,7 @@ in
   # EMACS configuration stuff
   services.emacs.defaultEditor = true;
   services.emacs.enable = true;
-  # services.emacs.install = true;
+  services.emacs.install = true;
    
 
 
@@ -151,6 +153,7 @@ in
     idris-mode
     csharp-mode
     auctex
+    agda2-mode
     rainbow-mode
     rainbow-delimiters
     evil-collection
@@ -182,8 +185,17 @@ in
   services.unclutter-xfixes.enable = true;
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
-
-  networking.firewall.enable = false;
+  networking = {
+    hostName = "LAIN";
+    useDHCP = false;
+    useNetworkd = true;
+    interfaces = {
+      enp0s25.useDHCP = true;
+      wlp3s0.useDHCP = true;
+    };
+    wireless.enable = true;
+    firewall.enable = false;
+  };
 
   # Enable X11
   services.xserver = {
@@ -212,8 +224,13 @@ in
     #horizontal scroll sucks on bad touchpad
     libinput.horizontalScrolling = false;
     # DISPLAY MANAGER
+    displayManager.sessionCommands =
+    # Disable Trackpad
+    ''
+    xinput --disable "Synaptics TM3053-004"
+    ''+ 
     # Trackpoint settings
-    displayManager.sessionCommands = ''
+    ''
     xinput set-prop "TPPS/2 IBM TrackPoint" "libinput Accel Speed" 1
     xinput set-prop "TPPS/2 IBM TrackPoint" "libinput Accel Profile Enabled" 0, 1
     xsetroot -cursor_name  left_ptr
@@ -228,12 +245,16 @@ in
     desktopManager.xterm.enable = false;
   };
 
+  fonts.fonts = with pkgs; [
+    tewi-font
+  ];
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.extraUsers.dcol = {
     isNormalUser = true;
     createHome = true;
     home = "/home/dcol/";
     description = "Daniel Collin";
+    
     extraGroups = ["video" "audio" "wheel" ];
     useDefaultShell = true;
   };
@@ -257,7 +278,7 @@ in
   };
    nix.nixPath = [ 
     "nixpkgs-overlays=/home/dcol/dotfiles/nix/overlays-compat/"
-    "nixpkgs=/home/dcol/nixpkgs/"
+    "nixpkgs=/home/dcol//.nix-defexpr/channels/nixos"
     "nixos-config=/home/dcol/dotfiles/nix/configuration.nix"
           ];
   
@@ -265,8 +286,7 @@ in
   services.acpid.enable = true;
   services.acpid.powerEventCommands = "systemctl suspend"; 
   powerManagement.enable = true;
-  services.fprintd.enable = true;
-  services.tlp.enable = true;
+  # services.tlp.enable = true;
   # Map CAPS to ESC / CTRL
   services.interception-tools.enable = true;
   systemd.user.services.dunst = {
@@ -289,17 +309,15 @@ in
 	 maxJobs = 10;
 	}];
 	nix.distributedBuilds = true;
-  # TODO: Find some way to ignore this is not on the network, atm it fucks up --user systemd
-  # fileSystems."/theta" = {
-  #   device = "192.168.0.11:/theta";
-  #   fsType = "nfs";
-  # };
+  fileSystems."/theta" = {
+    device = "192.168.0.11:/theta";
+    fsType = "nfs";
+  };
 
   # This value determines the NixOS release with which your system is to be
 
   # compatible, in order to avoid breaking some software such as database
   # servers. You should change this only after NixOS release notes say you
   # should.
-   system.stateVersion = "18.03"; # Did you read the comment?
 
 }
