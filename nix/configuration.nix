@@ -10,6 +10,22 @@ let
   };
   emacsWithPackages = (pkgs.emacsPackagesNgGen myEmacs).emacsWithPackages;
   overlays = import /home/dcol/dotfiles/nix/overlays/overlay1.nix;
+  hibernation = ''
+battery=`${pkgs.acpi}/bin/acpi -b | grep -P -o '[0-9]+(?=%)'`
+battery1=`echo "$battery" | head -1` 
+battery2=`echo "$battery" | head -2 | tail -1`
+if (("$battery1" <= 7)) && (("$battery1" <= 7))
+then
+    ${pkgs.dunst}/bin/notify-send -t 10000 "Battery low!"
+    for i in {0..10}
+    do 
+	let j=10-$i
+	${pkgs.dunst}/bin/notify-send -t 1000 "Hibernating in $j seconds."
+	sleep 1
+    done
+    systemctl hybrid-sleep 
+fi
+  '';
 
 in 
 {
@@ -286,9 +302,21 @@ in
   services.acpid.enable = true;
   services.acpid.powerEventCommands = "systemctl suspend"; 
   powerManagement.enable = true;
-  # services.tlp.enable = true;
+  services.tlp.enable = true;
   # Map CAPS to ESC / CTRL
   services.interception-tools.enable = true;
+  systemd = {
+    timers.battery-check = {
+      wantedBy = [ "timers.target" ];
+      partOf = [ "battery-check.service" ];
+      timerConfig.OnCalendar = "minutely";
+    };
+    services.battery-check = {
+      serviceConfig.Type = "oneshot";
+      script = hibernation;
+    };
+  };
+
   systemd.user.services.dunst = {
     enable = true;
     description = "dunst daemon";
@@ -315,9 +343,22 @@ in
   };
 
   # This value determines the NixOS release with which your system is to be
-
   # compatible, in order to avoid breaking some software such as database
   # servers. You should change this only after NixOS release notes say you
   # should.
+
+  # Suspend on low battery, courtesy of https://gitlab.com/xaverdh/my-nixos-config/blob/master/per-box/tux.nix#L85
+  systemd.services.suspend-on-low-battery =
+    let battery-level-sufficient = pkgs.writeShellScriptBin
+        "battery-level-sufficient" ''
+      test "$(cat /sys/class/power_supply/BAT1/status)" != Discharging \
+        || test "$(cat /sys/class/power_supply/BAT1/capacity)" -ge 10
+      '';
+    in {
+      serviceConfig = { Type = "oneshot"; };
+      onFailure = [ "suspend.target" ];
+      script = "${battery-level-sufficient}/bin/battery-level-sufficient";
+    };
+
 
 }
