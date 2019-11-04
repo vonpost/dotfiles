@@ -31,6 +31,7 @@ in
 {
   imports =
     [ # Include the results of the hardware scan.
+      <nixos-hardware/lenovo/thinkpad/t450s>
       ./hardware-configuration.nix
       ./audio.nix
     ];
@@ -113,7 +114,6 @@ in
     ghc
     gcc
     git
-    octave
     #idris
     
     #ACCESSORIES
@@ -295,6 +295,7 @@ in
    nix.nixPath = [ 
     "nixpkgs-overlays=/home/dcol/dotfiles/nix/overlays-compat/"
     "nixpkgs=/home/dcol//.nix-defexpr/channels/nixos"
+    "nixos-hardware=/home/dcol/.nix-defexpr/channels/nixos-hardware"
     "nixos-config=/home/dcol/dotfiles/nix/configuration.nix"
           ];
   
@@ -311,6 +312,8 @@ in
       partOf = [ "battery-check.service" ];
       timerConfig.OnCalendar = "minutely";
     };
+    # wait-online keeps getting stuck, so disable it.
+    services.systemd-networkd-wait-online.enable = false;
     services.battery-check = {
       serviceConfig.Type = "oneshot";
       script = hibernation;
