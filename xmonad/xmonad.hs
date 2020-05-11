@@ -12,6 +12,8 @@ import XMonad.Hooks.SetWMName
 import XMonad.Hooks.ManageHelpers
 import XMonad.Util.Scratchpad
 import XMonad.Layout.Hidden
+import XMonad.Layout.Spacing
+
 main :: IO ()
 main =
   xmonad
@@ -23,8 +25,8 @@ main =
 
 -- TODO: Get these colors from xrdb
 backgroundColor   = "#000000"
-middleColor       = "#000000"
-foregroundColor   = "#000006"
+middleColor       = "#F2A4A3"
+foregroundColor   = "#F2A4A3"
 myConfig = def
   { borderWidth        = 0
   , startupHook = startupHook def
@@ -33,7 +35,8 @@ myConfig = def
   , focusedBorderColor = foregroundColor
   , focusFollowsMouse  = False
   , keys               = myKeys
-  , layoutHook         = hiddenWindows emptyBSP 
+  , layoutHook         = spacingRaw True (Border 10 10 10 10) True (Border 10 10 10 10) True
+                         $ hiddenWindows emptyBSP 
   , modMask            = mod4Mask
   , manageHook         = manageSpawn <+> manageHook def <+> scratchpadManageHookDefault <+> fullscreenManageHook  
   , normalBorderColor  = middleColor

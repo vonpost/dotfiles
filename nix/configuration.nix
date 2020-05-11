@@ -31,7 +31,6 @@ in
 {
   imports =
     [ # Include the results of the hardware scan.
-      <nixos-hardware/lenovo/thinkpad/t450s>
       ./hardware-configuration.nix
       ./audio.nix
     ];
@@ -54,10 +53,9 @@ in
   boot.loader.grub.device = "/dev/sda"; # or "nodev" for efi only
   boot.extraModulePackages = [ config.boot.kernelPackages.acpi_call config.boot.kernelPackages.tp_smapi ];
   #networking.enableIPv6 = false;
-  i18n = {
-    consoleFont = "Lat2-Terminus16";
-    consoleKeyMap = "us";
-    defaultLocale = "en_US.UTF-8";
+  console = {
+    font = "Lat2-Terminus16";
+    keyMap = "us";
   };
   # Shell aliases
   environment.shellAliases = {
@@ -83,9 +81,8 @@ in
 
     # GAMING
     parsec
-    steam
     discord
-    wineWowPackages.staging
+    # wineWowPackages.staging
 
     # VIDEO 
     vaapiIntel
@@ -101,7 +98,6 @@ in
 
 
     # MATH
-    openblas
     texlive.combined.scheme-full
     aspell
     aspellDicts.en
@@ -118,15 +114,13 @@ in
     
     #ACCESSORIES
     brightnessctl
-    qbittorrent
-    xpdf
+    # qbittorrent
     wpa_supplicant_gui
     rofi-pass
     pass
     gnupg
     rxvt_unicode
     screenfetch
-    ghostscript
     wget
     rofi
     xclip
@@ -221,8 +215,8 @@ in
 
 
     # WINDOW MANAGER
+    displayManager.defaultSession = "none+xmonad";
     windowManager = {
-      default = "xmonad";
       xmonad = {
         enable = true;
         enableContribAndExtras = true;
@@ -241,6 +235,14 @@ in
     libinput.horizontalScrolling = false;
     # DISPLAY MANAGER
     displayManager.sessionCommands =
+    # Set background image with feh
+    ''
+    feh --bg-tile ~/wallpapers/CatHead.tft1.png
+    '' +   
+    # Start emacs daemon, for some reason doesnt do naturally
+    ''
+    emacs --daemon &
+    '' +   
     # Disable Trackpad
     ''
     xinput --disable "Synaptics TM3053-004"
@@ -257,7 +259,6 @@ in
       autoLogin.user = "dcol";
       greeter.enable = false;
     };
-    desktopManager.default = "none";
     desktopManager.xterm.enable = false;
   };
 
@@ -282,7 +283,11 @@ in
   #    vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
   #  };
   hardware = {
-    brightnessctl.enable = true;
+    trackpoint = {
+      enable = true;
+      speed = 225;
+      sensitivity = 184;
+    };
     opengl = {
       enable = true;
       driSupport = true;
@@ -292,6 +297,9 @@ in
 
     };
   };
+  services.printing.enable = true;
+  services.printing.drivers = [pkgs.gutenprint pkgs.gutenprintBin pkgs.hplipWithPlugin];
+
    nix.nixPath = [ 
     "nixpkgs-overlays=/home/dcol/dotfiles/nix/overlays-compat/"
     "nixpkgs=/home/dcol//.nix-defexpr/channels/nixos"
@@ -335,13 +343,13 @@ in
   ];
   # Build nixos configs remotely for speed
 	nix.buildMachines = [ {
-	 hostName = "192.168.0.11";
+	 hostName = "192.168.1.11";
 	 system = "x86_64-linux";
-	 maxJobs = 10;
+	 maxJobs = 12;
 	}];
 	nix.distributedBuilds = true;
   fileSystems."/theta" = {
-    device = "192.168.0.11:/theta";
+    device = "192.168.1.11:/theta";
     fsType = "nfs";
   };
 

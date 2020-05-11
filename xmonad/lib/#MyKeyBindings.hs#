@@ -13,6 +13,7 @@ import XMonad.Util.Run
 import XMonad.Util.Scratchpad
 import Graphics.X11.ExtraTypes.XF86
 import XMonad.Layout.Hidden
+import XMonad.Layout.Spacing
 import qualified XMonad.Util.ExtensibleState as XS
 myKeys = customKeys removedKeys addedKeys
 
@@ -34,6 +35,11 @@ addedKeys conf @ XConfig {modMask = modm} =
   , ((modm, xK_e), spawn "emacsclient -c") 
     -- Close application
   , ((modm, xK_w), kill)
+
+    -- Modify spacing
+  , ((modm, xK_Right), incScreenWindowSpacing 2)
+  , ((modm, xK_Left), decScreenWindowSpacing 2)
+  , ((modm, xK_Up), toggleScreenSpacingEnabled >> toggleWindowSpacingEnabled)
 
     -- Switch to last workspace
   , ((modm, xK_Tab), toggleWS)
@@ -89,6 +95,8 @@ addedKeys conf @ XConfig {modMask = modm} =
     -- XF86AudioMute
   , ((0, xF86XK_AudioMute), spawn "pamixer -t")
 
+  fa
+
     -- XF86AudioRaiseVolume
   , ((0, xF86XK_AudioRaiseVolume), spawn "pamixer -i 5 && notify-send \"$(pamixer --get-volume) \" ")
 
@@ -110,8 +118,8 @@ addedKeys conf @ XConfig {modMask = modm} =
 
 -- some help functions
 readLight = do brightness <- runProcessWithInput "brightnessctl" ["get"] ""
-               max <- runProcessW
-               let rounded = show . round $ read brightness
+               max <- runProcessWithInput "brightnessctl" ["m"] ""
+               let rounded = show . round $ 100*(read brightness)/(read max)
                spawn $ "notify-send \"" ++ rounded ++ "\""
 
 
@@ -119,11 +127,11 @@ incLight = spawn "brightnessctl set 5%+" >> readLight
 decLight = spawn "brightnessctl set 5%-" >> readLight
 
 switchLight :: Int -> String
-switchLight percent = if percent > 0 then "0%" else "5%"
+switchLight percent = if percent > 0 then "0%" else "100%"
 toggleLight = do brightness <- runProcessWithInput "brightnessctl" ["get"] ""
                  max <- runProcessWithInput "brightnessctl" ["m"] ""
                  let currentPercentage = 100*(read brightness)/(read max)
-                 let cmd = "brightnessctl set " ++ (switchLight (read [brightness]))
+                 let cmd = "brightnessctl set " ++ (switchLight (read brightness))
                  spawn cmd
 
 

@@ -23,7 +23,7 @@ URxvt.boldItalicFont:       xft:lucy tewi:style=Bold:size12,\
                             xft:Misc Fixed Wide
 
 
-#define bg    #1C1126
+#define bg    #000000
 #define blk   #000000
 #define fg    #ffe6ff
 #define bblk  #8B55FE

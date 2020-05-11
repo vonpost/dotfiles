@@ -13,6 +13,7 @@ import XMonad.Util.Run
 import XMonad.Util.Scratchpad
 import Graphics.X11.ExtraTypes.XF86
 import XMonad.Layout.Hidden
+import XMonad.Layout.Spacing
 import qualified XMonad.Util.ExtensibleState as XS
 myKeys = customKeys removedKeys addedKeys
 
@@ -34,6 +35,11 @@ addedKeys conf @ XConfig {modMask = modm} =
   , ((modm, xK_e), spawn "emacsclient -c") 
     -- Close application
   , ((modm, xK_w), kill)
+
+    -- Modify spacing
+  , ((modm, xK_Right), incScreenWindowSpacing 2)
+  , ((modm, xK_Left), decScreenWindowSpacing 2)
+  , ((modm, xK_Up), toggleScreenSpacingEnabled >> toggleWindowSpacingEnabled)
 
     -- Switch to last workspace
   , ((modm, xK_Tab), toggleWS)

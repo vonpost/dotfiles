@@ -5,7 +5,7 @@ let
 in 
 {
   parsec = super.callPackage ../derivations/parsec/default.nix {};
-  octave = super.callPackage ../derivations/octave/default.nix {};
+  # octave = super.callPackage ../derivations/octave/default.nix {};
   # lutris = super.pythonPackages.callPackage ../derivations/lutris/chrootenv.nix {};
  #  haskellPackages =  super.haskellPackages.extend(h-sel: h-sup:  {
  #  mkDerivation = expr: h-sup.mkDerivation (expr // { enableLibraryProfiling = true; });

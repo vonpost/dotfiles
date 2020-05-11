@@ -13,7 +13,7 @@ stdenv.mkDerivation rec {
 
   src = fetchurl {
       url = "https://s3.amazonaws.com/parsec-build/package/parsec-linux.deb";
-      sha256 = "0wx2nchjr0cbd8a9wdq38wf6kiyxw6892gda4a69w670pqg9bvdy";
+      sha256 = "1hfdzjd8qiksv336m4s4ban004vhv00cv2j461gc6zrp37s0fwhc";
     };
 
   buildInputs = [ dpkg ];
