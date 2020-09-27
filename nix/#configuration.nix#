@@ -178,6 +178,10 @@ in
     dante
     nix-buffer
     company
+    company-auctex
+    company-python
+    company-haskell
+    company-
     company-math
     projectile
     nix-mode

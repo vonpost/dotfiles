@@ -5,6 +5,7 @@ let
 in 
 {
   parsec = super.callPackage ../derivations/parsec/default.nix {};
+  discord = super.discord.overrideAttrs (_: { src = builtins.fetchTarball https://discord.com/api/download?platform=linux&format=tar.gz; });
   # octave = super.callPackage ../derivations/octave/default.nix {};
   # lutris = super.pythonPackages.callPackage ../derivations/lutris/chrootenv.nix {};
  #  haskellPackages =  super.haskellPackages.extend(h-sel: h-sup:  {

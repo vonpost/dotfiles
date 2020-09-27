@@ -74,13 +74,14 @@
    [default default default italic underline success warning error])
  '(ansi-color-names-vector
    ["#242424" "#e5786d" "#95e454" "#cae682" "#8ac6f2" "#333366" "#ccaa8f" "#f6f3e8"])
- '(custom-enabled-themes (quote (xresources)))
+ '(custom-enabled-themes '(xresources))
  '(custom-safe-themes
-   (quote
-    ("e0c66085db350558f90f676e5a51c825cb1e0622020eeda6c573b07cb8d44be5" default)))
+   '("e0c66085db350558f90f676e5a51c825cb1e0622020eeda6c573b07cb8d44be5" default))
+ '(global-auto-revert-mode t)
+ '(indent-tabs-mode nil)
  '(package-selected-packages
-   (quote
-    (csharp-mode which-key visual-regexp-steroids rust-mode ranger rainbow-mode rainbow-delimiters projectile pdf-tools nix-mode nix-buffer magit latex-preview-pane ivy-pass idris-mode highlight-parentheses frames-only-mode evil-collection dante counsel company-math auctex))))
+   '(csharp-mode which-key visual-regexp-steroids rust-mode ranger rainbow-mode rainbow-delimiters projectile pdf-tools nix-mode nix-buffer magit latex-preview-pane ivy-pass idris-mode highlight-parentheses frames-only-mode evil-collection dante counsel company-math auctex))
+ '(tab-width 4))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
