@@ -32,7 +32,7 @@ addedKeys conf @ XConfig {modMask = modm} =
     -- Terminal
   , ((modm, xK_Return), spawn $ XMonad.terminal conf)
     -- Emacs
-  , ((modm, xK_e), spawn "emacsclient -c") 
+  , ((modm, xK_e), spawn "emacsclient -c -n -e '(switch-to-buffer nil)'")
     -- Close application
   , ((modm, xK_w), kill)
 
@@ -54,6 +54,7 @@ addedKeys conf @ XConfig {modMask = modm} =
   , ((modm, xK_t), sendMessage Swap)
     -- Open quake terminal dropdown
   , ((modm, xK_f), scratchpadSpawnActionTerminal "urxvtc")
+
     -- Open rofi-pass, password selector
   , ((modm, xK_p), spawn "rofi-pass")
     -- Layout switching

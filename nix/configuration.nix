@@ -13,16 +13,12 @@ let
   hibernation = ''
 battery0=`cat /sys/class/power_supply/BAT0/capacity`
 battery1=`cat /sys/class/power_supply/BAT1/capacity`
-if (("$battery0" <= 5)) && (("$battery1" <= 5))
+status=`cat /sys/class/power_supply/BAT0/status`
+if [[ "$battery0" -le 5 && "$battery1" -le 5  && "$status" == Discharging ]]
 then
-    ${pkgs.dunst}/bin/notify-send -t 10000 "Battery low!"
-    for i in {0..10}
-    do 
-	let j=10-$i
-	${pkgs.dunst}/bin/notify-send -t 1000 "Hibernating in $j seconds."
-	sleep 1
-    done
-    systemctl hybrid-sleep 
+    ${pkgs.libnotify}/bin/notify-send -t 10000 "Battery low, going into hibernation!"
+    sleep 10
+    ${pkgs.systemd}/bin/systemctl hybrid-sleep
 fi
   '';
 
@@ -40,6 +36,11 @@ in
   nix.gc.automatic = true;
   nix.gc.dates = "weekly";
   nix.gc.options = "--delete-older-than 30d";
+  # nix options for derivations to persist garbage collection
+  nix.extraOptions = ''
+    keep-outputs = true
+    keep-derivations = true
+  '';
   # Use the GRUB 2 boot loader.
   boot.kernelPackages = pkgs.linuxPackages_latest;       
   # boot.kernel.sysctl."net.ipv6.conf.eth0.disable_ipv6" = true;
@@ -73,7 +74,6 @@ in
   nixpkgs.config = {
 		allowUnfree = true;
   };
-  environment.pathsToLink = [ "/share/agda" ];
   environment.systemPackages = with pkgs; [
     # BROWSER
     qutebrowser
@@ -81,8 +81,6 @@ in
     # GAMING
     parsec
     discord
-    discord-canary
-    discord-ptb
     # wineWowPackages.staging
 
     # VIDEO 
@@ -112,7 +110,8 @@ in
     gcc
     git
     #idris
-    
+    direnv
+
     #ACCESSORIES
     brightnessctl
     # qbittorrent
@@ -162,36 +161,36 @@ in
   services.zerotierone.enable = true;
 
   services.emacs.package = with pkgs; (emacsWithPackages (with emacsPackagesNg; [
-    graphviz-dot-mode
-    idris-mode
-    csharp-mode
-    auctex
-    agda2-mode
-    rainbow-mode
-    rainbow-delimiters
-    evil-collection
-    visual-regexp-steroids
-    flycheck
-    haskell-mode
-    highlight-parentheses
-    magit
-    dante
-    nix-buffer
-    company
-    company-math
-    projectile
-    nix-mode
-    pdf-tools
-    ranger
-    ivy
-    swiper
-    counsel
-    ivy-pass
-    evil
-    frames-only-mode
-    latex-preview-pane
-    which-key
-    rust-mode
+    # graphviz-dot-mode
+    # idris-mode
+    # csharp-mode
+    # auctex
+    # agda2-mode
+    # rainbow-mode
+    # rainbow-delimiters
+    # evil-collection
+    # visual-regexp-steroids
+    # flycheck
+    # haskell-mode
+    # highlight-parentheses
+    # magit
+    # dante
+    # nix-buffer
+    # company
+    # company-math
+    # projectile
+    # nix-mode
+    # pdf-tools
+    # ranger
+    # ivy
+    # swiper
+    # counsel
+    # ivy-pass
+    # evil
+    # frames-only-mode
+    # latex-preview-pane
+    # which-key
+    # rust-mode
   ]));
 
   # Hide cursor when idle.
@@ -241,9 +240,10 @@ in
     # DISPLAY MANAGER
     displayManager.sessionCommands =
     # Set background image with feh
+
     ''
-    feh --bg-tile ~/wallpapers/CatHead.tft1.png
-    '' +   
+    wal -i ~/wallpapers/tennis.jpg
+    '' +
     # Start emacs daemon, for some reason doesnt do naturally
     ''
     emacs --daemon &
@@ -282,9 +282,6 @@ in
   # enable to allow ios connection for tethering
   services.usbmuxd.enable = true;
   security.sudo.enable = true;
-  # nixpkgs.config.packageOverrides = pkgs: {
-  #    vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
-  #  };
   hardware = {
     trackpoint = {
       enable = true;
@@ -311,24 +308,27 @@ in
           ];
   
   # Power management
-  services.acpid.enable = true;
-  services.acpid.powerEventCommands = "systemctl suspend"; 
   powerManagement.enable = true;
   services.tlp.enable = true;
   # Map CAPS to ESC / CTRL
   services.interception-tools.enable = true;
   systemd = {
-    timers.battery-check = {
-      wantedBy = [ "timers.target" ];
-      partOf = [ "battery-check.service" ];
-      timerConfig.OnCalendar = "minutely";
+    user = {
+      timers.battery-check = {
+        wantedBy = [ "timers.target" ];
+        partOf = [ "battery-check.service" ];
+        timerConfig.OnBootSec = "1m";
+        timerConfig.OnUnitInactiveSec = "1m";
+
+      };
+      services.battery-check = {
+        serviceConfig.Type = "oneshot";
+        script = hibernation;
+      };
     };
+
     # wait-online keeps getting stuck, so disable it.
     services.systemd-networkd-wait-online.enable = false;
-    services.battery-check = {
-      serviceConfig.Type = "oneshot";
-      script = hibernation;
-    };
   };
 
   systemd.user.services.dunst = {
@@ -346,7 +346,7 @@ in
   ];
   # Build nixos configs remotely for speed
 	nix.buildMachines = [ {
-	 hostName = "mother";
+	 hostName = "192.168.1.11";
 	 system = "x86_64-linux";
 	 maxJobs = 10;
 	}];

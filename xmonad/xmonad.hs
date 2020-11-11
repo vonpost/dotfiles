@@ -24,22 +24,22 @@ main =
 
 
 -- TODO: Get these colors from xrdb
-backgroundColor   = "#000000"
-middleColor       = "#F2A4A3"
-foregroundColor   = "#F2A4A3"
+-- backgroundColor   = "#000000"
+-- middleColor       = "#F2A4A3"
+-- foregroundColor   = "#F2A4A3"
 myConfig = def
   { borderWidth        = 0
   , startupHook = startupHook def
     -- <+> setFullscreenSupported
   , handleEventHook = fullscreenEventHook
-  , focusedBorderColor = foregroundColor
+  -- , focusedBorderColor = foregroundColor
   , focusFollowsMouse  = False
   , keys               = myKeys
   , layoutHook         = spacingRaw True (Border 10 10 10 10) True (Border 10 10 10 10) True
                          $ hiddenWindows emptyBSP 
   , modMask            = mod4Mask
   , manageHook         = manageSpawn <+> manageHook def <+> scratchpadManageHookDefault <+> fullscreenManageHook  
-  , normalBorderColor  = middleColor
+  -- , normalBorderColor  = middleColor
   , terminal           = "urxvtc"
   , workspaces         = [ "browse", "code", "read", "chat", "etc"]
   -- TODO: Fix workspaces, correct names, started in correct workspaces etc.
