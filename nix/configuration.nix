@@ -156,9 +156,6 @@ in
   services.emacs.defaultEditor = true;
   services.emacs.enable = true;
   services.emacs.install = true;
-   
-  # zerotier
-  services.zerotierone.enable = true;
 
   services.emacs.package = with pkgs; (emacsWithPackages (with emacsPackagesNg; [
     # graphviz-dot-mode
