@@ -7,11 +7,18 @@ in {
     kernelModules = [];
   };
 
-  hardware.pulseaudio = {
-    enable = true;
-    support32Bit = true;
-    package = pulse;
-    extraConfig = "load-module module-switch-on-connect";
-  };
+ hardware.bluetooth.enable = true;
+ services.blueman.enable = true;
+
+# rtkit is optional but recommended
+security.rtkit.enable = true;
+services.pipewire = {
+  enable = true;
+  alsa.enable = true;
+  alsa.support32Bit = true;
+  pulse.enable = true;
+  # If you want to use JACK applications, uncomment this
+  #jack.enable = true;
+};
 
 }

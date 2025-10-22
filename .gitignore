@@ -2,6 +2,7 @@
 .idea
 *.log
 tmp/
+nix/wg_client.nix
 
 dist
 dist-*
