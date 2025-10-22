@@ -16,7 +16,7 @@ in
       /etc/nixos/hardware-configuration.nix
       ./power_management.nix
       ./audio.nix
-      ./wg_client.nix
+      ./wg/wg_client.nix
       ./picom.nix
   ];
   services.fwupd.enable = true;

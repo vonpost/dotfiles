@@ -4,3 +4,9 @@
 [submodule ".xmonad"]
 	path = .xmonad
 	url = https://github.com/vonpost/.xmonad
+[submodule "wg"]
+	path = nix/wg
+	url = https://gitub.com/vonpost/wg
+[submodule "nix/wg"]
+	path = nix/wg
+	url = git@github.com:vonpost/wg.git
