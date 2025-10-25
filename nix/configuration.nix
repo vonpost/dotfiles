@@ -91,6 +91,7 @@ in
     nix-direnv
 
     #ACCESSORIES
+    ripgrep
     alacritty
     imagemagick
     (pkgs.writeShellScriptBin "alacrittyc" ''

@@ -1,0 +1,24 @@
+
+[selection]
+save_to_clipboard = true
+
+[[keyboard.bindings]]
+key = "C"
+mods = "Control|Alt"
+action = "Copy"
+
+[[keyboard.bindings]]
+key = "V"
+mods = "Control|Alt"
+action = "Paste"
+
+[window]
+decorations = "Buttonless"
+
+[window.dimensions]
+columns = 80
+lines = 24
+
+[window.padding]
+x = 10
+y = 10
