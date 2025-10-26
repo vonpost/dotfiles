@@ -40,9 +40,9 @@ vec4 window_shader(){
   g = (g - 0.5) * 0.05;                             // amplitude ~5%
 
   // faint fibers (subtle; safe for text)
-  float ang = 1.07;
+  float ang = 1.0;
   vec2 rot = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * (uv*700.0*0.6);
-  float fibers = smoothstep(0.6, 0.95, noise(vec2(rot.x*4.0, rot.y*0.22))) * 0.035;
+  float fibers = smoothstep(0.6, 0.95, noise(vec2(rot.x*4.0, rot.y*0.22))) * 0.065;
 
   // base tint and grain application with edge mask
   vec3 paperTint = vec3(0.985, 0.983, 0.978);
