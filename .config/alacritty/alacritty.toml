@@ -20,7 +20,7 @@ action = "Paste"
 
 [window]
 decorations = "Buttonless"
-opacity = 0.7
+opacity = 1.0
 [window.dimensions]
 columns = 80
 lines = 24
