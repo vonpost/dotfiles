@@ -4,7 +4,7 @@
     "wallpaper": "{{wallpaper}}",
     "alpha": "100",
     "special": {
-        "background": "{{background}}",
+        "background": "{{background | blend(color1) | darken(0.5)}}",
         "foreground": "{{foreground}}",
         "cursor": "{{foreground}}"
     },

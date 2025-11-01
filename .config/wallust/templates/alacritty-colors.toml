@@ -2,7 +2,7 @@
 # alacritty = { template = 'alacritty.toml', target = '~/.config/alacritty/colors.toml' }
 # and alacritty.toml should import that file under [general]
 [colors.primary]
-background = "{{background}}"
+background = "{{background | blend(color1) | darken(0.5)}}"
 foreground = "{{foreground}}"
 
 [colors.normal]

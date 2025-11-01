@@ -2,7 +2,7 @@ configuration {
 	modes: "window,drun,run,ssh";
 	font: "mono 12";
 	location: 0;
-	yoffset: 0;
+	yoffset: -300;
 	xoffset: 0;
 /*	fixed-num-lines: true;*/
 /*	show-icons: false;*/
@@ -72,7 +72,7 @@ ssh-command: "{terminal} -e {ssh-client} {host} [-p {port}]";
 /*	display-run: ;*/
 /*	display-ssh: ;*/
 /*	display-drun: ;*/
-/*	display-combi: ;*/
+	display-combi: "";
 /*	display-keys: ;*/
 /*	display-filebrowser: ;*/
 /*	display-recursivebrowser: ;*/
@@ -166,4 +166,6 @@ ssh-command: "{terminal} -e {ssh-client} {host} [-p {port}]";
       sorting-method:    "name";
   }
 }
-@theme "~/.cache/wal/colors-rofi-dark.rasi"
+@theme "~/.config/rofi/dracula.rasi"
+
+/* @theme "~/.cache/wal/colors-rofi-dark.rasi" */

@@ -48,3 +48,5 @@ alacritty = { template = 'alacritty-colors.toml', target = '~/.config/alacritty/
 rofi = { template = 'colors-rofi-dark.rasi', target = '~/.config/rofi/colors-rofi-dark.rasi' }
 qutebrowser = { template = 'qutebrowser-colors.py', target = '~/.config/qutebrowser/colors.py' }
 wal = { template = 'colors.json', target = '~/.cache/wal/colors.json' }
+#wal-gruv = { template = 'gruvbox-light.json', target = '~/.cache/wal/colors.json' }
+alacritty-gruv = { template = 'alacritty-gruvbox.toml', target = "~/.cache/wallust/alacritty-gruvbox.toml" }

@@ -5,16 +5,16 @@ This file is meant to be sourced from qutebrowser's config.py via
 """
 
 palette = {
-    "background": "{{background}}",
-    "background_alt": "{{color0}}",
-    "background_highlight": "{{color8}}",
+    "background": "{{color1 | blend(color0)}}",
+    "background_alt": "{{ color1 }}",
+    "background_highlight": "{{ color1 | lighten(0.5)}}",
     "foreground": "{{foreground}}",
-    "foreground_alt": "{{color7}}",
-    "primary": "{{color4}}",
-    "secondary": "{{color5}}",
-    "success": "{{color2}}",
-    "warning": "{{color3}}",
-    "error": "{{color1}}",
+    "foreground_alt": "{{ foreground | lighten(0.2) }}",
+    "primary": "{{color6 | blend(foreground)}}",
+    "secondary": "{{color7 | blend(foreground)}}",
+    "success": "{{color3 | blend("00FF00") | lighten(0.5)}}",
+    "warning": "{{color4 | blend("FFFF00") | lighten(0.5)}}",
+    "error": "{{color5 | blend ("FF0000") | lighten(0.5)}}",
 }
 
 try:
@@ -123,8 +123,7 @@ c.colors.messages.error.fg = bg
 c.colors.messages.error.border = error
 
 # Keyhints and webpages
-c.colors.keyhint.bg = bg_hi
+c.colors.keyhint.bg = bg
 c.colors.keyhint.fg = fg
 c.colors.keyhint.suffix.fg = primary
 c.colors.webpage.bg = bg
-c.colors.webpage.preferred_color_scheme = "dark"

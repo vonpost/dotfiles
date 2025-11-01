@@ -7,7 +7,10 @@ let
   bleeding = import <bleeding> {  };
   staging = import <staging> {  };
   # Should be pkgs.emacsGcc but tired of recompiling all the fucking time.
-  myEmacs = pkgs.emacs;
+  myEmacs =   ((pkgs.emacsPackagesFor pkgs.emacs-gtk).emacsWithPackages (epkgs: [
+    epkgs.vterm
+  ]));
+
 in
 {
   imports =
@@ -91,6 +94,7 @@ in
     nix-direnv
 
     #ACCESSORIES
+    rofi-bluetooth
     ripgrep
     alacritty
     imagemagick
@@ -113,7 +117,7 @@ in
     rofi
     xclip
     maim
-    pywal16
+    bleeding.wallust
   # ranger
     libnotify
     dunst
@@ -208,12 +212,9 @@ in
     # DISPLAY MANAGER
     displayManager.sessionCommands =
         # Set background image with feh
-        ''
-        wal -i ~/wallpapers/clockwork.jpg
-        wal -Rqe
-        '' +
         # Trackpoint settings
         ''
+        feh --bg-tile /home/dcol/wallpapers/mactex1.png
         xinput set-prop "TPPS/2 Elan TrackPoint" "libinput Accel Speed" 1
         xinput set-prop "TPPS/2 Elan TrackPoint" "libinput Accel Profile Enabled" 0, 1
         xsetroot -cursor_name  left_ptr

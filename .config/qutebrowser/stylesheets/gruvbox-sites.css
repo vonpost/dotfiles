@@ -1,0 +1,136 @@
+:root {
+    color-scheme: light;
+    --gruvbox-bg0: #fbf1c7;
+    --gruvbox-bg1: #ebdbb2;
+    --gruvbox-bg2: #d5c4a1;
+    --gruvbox-bg3: #bdae93;
+    --gruvbox-fg0: #3c3836;
+    --gruvbox-fg1: #7c6f64;
+    --gruvbox-red: #cc241d;
+    --gruvbox-orange: #d65d0e;
+    --gruvbox-yellow: #d79921;
+    --gruvbox-green: #98971a;
+    --gruvbox-blue: #458588;
+    --gruvbox-purple: #b16286;
+
+    /* New Reddit overrides */
+    --newRedditTheme-bodyText: var(--gruvbox-fg0);
+    --newRedditTheme-bodyTextAlpha03: rgba(60, 56, 54, 0.3);
+    --newRedditTheme-bodyTextAlpha06: rgba(60, 56, 54, 0.6);
+    --newRedditTheme-bodyBackground: var(--gruvbox-bg0);
+    --newRedditTheme-bodyBackgroundMobile: var(--gruvbox-bg0);
+    --newRedditTheme-post: var(--gruvbox-bg0);
+    --newRedditTheme-field: var(--gruvbox-bg1);
+    --newRedditTheme-inputBackground: var(--gruvbox-bg1);
+    --newRedditTheme-line: var(--gruvbox-bg2);
+    --newRedditTheme-navBar: var(--gruvbox-bg1);
+    --newRedditTheme-shade2: var(--gruvbox-bg1);
+    --newRedditTheme-shade3: var(--gruvbox-bg2);
+    --newRedditTheme-shade4: var(--gruvbox-bg3);
+    --newRedditTheme-linkText: var(--gruvbox-blue);
+    --newRedditTheme-visitedLink: var(--gruvbox-purple);
+    --newRedditTheme-actionText: var(--gruvbox-blue);
+    --newRedditTheme-metaText: var(--gruvbox-fg1);
+    --newRedditTheme-button: var(--gruvbox-blue);
+    --newRedditTheme-buttonText: var(--gruvbox-bg0);
+    --newRedditTheme-flair: var(--gruvbox-yellow);
+}
+
+html, body {
+    background-color: var(--gruvbox-bg0) !important;
+    color: var(--gruvbox-fg0) !important;
+}
+
+a {
+    color: var(--gruvbox-blue) !important;
+}
+
+a:visited {
+    color: var(--gruvbox-purple) !important;
+}
+
+button,
+input[type="button"],
+input[type="submit"],
+.button {
+    background-color: var(--gruvbox-blue) !important;
+    color: var(--gruvbox-bg0) !important;
+    border: 1px solid var(--gruvbox-bg2) !important;
+}
+
+input,
+textarea,
+select {
+    background-color: var(--gruvbox-bg1) !important;
+    color: var(--gruvbox-fg0) !important;
+    border: 1px solid var(--gruvbox-bg2) !important;
+}
+
+/* Old reddit structure */
+body#reddit,
+.content,
+.commentarea,
+.link,
+.linkinfo,
+.side,
+#header,
+#header-bottom-left,
+#header-bottom-right,
+.tabmenu,
+.listing-chooser {
+    background-color: var(--gruvbox-bg0) !important;
+    color: var(--gruvbox-fg0) !important;
+    border-color: var(--gruvbox-bg2) !important;
+}
+
+.thing,
+.comment,
+.md-container,
+.menuarea,
+.titlebox,
+.sidebox {
+    background-color: var(--gruvbox-bg1) !important;
+}
+
+.thing.stickied {
+    border-left: 4px solid var(--gruvbox-green) !important;
+}
+
+.link .title,
+.md a {
+    color: var(--gruvbox-blue) !important;
+}
+
+.link .flat-list .comments {
+    color: var(--gruvbox-purple) !important;
+}
+
+/* Leta Mullvad general tweaks */
+header,
+nav,
+.card,
+.card-header,
+.card-body,
+.card-footer {
+    background-color: var(--gruvbox-bg1) !important;
+    color: var(--gruvbox-fg0) !important;
+}
+
+table {
+    background-color: var(--gruvbox-bg1) !important;
+    color: var(--gruvbox-fg0) !important;
+}
+
+table th {
+    background-color: var(--gruvbox-bg2) !important;
+}
+
+table td,
+table th {
+    border-color: var(--gruvbox-bg3) !important;
+}
+
+.text-muted,
+.text-secondary {
+    color: var(--gruvbox-fg1) !important;
+}
