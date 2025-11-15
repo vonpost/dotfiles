@@ -4,8 +4,8 @@
 
 { config, pkgs, ... }:
 let
-  bleeding = import <bleeding> {  };
-  staging = import <staging> {  };
+  bleeding = import <bleeding> {     config = config.nixpkgs.config;
+ };
   # Should be pkgs.emacsGcc but tired of recompiling all the fucking time.
   myEmacs =   ((pkgs.emacsPackagesFor pkgs.emacs-gtk).emacsWithPackages (epkgs: [
     epkgs.vterm
@@ -21,6 +21,8 @@ in
       ./audio.nix
       ./wg/wg_client.nix
       ./picom.nix
+      ./xserver.nix
+      #./wayland.nix
   ];
   services.fwupd.enable = true;
 
@@ -58,16 +60,21 @@ in
   time.timeZone = "Europe/Amsterdam";
 
   nixpkgs.config = {
-		allowUnfree = true;
+    allowUnfree = true;
   };
 
   environment.systemPackages = with pkgs; [
     # BROWSER
-    qutebrowser
+    bleeding.qutebrowser
+
+    #email
+    # mu
+    # isync
+
 
     # GAMING
-    discord
-    moonlight-qt
+    bleeding.discord
+    bleeding.moonlight-qt
     #lutris
     #(wineWowPackages.staging.override { wineBuild = "wine64"; })
 
@@ -86,6 +93,7 @@ in
     
     # PROGRAMMING
     vim
+    python3Packages.python-lsp-server
     ghc
     gcc
     git
@@ -104,12 +112,10 @@ in
     '')
 
     htop
-    jellyfin-media-player
+    # bleeding.jellyfin-media-player , relies on insecure qtwebengine
+    acpi
     brightnessctl
-    # qbittorrent
     wpa_supplicant_gui
- #  rofi-pass
- #  pass
     gnupg
     rxvt-unicode-unwrapped
     screenfetch
@@ -117,29 +123,16 @@ in
     rofi
     xclip
     maim
-    bleeding.wallust
-  # ranger
     libnotify
     dunst
     pamixer
     feh
     piper
     libinput
-    
-    #POWER MANAGEMENT
-    acpi
-    # haskell
-    # haskellPackages.categories
-    # haskellPackages.accelerate
-    # haskellPackages.accelerate-llvm-native
-    # XMONAD stuff
-    # haskellPackages.Agda
-    haskellPackages.xmonad-contrib
-    haskellPackages.xmonad-extras
-    haskellPackages.xmonad
 
     openrazer-daemon
   ];
+
 
     hardware.openrazer.enable = true;
      hardware.openrazer.users = ["dcol"];
@@ -184,46 +177,20 @@ in
   # Enable X11
   services.libinput.enable = true;
   services.displayManager = {
-    defaultSession = "none+xmonad";
     autoLogin.enable = true;
     autoLogin.user = "dcol";
   };
-  services.xserver = {
-    enable = true;
-    xkb = {
-      layout = "us";
-      options = "eurosign:e";
-    };
-    videoDrivers = [ "amdgpu" ];
-    # WINDOW MANAGER
-    windowManager = {
-      xmonad = {
-        enable = true;
-        enableContribAndExtras = true;
-        extraPackages = haskellPackages: [
-          haskellPackages.xmonad-contrib
-	        haskellPackages.xmonad-extras
-	        haskellPackages.xmonad
-	      ];
-      };
-    };
 
 
-    # DISPLAY MANAGER
-    displayManager.sessionCommands =
-        # Set background image with feh
-        # Trackpoint settings
-        ''
-        feh --bg-tile /home/dcol/wallpapers/mactex1.png
-        xinput set-prop "TPPS/2 Elan TrackPoint" "libinput Accel Speed" 1
-        xinput set-prop "TPPS/2 Elan TrackPoint" "libinput Accel Profile Enabled" 0, 1
-        xsetroot -cursor_name  left_ptr
-        '';
-    desktopManager.xterm.enable = false;
+  fonts = {
+    packages = with pkgs; [
+      tewi-font
+      nerd-fonts.blex-mono
+      eb-garamond
+    ];
+    enableDefaultPackages = true;
   };
-  fonts.packages = with pkgs; [
-    tewi-font
-  ];
+
 
   # Define a user account. Don't forget to set a password with ‘passwd’.
   users.extraUsers.dcol = {
@@ -248,15 +215,9 @@ in
     cpu.amd.updateMicrocode = true;
     graphics = {
       enable = true;
-      extraPackages = with pkgs; [
-        amdvlk
-      ];
-
-      extraPackages32 = with pkgs; [
-        driversi686Linux.amdvlk
-      ];
     };
   };
+
   # services.printing.enable = true;
   # services.printing.drivers = [pkgs.gutenprint pkgs.gutenprintBin pkgs.hplipWithPlugin];
   # Map CAPS to ESC / CTRL
@@ -313,7 +274,7 @@ in
   systemd.services.networkd-wait-online.enable = false;
   # Build nixos configs remotely for speed
 	nix.buildMachines = [ {
-	 hostName = "mother.lan";
+	 hostName = "root@mother.lan";
 	 system = "x86_64-linux";
 	 maxJobs = 10;
 	}];
