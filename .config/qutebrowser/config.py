@@ -15,7 +15,7 @@ config.load_autoconfig()
 # else:
 #     print(f"[qutebrowser] wallust colors not found at {colors_file}")
 
-
+config.bind('dm', 'config-cycle colors.webpage.darkmode.enabled')
 # Example personal preferences. Adjust as needed.
 c.editor.command = ["emacsclient","-c", "{file}"]
 c.auto_save.session = True

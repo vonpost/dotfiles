@@ -2,8 +2,14 @@
 import = [
     #"~/.config/alacritty/colors/alacritty-colors.toml"
     #"~/.cache/wallust/alacritty-gruvbox.toml"
-    "~/.config/alacritty/dracula.toml"
+     "~/.config/alacritty/dracula.toml"
+     #"~/.config/alacritty/modus-vivendi-tinted.toml"
 ]
+[font]
+
+normal = { family = "BlexMono Nerd Font", style = "Regular"}
+
+
 
 [selection]
 save_to_clipboard = true

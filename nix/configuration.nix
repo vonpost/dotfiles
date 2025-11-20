@@ -22,6 +22,7 @@ in
       ./wg/wg_client.nix
       ./picom.nix
       ./xserver.nix
+      ./t14-trackpoint.nix
       #./wayland.nix
   ];
   services.fwupd.enable = true;
@@ -98,7 +99,6 @@ in
     gcc
     git
     #idris
-    direnv
     nix-direnv
 
     #ACCESSORIES
@@ -154,6 +154,8 @@ in
   enableSSHSupport = true;
 };
 
+  programs.direnv.enable = true;
+
   # Hide cursor when idle.
   services.unclutter-xfixes.enable = true;
   # Enable ratbagd for configuring mouse
@@ -175,7 +177,6 @@ in
   };
 
   # Enable X11
-  services.libinput.enable = true;
   services.displayManager = {
     autoLogin.enable = true;
     autoLogin.user = "dcol";
@@ -271,18 +272,25 @@ in
   swapDevices = [
     { device = "/dev/disk/by-label/swap"; }
   ];
-  systemd.services.networkd-wait-online.enable = false;
+  systemd.network.wait-online.anyInterface = true;
   # Build nixos configs remotely for speed
-	nix.buildMachines = [ {
-	 hostName = "root@mother.lan";
-	 system = "x86_64-linux";
-	 maxJobs = 10;
-	}];
+	# nix.buildMachines = [ {
+	#  hostName = "root@192.168.1.11";
+	#  system = "x86_64-linux";
+	#  maxJobs = 10;
+	# }];
 	nix.distributedBuilds = true;
   fileSystems."/theta" = {
     device = "mother.lan:/theta";
     fsType = "nfs";
-    options = [ "x-systemd.automount" "noauto" "x-systemd.idle-timeout=600" ];
+    options = [
+      "x-systemd.requires=wg-quick-wg0.service"
+      "x-systemd.after=wg-quick-wg0.service"
+      "x-systemd.automount"
+      "noauto"
+      "_netdev"
+      "x-systemd.idle-timeout=300"
+      "nofail" ];
   };
 
 }
