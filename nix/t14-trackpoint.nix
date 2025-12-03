@@ -13,7 +13,7 @@ in
 
     mouse = {
       accelProfile = "flat";
-      accelSpeed   = "1.0";
+      accelSpeed   = "0.2";
       additionalOptions = ''
       MatchProduct "${trackpoint_new_name}"
       '';
@@ -29,7 +29,7 @@ in
   environment.etc."libinput/local-overrides.quirks".text = ''
     [Trackpoint Override]
     MatchName=*Synaptics*TouchPad*
-    AttrTrackpointMultiplier=1.5
+    AttrTrackpointMultiplier=1.0
   '';
   # services.xserver.inputClassSections = [
   #   ''

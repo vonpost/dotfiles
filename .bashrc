@@ -5,6 +5,7 @@ alias doom="~/.config/emacs/bin/doom"
 eval "$(direnv hook bash)"
 alias godotgl="godot --rendering-driver opengl3"
 alias grep="rg"
+alias vi="emacsclient -nw"
 alias e="emacsclient -nc"
 alias et="emacsclient -nw"
 man() {

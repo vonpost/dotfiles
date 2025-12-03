@@ -19,7 +19,7 @@ in
       /etc/nixos/hardware-configuration.nix
       ./power_management.nix
       ./audio.nix
-      ./wg/wg_client.nix
+      ./wg/wg_client_systemd.nix
       ./picom.nix
       ./xserver.nix
       ./t14-trackpoint.nix
@@ -154,7 +154,14 @@ in
   enableSSHSupport = true;
 };
 
+  services.mullvad-vpn = {
+    enable = true;
+    package = pkgs.mullvad-vpn;
+  };
+
   programs.direnv.enable = true;
+  programs.nix-ld.enable = true;
+
 
   # Hide cursor when idle.
   services.unclutter-xfixes.enable = true;
@@ -162,10 +169,19 @@ in
   services.ratbagd.enable = true;
   # Enable the OpenSSH daemon.
   services.openssh.enable = true;
+  # Use systemd-networkd + systemd-resolved
+  systemd.network.enable = true;
+  services.resolved = {
+    enable = true;
+    # Optional: use this as fallback for non-lan stuff if Mullvad isn't enforcing its own
+    fallbackDns = [ "9.9.9.9" ];
+  };
+
   networking = {
     hostName = "TERRA";
     useDHCP = false;
     useNetworkd = true;
+    useHostResolvConf = false;
     interfaces = {
       enp5s0.useDHCP = true;
       wlp3s0.useDHCP = true;
@@ -173,7 +189,6 @@ in
     };
     wireless.enable = true;
     firewall.enable = false;
-    nameservers = ["1.1.1.1" "8.8.8.8"];
   };
 
   # Enable X11
