@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "bleeding": {
+      "locked": {
+        "lastModified": 1765833526,
+        "narHash": "sha256-jDFKvwICaJoVREyN1fR/F0PSdZhg5jjfPJKUoHp6yYA=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "20bb5d462943a0f38eba2372db9f7a6d9fd22be2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "master",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nixos-hardware": {
       "locked": {
         "lastModified": 1764440730,
@@ -33,9 +49,7 @@
     },
     "root": {
       "inputs": {
-        "bleeding": [
-          "nixpkgs"
-        ],
+        "bleeding": "bleeding",
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs"
       }
