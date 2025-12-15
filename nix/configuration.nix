@@ -2,7 +2,7 @@
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 let
   bleeding = import <bleeding> {     config = config.nixpkgs.config;
  };
@@ -10,7 +10,7 @@ let
   myEmacs =   ((pkgs.emacsPackagesFor pkgs.emacs-gtk).emacsWithPackages (epkgs: [
     epkgs.vterm
   ]));
-
+  myRofi =  pkgs.rofi.override { plugins = [ pkgs.rofi-bluetooth pkgs.rofi-rbw]; };
 in
 {
   imports =
@@ -101,8 +101,10 @@ in
     #idris
     nix-direnv
 
+    #bitwarden
+    pinentry-all
+
     #ACCESSORIES
-    rofi-bluetooth
     ripgrep
     alacritty
     imagemagick
@@ -120,7 +122,11 @@ in
     rxvt-unicode-unwrapped
     screenfetch
     wget
-    rofi
+    myRofi
+    rofi-bluetooth
+    rofi-rbw
+    rbw
+    xdotool
     xclip
     maim
     libnotify
@@ -294,6 +300,31 @@ in
 	#  system = "x86_64-linux";
 	#  maxJobs = 10;
 	# }];
+    nix.buildMachines = [
+    {
+      hostName = "mother.lan";
+      sshUser = "root";
+      # 'ssh-ng' is faster if both machines are NixOS but falls flat if the
+      # machine Nix will attempt a connection to is not NixOS. In such a case
+      # you must use 'ssh' instead.
+      protocol = "ssh-ng";
+
+      # This can be an absolute path to a private key or it can be managed
+      # with something like Agenix, or SOPS.
+      sshKey = "/home/dcol/.ssh/id_rsa";
+
+      # Systems for which builds will be offloaded.
+      systems = ["x86_64-linux" ];
+
+      # Default is 1 but may keep the builder idle in between builds
+      maxJobs = 10;
+      # How fast is the builder compared to your local machine
+      speedFactor = 10;
+
+      supportedFeatures = ["big-parallel" "kvm" "nixos-test"];
+    }
+  ];
+
 	nix.distributedBuilds = true;
   fileSystems."/theta" = {
     device = "mother.lan:/theta";

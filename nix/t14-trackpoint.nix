@@ -13,7 +13,7 @@ in
 
     mouse = {
       accelProfile = "flat";
-      accelSpeed   = "0.2";
+      accelSpeed   = "0.4";
       additionalOptions = ''
       MatchProduct "${trackpoint_new_name}"
       '';

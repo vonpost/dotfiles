@@ -20,7 +20,7 @@ int relief_offset = 30;//max(min(window_size.x,window_size.y) * 0.03,5);
 // How far the L extends *along the edge* inside the border
 const float relief_length = 6.0;
 // Motif palette
-uniform vec3  tone = vec3(1.0,0.4,0.9);
+uniform vec3  tone = vec3(0.85,0.85,0.9);
 vec3  lightC    = mix(tone,vec3(0.75, 0.75, 0.78),0.8);
 vec3  darkC     = mix(tone,vec3(0.25, 0.25, 0.20),0.8);
 uniform vec3 relief_rgb = vec3(0.00, 0.00, 0.00);
