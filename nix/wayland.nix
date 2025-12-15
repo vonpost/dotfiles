@@ -1,7 +1,6 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, bleeding, ... }:
 let
   inherit (lib) getExe;
-  bleeding = import <bleeding> {  };
 in
 {
   #= Setup Niri

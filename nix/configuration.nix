@@ -2,10 +2,8 @@
 # your system.  Help is available in the configuration.nix(5) man page
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
-{ config, pkgs, lib, ... }:
+{ config, pkgs, lib, bleeding, ... }:
 let
-  bleeding = import <bleeding> {     config = config.nixpkgs.config;
- };
   # Should be pkgs.emacsGcc but tired of recompiling all the fucking time.
   myEmacs =   ((pkgs.emacsPackagesFor pkgs.emacs-gtk).emacsWithPackages (epkgs: [
     epkgs.vterm
@@ -15,8 +13,7 @@ in
 {
   imports =
     [ # Include the results of the hardware scan.
-      <nixos-hardware/lenovo/thinkpad/t14/amd/gen1>
-      /etc/nixos/hardware-configuration.nix
+      ./hardware-configuration.nix
       ./power_management.nix
       ./audio.nix
       ./wg/wg_client_systemd.nix
@@ -33,6 +30,7 @@ in
   nix.gc.automatic = true;
   nix.gc.dates = "weekly";
   nix.gc.options = "--delete-older-than 30d";
+  nix.settings.experimental-features = [ "nix-command" "flakes" ];
   system.stateVersion = "23.11";
 
   # Use the GRUB 2 boot loader.
