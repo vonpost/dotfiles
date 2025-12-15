@@ -25,13 +25,13 @@
   ########################################
   ## Suspend on lid / power-button actions
   ########################################
-  services.logind = {
-    lidSwitch = "suspend";              # close lid -> suspend
-    lidSwitchExternalPower = "suspend"; # also suspend when on AC (change to "ignore" if you prefer)
-    lidSwitchDocked = "ignore";         # don't suspend if docked (tweak to taste)
+  services.logind.settings.Login = {
+    HandleLidSwitch = "suspend"; # close lid -> suspend
+    HandleLidSwitchExternalPower = "suspend"; # also suspend when on AC
+    HandleLidSwitchDocked = "ignore"; # don't suspend if docked
 
-    powerKey = "suspend";               # short press power button -> suspend
-    powerKeyLongPress = "poweroff";     # long press -> power off
+    HandlePowerKey = "suspend"; # short press power button -> suspend
+    HandlePowerKeyLongPress = "poweroff"; # long press -> power off
   };
   services.upower = {
     enable = true;
