@@ -1,6 +1,6 @@
 # Only load Liquid Prompt in interactive shells, not from a script or from scp
 [[ $- = *i* ]] && source ~/liquidprompt/liquidprompt
-alias nixos_rebuild="nixos-rebuild switch --flake /home/dcol/dotfiles/nix/#TERRA --use-remote-sudo"
+alias nixos_rebuild="nixos-rebuild switch --flake /home/dcol/dotfiles/nix/#TERRA --sudo"
 export TERM="alacritty"
 alias doom="~/.config/emacs/bin/doom"
 eval "$(direnv hook bash)"
