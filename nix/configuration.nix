@@ -160,11 +160,11 @@ in
 
   sops = {
     defaultSopsFile = ./secrets/secrets.yaml;
-    age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
+    age.sshKeyPaths = [ "/home/dcol/.ssh/id_ed25519" ];
     secrets = {
-      "wg.TERRA" = {};
-      "ssh.TERRA" = {};
-      "ssh.mullvad" = {};
+      "wg/TERRA" = {};
+      "ssh/TERRA" = {};
+      "mullvad" = {};
     };
   };
 
