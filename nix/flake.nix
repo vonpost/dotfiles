@@ -28,7 +28,7 @@
         modules = [
           nixos-hardware.nixosModules.lenovo-thinkpad-t14-amd-gen1
           sops-nix.nixosModules.sops
-          ./configuration.nix
+          ./laptop/configuration.nix
         ];
       };
     };

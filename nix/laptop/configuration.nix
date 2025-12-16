@@ -44,7 +44,6 @@ in
       font = "Lat2-Terminus16";
       keyMap = "us";
     };
-    services.lorri.enable = true;
 
     # Shell aliases
     environment.shellAliases = {
