@@ -154,9 +154,19 @@ in
 
   services.emacs.package = myEmacs;
   programs.gnupg.agent = {
-  enable = true;
-  enableSSHSupport = true;
-};
+    enable = true;
+    enableSSHSupport = true;
+  };
+
+  sops = {
+    defaultSopsFile = ./secrets/secrets.yaml;
+    age.sshKeyPaths = [ "/etc/ssh/ssh_host_ed25519_key" ];
+    secrets = {
+      "wg.TERRA" = {};
+      "ssh.TERRA" = {};
+      "ssh.mullvad" = {};
+    };
+  };
 
   services.mullvad-vpn = {
     enable = true;
