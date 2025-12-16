@@ -16,7 +16,7 @@ in
     ./hardware-configuration.nix
     ./power_management.nix
     ./audio.nix
-    ./wg/wg_client_systemd.nix
+    ../wg/wg_client_systemd.nix
     ./picom.nix
     ./xserver.nix
     ./t14-trackpoint.nix
@@ -150,7 +150,7 @@ in
     };
 
     sops = {
-      defaultSopsFile = ./secrets/secrets.yaml;
+      defaultSopsFile = ../secrets/secrets.yaml;
       age.sshKeyPaths = [ "/home/dcol/.ssh/id_ed25519" ];
       secrets = {
         "wg/TERRA" = {
