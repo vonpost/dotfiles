@@ -2,11 +2,11 @@
   "nodes": {
     "bleeding": {
       "locked": {
-        "lastModified": 1765834361,
-        "narHash": "sha256-mIfhdk95hXhCkEehYetdvCZEFM0Z1AYHm1/G3hlOZ+k=",
+        "lastModified": 1765913442,
+        "narHash": "sha256-GLs5VRinJKYJJzxAeV3O8FJaKUgbFJjVl3WF3l5DWnA=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "c96f418bf5cae6b0703b177d416efa399fbd2799",
+        "rev": "5ba0e71fba1465f6c623f87db91414616f969d4f",
         "type": "github"
       },
       "original": {
@@ -33,11 +33,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1765472234,
-        "narHash": "sha256-9VvC20PJPsleGMewwcWYKGzDIyjckEz8uWmT0vCDYK0=",
+        "lastModified": 1765779637,
+        "narHash": "sha256-KJ2wa/BLSrTqDjbfyNx70ov/HdgNBCBBSQP3BIzKnv4=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "2fbfb1d73d239d2402a8fe03963e37aab15abe8b",
+        "rev": "1306659b587dc277866c7b69eb97e5f07864d8c4",
         "type": "github"
       },
       "original": {

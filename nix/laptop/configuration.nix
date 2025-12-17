@@ -238,20 +238,19 @@ in
       };
     };
 
-    # services.printing.enable = true;
-    # services.printing.drivers = [pkgs.gutenprint pkgs.gutenprintBin pkgs.hplipWithPlugin];
     # Map CAPS to ESC / CTRL
-    # Remap Ctrl and CapsLock
-    services.interception-tools = {
+    services.evremap = {
       enable = true;
-      plugins = [ pkgs.interception-tools-plugins.caps2esc ];
-      udevmonConfig = ''
-        - JOB: "${pkgs.interception-tools}/bin/intercept -g $DEVNODE | ${pkgs.interception-tools-plugins.caps2esc}/bin/caps2esc | ${pkgs.interception-tools}/bin/uinput -d $DEVNODE"
-        DEVICE:
-        EVENTS:
-        EV_KEY: [KEY_CAPSLOCK, KEY_ESC]
-      '';
+      settings.device_name = "AT Translated Set 2 keyboard";
+      settings.dual_role = [
+        {
+                  input = "KEY_CAPSLOCK";
+                  hold = [ "KEY_LEFTCTRL" ];
+                  tap = [ "KEY_ESC" ];
+        }
+      ];
     };
+
 
     systemd.user.services.dunst = {
       enable = true;
@@ -285,51 +284,25 @@ in
         Restart = "on-failure";
       };
     };
-
-
-
-    swapDevices = [
-      { device = "/dev/disk/by-label/swap"; }
-    ];
     systemd.network.wait-online.anyInterface = true;
-    # Build nixos configs remotely for speed
-	  # nix.buildMachines = [ {
-	    #  hostName = "root@192.168.1.11";
-	    #  system = "x86_64-linux";
-	    #  maxJobs = 10;
-	    # }];
-      nix.buildMachines = [
-        {
-          hostName = "mother.lan";
-          sshUser = "root";
-          # 'ssh-ng' is faster if both machines are NixOS but falls flat if the
-          # machine Nix will attempt a connection to is not NixOS. In such a case
-          # you must use 'ssh' instead.
-          protocol = "ssh-ng";
-
-          # This can be an absolute path to a private key or it can be managed
-          # with something like Agenix, or SOPS.
-          sshKey = "/run/secrets/ssh/TERRA";
-
-          # Systems for which builds will be offloaded.
-          systems = ["x86_64-linux" ];
-
-          # Default is 1 but may keep the builder idle in between builds
-          maxJobs = 10;
-          # How fast is the builder compared to your local machine
-          speedFactor = 10;
-
-          supportedFeatures = ["big-parallel" "kvm" "nixos-test"];
-        }
-      ];
+    nix.buildMachines = [
+      {
+        hostName = "mother.lan";
+        sshUser = "root";
+        protocol = "ssh-ng";
+        sshKey = "/run/secrets/ssh/TERRA";
+        systems = ["x86_64-linux" ];
+        maxJobs = 10;
+        speedFactor = 10;
+        supportedFeatures = ["big-parallel" "kvm" "nixos-test"];
+      }
+    ];
 
 	    nix.distributedBuilds = true;
       fileSystems."/theta" = {
         device = "mother.lan:/theta";
         fsType = "nfs";
         options = [
-          "x-systemd.requires=wg-quick-wg0.service"
-          "x-systemd.after=wg-quick-wg0.service"
           "x-systemd.automount"
           "noauto"
           "_netdev"

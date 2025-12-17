@@ -31,5 +31,21 @@
           ./laptop/configuration.nix
         ];
       };
+      nixosConfigurations.MOTHER = nixpkgs.lib.nixosSystem {
+        inherit system;
+        specialArgs = {
+          bleeding = bleedingPkgs;
+          ssh_master_keys = [
+              "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDG2YxFYwcWwrsS0TecE+6wPLGzerQAbVDyKy4HvSev+ ed25519-key-20221208"
+              "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINaBarHkA8npoU1VmJPcRIdAAIdvQN7E1D+a+LXp7hmg daniel.j.collin@gmail.com"
+            ];
+        };
+        modules = [
+          sops-nix.nixosModules.sops
+          ./MOTHER/configuration.nix
+          ./MOTHER/contain-qbit-mullvad.nix
+          ./MOTHER/contain-vpn.nix
+        ];
+      };
     };
 }
