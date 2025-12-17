@@ -10,3 +10,6 @@
 [submodule "nix/secrets"]
 	path = nix/secrets
 	url = git@github.com:vonpost/secrets.git
+[submodule "nix/MOTHER"]
+	path = nix/MOTHER
+	url = git@github.com:vonpost/MOTHER.git
