@@ -5,7 +5,7 @@ let
   cfg = config.services.wg_server;
 in
 {
-  options = {
+  options.services.wg_server = {
     enable = mkEnableOption "Wireguard server";
 
     pskFile = mkOption {
