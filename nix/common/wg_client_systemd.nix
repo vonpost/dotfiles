@@ -57,27 +57,17 @@ in
       type = types.str;
     };
 
+    bypassMullvad = mkOption {
+      default = true;
+      description = "Enables local dns through this tunnel work when Mullvad VPN client is running.";
+      type = types.bool;
+
+    };
+
   };
   config = mkIf cfg.enable {
     systemd.network.enable = true;
     services.resolved.enable = true;
-    networking.nftables = {
-      enable = true;
-
-      tables.excludeTraffic = {
-        family = "inet";
-        content = ''
-          define RESOLVER_ADDRS = { ${cfg.localDns} }
-
-          chain excludeDns {
-            type filter hook output priority -10; policy accept;
-            ip daddr $RESOLVER_ADDRS udp dport 53 ct mark set 0x00000f41 meta mark set 0x6d6f6c65;
-            ip daddr $RESOLVER_ADDRS tcp dport 53 ct mark set 0x00000f41 meta mark set 0x6d6f6c65;
-          }
-        '';
-      };
-    };
-
     systemd.network.networks."50-${cfg.device}" = {
       matchConfig.Name = "${cfg.device}";
 
@@ -120,6 +110,22 @@ in
           PersistentKeepalive = 25;
         }
       ];
+    };
+
+    networking.nftables = mkIf cfg.bypassMullvad {
+      enable = true;
+      tables.excludeTraffic = {
+        family = "inet";
+        content = ''
+          define RESOLVER_ADDRS = { ${cfg.localDns} }
+
+          chain excludeDns {
+          type filter hook output priority -10; policy accept;
+          ip daddr $RESOLVER_ADDRS udp dport 53 ct mark set 0x00000f41 meta mark set 0x6d6f6c65;
+          ip daddr $RESOLVER_ADDRS tcp dport 53 ct mark set 0x00000f41 meta mark set 0x6d6f6c65;
+          }
+        '';
+      };
     };
   };
 }
