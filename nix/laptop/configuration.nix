@@ -16,7 +16,7 @@ in
     ./hardware-configuration.nix
     ./power_management.nix
     ./audio.nix
-    ../wg/wg_settings.nix
+    ../secrets/TERRA_wg_settings.nix
     ./picom.nix
     ./xserver.nix
     ./t14-trackpoint.nix
