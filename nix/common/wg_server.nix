@@ -31,18 +31,18 @@ in
     peers = mkOption {
       default = [];
       description = "List of peer public keys";
-      type  = types.list;
+      type  = types.listOf types.str;
     };
 
     subnet = mkOption {
       default = { prefix = "10.100.0."; hostIdentifier = 1; suffix = "/24"; };
-      type = type.attrs;
+      type = types.attrs;
     };
   };
 
   config = mkIf cfg.enable {
 
-    environment.systemPackages = [ pkgs.wireguard-tools pkgs.iptables];
+    environment.systemPackages = [ pkgs.wireguard-tools pkgs.iptables ];
     networking = {
       nat = {
         enable = true;
@@ -50,17 +50,17 @@ in
         internalInterfaces = [ cfg.internalInterface ];
       };
       firewall = {
-        allowedUDPPorts = [ cfg.externalPort ];
+        allowedUDPPorts = [ cfg.port ];
       };
       wireguard.interfaces = {
         "${cfg.internalInterface}" = {
-          ips = [ "${cfg.subnet.prefix + cfg.subnet.hostIdentifier + cfg.subnet.suffix}" ];
-          listenPort = cfg.externalPort;
+          ips = [ "${cfg.subnet.prefix}${toString cfg.subnet.hostIdentifier}${cfg.subnet.suffix}" ];
+          listenPort = cfg.port;
 
           postSetup = ''
             ${pkgs.iptables}/bin/iptables -A FORWARD -i ${cfg.internalInterface} -j ACCEPT
             ${pkgs.iptables}/bin/iptables -A FORWARD -o ${cfg.internalInterface} -j ACCEPT
-            ${pkgs.iptables}/bin/iptables -t nat -A POSTROUTING -o ${externalInterface} -j MASQUERADE
+            ${pkgs.iptables}/bin/iptables -t nat -A POSTROUTING -o ${cfg.externalInterface} -j MASQUERADE
           '';
 
           postShutdown = ''
@@ -71,8 +71,11 @@ in
 
           privateKeyFile = "${cfg.pskFile}";
 
-          peers =  lib.lists.zipListsWith (x : y: { publicKey = x; allowedIPs = [ (cfg.subnet.prefix + "${y}" + cfg.subnet.suffix) ]; } )
-          cfg.peers (lib.range cfg.hostIdentifier builtins.length(cfg.peers));
+          peers =
+            lib.lists.zipListsWith
+              (x: y: { publicKey = x; allowedIPs = [ "${cfg.subnet.prefix}${y}${cfg.subnet.suffix}" ]; })
+              cfg.peers
+              (map toString (lib.range (cfg.subnet.hostIdentifier + 1) (cfg.subnet.hostIdentifier + builtins.length cfg.peers)));
         };
       };
     };
