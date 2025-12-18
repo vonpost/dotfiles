@@ -46,11 +46,11 @@ in
     networking = {
       nat = {
         enable = true;
-        externalInterface = externalInterface;
-        internalInterfaces = [ internalInterface ];
+        externalInterface = cfg.externalInterface;
+        internalInterfaces = [ cfg.internalInterface ];
       };
       firewall = {
-        allowedUDPPorts = [ externalPort ];
+        allowedUDPPorts = [ cfg.externalPort ];
       };
       wireguard.interfaces = {
         "${cfg.internalInterface}" = {
