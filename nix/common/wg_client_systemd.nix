@@ -32,7 +32,6 @@ in
       description = "Wireguard subnet.";
     };
 
-
     endpoint = mkOption {
       type = types.str;
     };
