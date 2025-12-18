@@ -73,7 +73,7 @@ in
 
           peers =
             lib.lists.zipListsWith
-              (x: y: { publicKey = x; allowedIPs = [ "${cfg.subnet.prefix}${y}${cfg.subnet.suffix}" ]; })
+              (x: y: { publicKey = x; allowedIPs = [ "${cfg.subnet.prefix}${y}/32" ]; })
               cfg.peers
               (map toString (lib.range (cfg.subnet.hostIdentifier + 1) (cfg.subnet.hostIdentifier + builtins.length cfg.peers)));
         };
