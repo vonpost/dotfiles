@@ -72,6 +72,11 @@
                     mountPoint = "/nix/.ro-store";
                   }
                 ];
+                microvm.binScripts.tap-up = lib.mkAfter ''
+                  ${lib.getExe' pkgs.iproute2 "ip"} link set dev vm-myvm up
+                  ${lib.getExe' pkgs.iproute2 "ip"} link set dev vm-myvm master br0
+                '';
+
                 microvm.interfaces = [
                   {
                     type = "tap";
@@ -89,7 +94,7 @@
                 networking.useHostResolvConf = false;
                 networking.enableIPv6 = false;
                 networking.hostName = "UCHI";
-                systemd.network.enable = true;
+                networking.useDHCP = true;
 
 
 
