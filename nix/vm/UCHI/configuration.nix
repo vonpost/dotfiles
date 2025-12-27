@@ -1,5 +1,5 @@
 { config, pkgs, lib, microvm, ... }:
-let svc = import ../../lib/service-state.nix;
+let svc = import ../../lib/vm-service-state.nix;
 in {
   imports = svc.mkMany [ "sonarr" "radarr" "prowlarr" ];
 

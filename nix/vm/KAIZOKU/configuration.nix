@@ -1,5 +1,5 @@
 { config, pkgs, lib, microvm, ... }:
-let svc = import ../../lib/service-state.nix;
+let svc = import ../../lib/vm-service-state.nix;
 in {
   imports = svc.mkMany [ "qbittorrent" "sabnzbd" ];
 
@@ -26,7 +26,7 @@ in {
   microvm.interfaces = [
     {
       type = "tap";
-      id = "vm-KAIZOKU;
+      id = "vm-KAIZOKU";
       mac = "02:00:00:00:00:03";
     }
   ];
