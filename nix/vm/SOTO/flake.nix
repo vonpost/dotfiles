@@ -1,5 +1,5 @@
 {
- description = "UCHI microvm (guest)";
+ description = "SOTO microvm (guest)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -16,7 +16,7 @@
         config.allowUnfree = true;
       };
     in {
-      nixosConfigurations.UCHI = nixpkgs.lib.nixosSystem {
+      nixosConfigurations.SOTO = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
           bleeding = bleedingPkgs;

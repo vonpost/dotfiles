@@ -1,13 +1,12 @@
 { config, pkgs, lib, microvm, ... }:
 let svc = import ../../lib/service-state.nix;
 in {
-  imports = svc.mkMany [ "sonarr" "radarr" "prowlarr" ];
+  imports = svc.mkMany [ "jellyfin" "jellyseer" ];
 
-  services.sonarr.enable = true;
-  services.radarr.enable = true;
-  services.prowlarr.enable = true;
+  services.jellyseerr.enable = true;
+  services.jellyfin.enable = true;
 
-  networking.hostName = "UCHI";
+  networking.hostName = "SOTO";
   networking.useDHCP = true;
   networking.enableIPv6 = false;
   networking.firewall.enable = false;
@@ -20,15 +19,15 @@ in {
   ];
 
   microvm.hypervisor = "cloud-hypervisor";
-  microvm.vcpu = 2;
-  microvm.mem = 2000;
+  microvm.vcpu = 8;
+  microvm.mem = 8000;
   #microvm.hotplugMem = 8400;
 
   microvm.interfaces = [
     {
       type = "tap";
-      id = "vm-UCHI";
-      mac = "02:00:00:00:00:01";
+      id = "vm-SOTO";
+      mac = "02:00:00:00:00:02";
     }
   ];
 

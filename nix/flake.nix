@@ -11,10 +11,12 @@
     microvm.url = "github:microvm-nix/microvm.nix";
     microvm.inputs.nixpkgs.follows = "nixpkgs";
     UCHI.url = "path:./vm/UCHI";
+    SOTO.url = "path:./vm/SOTO";
+    KAIZOKU.url = "path:./vm/KAIZOKU";
   };
 
   outputs =
-    { self, nixpkgs, bleeding, nixos-hardware, sops-nix, microvm, UCHI, ... }:
+    { self, nixpkgs, bleeding, nixos-hardware, sops-nix, microvm, UCHI, SOTO, KAIZOKU, ... }:
     let
       system = "x86_64-linux";
       bleedingPkgs = import bleeding {
@@ -50,14 +52,19 @@
           ./MOTHER/configuration.nix
           ./MOTHER/contain-qbit-mullvad.nix
           ./MOTHER/contain-vpn.nix
+          ./lib/host-state-map.nix
 
           {
             networking.hostName = "MOTHER";
             microvm.autostart = [
               "UCHI"
+              "SOTO"
+              "KAIZOKU"
             ];
             microvm.stateDir = "/aleph/vm-pool/microvm";
             microvm.vms.UCHI = { flake = UCHI; };
+            microvm.vms.SOTO = { flake = SOTO; };
+            microvm.vms.KAIZOKU = { flake = KAIZOKU; };
           }
         ];
       };

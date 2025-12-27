@@ -1,13 +1,12 @@
 { config, pkgs, lib, microvm, ... }:
 let svc = import ../../lib/service-state.nix;
 in {
-  imports = svc.mkMany [ "sonarr" "radarr" "prowlarr" ];
+  imports = svc.mkMany [ "qbittorrent" "sabnzbd" ];
 
-  services.sonarr.enable = true;
-  services.radarr.enable = true;
-  services.prowlarr.enable = true;
+  services.sabnzbd.enable = true;
+  services.qbittorrent.enable = true;
 
-  networking.hostName = "UCHI";
+  networking.hostName = "KAIZOKU";
   networking.useDHCP = true;
   networking.enableIPv6 = false;
   networking.firewall.enable = false;
@@ -21,14 +20,14 @@ in {
 
   microvm.hypervisor = "cloud-hypervisor";
   microvm.vcpu = 2;
-  microvm.mem = 2000;
+  microvm.mem = 1000;
   #microvm.hotplugMem = 8400;
 
   microvm.interfaces = [
     {
       type = "tap";
-      id = "vm-UCHI";
-      mac = "02:00:00:00:00:01";
+      id = "vm-KAIZOKU;
+      mac = "02:00:00:00:00:03";
     }
   ];
 
