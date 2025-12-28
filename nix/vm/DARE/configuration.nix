@@ -27,7 +27,7 @@ in
   systemd.network.networks."10-lan" = {
     matchConfig.Name = lanIf;
     networkConfig = {
-      Address = "${addrs.dns}/${toString lanPrefix}";
+      Address = "${addrs.DARE}/${toString lanPrefix}";
       Gateway = addrs.gateway;
 
       # Upstream DNS for the VM itself (nix, ntp, etc.)
@@ -43,7 +43,7 @@ in
     enable = true;
 
     settings.server = {
-      interface = [ addrs.dns "127.0.0.1" ];
+      interface = [ addrs.DARE "127.0.0.1" ];
 
       access-control = [
         "${lanSubnet} allow"

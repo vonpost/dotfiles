@@ -1,21 +1,5 @@
 {
   "nodes": {
-    "bleeding": {
-      "locked": {
-        "lastModified": 1766908496,
-        "narHash": "sha256-X4v9MVu6d01mipDCxrPqA0xPv+AoTHvSofmsvc2H6wE=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "ce7db87dd6967ff2404dd58c554b50143db61f0a",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "master",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
     "microvm": {
       "inputs": {
         "nixpkgs": [
@@ -55,7 +39,6 @@
     },
     "root": {
       "inputs": {
-        "bleeding": "bleeding",
         "microvm": "microvm",
         "nixpkgs": "nixpkgs"
       }
