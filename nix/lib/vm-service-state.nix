@@ -26,13 +26,12 @@ let
     }:
     { ... }:
     {
-      users.groups.${name}.gid = uid;
+      users.groups.${name}.gid = lib.mkForce uid;
       users.users.${name} = {
-        inherit uid;
-        group = name;
-        isSystemUser = true;
+        uid = lib.mkForce uid;
+        group = lib.mkForce name;
+        isSystemUser = lib.mkForce true;
       };
-
       microvm.shares = [
         {
           proto = "virtiofs";

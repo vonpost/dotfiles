@@ -1,8 +1,8 @@
-{ config, pkgs, lib, microvm, ... }:
-let svc = import ../../lib/vm-service-state.nix;
+{ config, pkgs, lib, microvm, bleeding, ... }:
+let svc = import ../../lib/vm-service-state.nix { inherit lib; };
 in {
   imports = svc.mkMany [ "qbittorrent" "sabnzbd" ];
-
+  nixpkgs.config.allowUnfree = true;
   services.sabnzbd.enable = true;
   services.qbittorrent.enable = true;
 
@@ -11,7 +11,9 @@ in {
   networking.enableIPv6 = false;
   networking.firewall.enable = false;
   networking.useHostResolvConf = false;
-
+  networking.nameservers = [
+    "192.168.1.53"
+  ]
   services.openssh.enable = true;
   users.users.root.openssh.authorizedKeys.keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDG2YxFYwcWwrsS0TecE+6wPLGzerQAbVDyKy4HvSev+ ed25519-key-20221208"

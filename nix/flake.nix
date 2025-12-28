@@ -13,10 +13,11 @@
     UCHI.url = "path:./vm/UCHI";
     SOTO.url = "path:./vm/SOTO";
     KAIZOKU.url = "path:./vm/KAIZOKU";
+    DARE.url = "path:./vm/DARE";
   };
 
   outputs =
-    { self, nixpkgs, bleeding, nixos-hardware, sops-nix, microvm, UCHI, SOTO, KAIZOKU, ... }:
+    { self, nixpkgs, bleeding, nixos-hardware, sops-nix, microvm, UCHI, SOTO, KAIZOKU, DARE, ... }:
     let
       system = "x86_64-linux";
       bleedingPkgs = import bleeding {
@@ -60,11 +61,14 @@
               "UCHI"
               "SOTO"
               "KAIZOKU"
+              "DARE"
             ];
             microvm.stateDir = "/aleph/vm-pool/microvm";
             microvm.vms.UCHI = { flake = UCHI; };
             microvm.vms.SOTO = { flake = SOTO; };
             microvm.vms.KAIZOKU = { flake = KAIZOKU; };
+            microvm.vms.DARE = { flake = DARE; };
+
           }
         ];
       };
