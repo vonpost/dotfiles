@@ -19,13 +19,20 @@ in
 {
   networking.hostName = "DARE";
   networking.enableIPv6 = false;
-
+  networking.useDHCP = false;
   # --- networkd static IP ---
   networking.useNetworkd = true;
+  services.openssh.enable = true;
+  users.users.root.openssh.authorizedkeys.keys = [
+    "ssh-ed25519 aaaac3nzac1lzdi1nte5aaaaidg2yxfywcwwrss0tece+6wplgzerqabvdyky4hvsev+ ed25519-key-20221208"
+    "ssh-ed25519 aaaac3nzac1lzdi1nte5aaaainabarhka8npou1vmjpcridaaidvqn7e1d+a+lxp7hmg daniel.j.collin@gmail.com"
+  ];
+
+
   systemd.network.enable = true;
 
   systemd.network.networks."10-lan" = {
-    matchConfig.Name = lanIf;
+    matchConfig.MACAddress = "02:00:00:00:00:53";
     networkConfig = {
       Address = "${addrs.DARE}/${toString lanPrefix}";
       Gateway = addrs.gateway;
@@ -69,7 +76,7 @@ in
   };
 
   # --- Firewall ---
-  networking.firewall.enable = true;
+  networking.firewall.enable = false;
   networking.firewall.allowedUDPPorts = [ 53 22 ];
   networking.firewall.allowedTCPPorts = [ 53 22 ];
 
