@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 let
-  addrs = import ../../lib/lan-addresses.nix;
+  addrs = import ../../lib/lan-address.nix;
 
   lanIf = "eth0";          # adjust if needed
   lanPrefix = 24;

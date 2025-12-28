@@ -1,10 +1,25 @@
 {
   "nodes": {
+    "DARE": {
+      "inputs": {
+        "microvm": "microvm",
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "path": "./vm/DARE",
+        "type": "path"
+      },
+      "original": {
+        "path": "./vm/DARE",
+        "type": "path"
+      },
+      "parent": []
+    },
     "KAIZOKU": {
       "inputs": {
         "bleeding": "bleeding",
-        "microvm": "microvm",
-        "nixpkgs": "nixpkgs"
+        "microvm": "microvm_2",
+        "nixpkgs": "nixpkgs_2"
       },
       "locked": {
         "path": "./vm/KAIZOKU",
@@ -19,8 +34,8 @@
     "SOTO": {
       "inputs": {
         "bleeding": "bleeding_2",
-        "microvm": "microvm_2",
-        "nixpkgs": "nixpkgs_2"
+        "microvm": "microvm_3",
+        "nixpkgs": "nixpkgs_3"
       },
       "locked": {
         "path": "./vm/SOTO",
@@ -34,8 +49,8 @@
     },
     "UCHI": {
       "inputs": {
-        "microvm": "microvm_3",
-        "nixpkgs": "nixpkgs_3"
+        "microvm": "microvm_4",
+        "nixpkgs": "nixpkgs_4"
       },
       "locked": {
         "path": "./vm/UCHI",
@@ -98,7 +113,7 @@
     "microvm": {
       "inputs": {
         "nixpkgs": [
-          "KAIZOKU",
+          "DARE",
           "nixpkgs"
         ],
         "spectrum": "spectrum"
@@ -120,7 +135,7 @@
     "microvm_2": {
       "inputs": {
         "nixpkgs": [
-          "SOTO",
+          "KAIZOKU",
           "nixpkgs"
         ],
         "spectrum": "spectrum_2"
@@ -142,7 +157,7 @@
     "microvm_3": {
       "inputs": {
         "nixpkgs": [
-          "UCHI",
+          "SOTO",
           "nixpkgs"
         ],
         "spectrum": "spectrum_3"
@@ -164,9 +179,31 @@
     "microvm_4": {
       "inputs": {
         "nixpkgs": [
+          "UCHI",
           "nixpkgs"
         ],
         "spectrum": "spectrum_4"
+      },
+      "locked": {
+        "lastModified": 1766664413,
+        "narHash": "sha256-zP/5t+ZDVSjflXalMu8aN5vCb2HuoNMRGeP3FzLKJOM=",
+        "owner": "microvm-nix",
+        "repo": "microvm.nix",
+        "rev": "a4c90d904703096b51abcb5d09417d98604c5f30",
+        "type": "github"
+      },
+      "original": {
+        "owner": "microvm-nix",
+        "repo": "microvm.nix",
+        "type": "github"
+      }
+    },
+    "microvm_5": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "spectrum": "spectrum_5"
       },
       "locked": {
         "lastModified": 1766005889,
@@ -247,6 +284,22 @@
     },
     "nixpkgs_4": {
       "locked": {
+        "lastModified": 1766651565,
+        "narHash": "sha256-QEhk0eXgyIqTpJ/ehZKg9IKS7EtlWxF3N7DXy42zPfU=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "3e2499d5539c16d0d173ba53552a4ff8547f4539",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_5": {
+      "locked": {
         "lastModified": 1765779637,
         "narHash": "sha256-KJ2wa/BLSrTqDjbfyNx70ov/HdgNBCBBSQP3BIzKnv4=",
         "owner": "NixOS",
@@ -263,13 +316,14 @@
     },
     "root": {
       "inputs": {
+        "DARE": "DARE",
         "KAIZOKU": "KAIZOKU",
         "SOTO": "SOTO",
         "UCHI": "UCHI",
         "bleeding": "bleeding_3",
-        "microvm": "microvm_4",
+        "microvm": "microvm_5",
         "nixos-hardware": "nixos-hardware",
-        "nixpkgs": "nixpkgs_4",
+        "nixpkgs": "nixpkgs_5",
         "sops-nix": "sops-nix"
       }
     },
@@ -342,6 +396,22 @@
       }
     },
     "spectrum_4": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1759482047,
+        "narHash": "sha256-H1wiXRQHxxPyMMlP39ce3ROKCwI5/tUn36P8x6dFiiQ=",
+        "ref": "refs/heads/main",
+        "rev": "c5d5786d3dc938af0b279c542d1e43bce381b4b9",
+        "revCount": 996,
+        "type": "git",
+        "url": "https://spectrum-os.org/git/spectrum"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://spectrum-os.org/git/spectrum"
+      }
+    },
+    "spectrum_5": {
       "flake": false,
       "locked": {
         "lastModified": 1759482047,
