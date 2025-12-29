@@ -19,6 +19,19 @@ in
       source = "/theta/";
       mountPoint = "/theta";
     }
+    {
+      proto = "virtiofs";
+      tag = "qbit-loc";
+      source = "/aleph/qbit";
+      mountPoint = "/aleph/qbit";
+    }
+
+    {
+      proto = "virtiofs";
+      tag = "sabnzbd-loc";
+      source = "/aleph/nzb/complete";
+      mountPoint = "/aleph/nzb/complete";
+    }
   ];
   services.sonarr.enable = true;
   services.radarr.enable = true;
