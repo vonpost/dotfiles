@@ -1,23 +1,33 @@
-{
+rec {
   description = "NixOS configuration (flake)";
-
-  inputs = {
-    self.submodules = true;
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    bleeding.url = "github:NixOS/nixpkgs/master";
-    nixos-hardware.url = "github:NixOS/nixos-hardware";
-    sops-nix.url = "github:Mic92/sops-nix";
-    sops-nix.inputs.nixpkgs.follows = "nixpkgs";
-    microvm.url = "github:microvm-nix/microvm.nix";
-    microvm.inputs.nixpkgs.follows = "nixpkgs";
-    UCHI.url = "path:./vm/UCHI";
-    SOTO.url = "path:./vm/SOTO";
-    KAIZOKU.url = "path:./vm/KAIZOKU";
-    DARE.url = "path:./vm/DARE";
-  };
+  inputs =
+        {
+          self.submodules = true;
+          nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+          bleeding.url = "github:NixOS/nixpkgs/master";
+          nixos-hardware.url = "github:NixOS/nixos-hardware";
+          sops-nix.url = "github:Mic92/sops-nix";
+          sops-nix.inputs.nixpkgs.follows = "nixpkgs";
+          microvm.url = "github:microvm-nix/microvm.nix";
+          microvm.inputs.nixpkgs.follows = "nixpkgs";
+          UCHI.url = "git+file:///root/dotfiles?dir=nix/vm/UCHI";
+          SOTO.url = "git+file:///root/dotfiles?dir=nix/vm/SOTO";
+          KAIZOKU.url = "git+file:///root/dotfiles?dir=nix/vm/KAIZOKU";
+          DARE.url = "git+file:///root/dotfiles/?dir=nix/vm/DARE";
+        };
 
   outputs =
-    { self, nixpkgs, bleeding, nixos-hardware, sops-nix, microvm, UCHI, SOTO, KAIZOKU, DARE, ... }:
+    { self,
+      nixpkgs,
+      bleeding,
+      nixos-hardware,
+      sops-nix,
+      microvm,
+      UCHI,
+      SOTO,
+      KAIZOKU,
+      DARE,
+      ... }:
     let
       system = "x86_64-linux";
       bleedingPkgs = import bleeding {
@@ -57,18 +67,12 @@
 
           {
             networking.hostName = "MOTHER";
-            microvm.autostart = [
-              "UCHI"
-              "SOTO"
-              "KAIZOKU"
-              "DARE"
-            ];
             microvm.stateDir = "/aleph/vm-pool/microvm";
-            microvm.vms.UCHI = { flake = UCHI; };
-            microvm.vms.SOTO = { flake = SOTO; };
-            microvm.vms.KAIZOKU = { flake = KAIZOKU; };
-            microvm.vms.DARE = { flake = DARE; };
-
+            microvm.autostart = ["UCHI" "SOTO" "DARE" "KAIZOKU"];
+            microvm.vms.UCHI = { flake = UCHI; updateFlake = inputs.UCHI.url; };
+            microvm.vms.SOTO = { flake = SOTO; updateFlake = inputs.SOTO.url; };
+            microvm.vms.DARE = { flake = DARE; updateFlake = inputs.DARE.url; };
+            microvm.vms.KAIZOKU = { flake = KAIZOKU; updateFlake = inputs.KAIZOKU.url; };
           }
         ];
       };

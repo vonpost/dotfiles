@@ -23,10 +23,14 @@ in
   # --- networkd static IP ---
   networking.useNetworkd = true;
   services.openssh.enable = true;
-  users.users.root.openssh.authorizedkeys.keys = [
-    "ssh-ed25519 aaaac3nzac1lzdi1nte5aaaaidg2yxfywcwwrss0tece+6wplgzerqabvdyky4hvsev+ ed25519-key-20221208"
-    "ssh-ed25519 aaaac3nzac1lzdi1nte5aaaainabarhka8npou1vmjpcridaaidvqn7e1d+a+lxp7hmg daniel.j.collin@gmail.com"
-  ];
+  users.users.root.openssh.authorizedKeys.keys = [
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDG2YxFYwcWwrsS0TecE+6wPLGzerQAbVDyKy4HvSev+ ed25519-key-20221208"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINaBarHkA8npoU1VmJPcRIdAAIdvQN7E1D+a+LXp7hmg daniel.j.collin@gmail.com"
+];
+  services.openssh.settings.PasswordAuthentication = false;
+  services.openssh.extraConfig = ''
+    AllowAgentForwarding yes
+  '';
 
 
   systemd.network.enable = true;
@@ -59,7 +63,7 @@ in
       ];
 
       local-zone = [ "lan. static" ];
-      local-data = lib.mapAttrsToList (n: ip: "${n} IN A ${ip}") hosts;
+      local-data = lib.mapAttrsToList (n: ip: "\"${n} IN A ${ip}\"") hosts;
 
       hide-identity = "yes";
       hide-version = "yes";
