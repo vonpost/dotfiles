@@ -2,6 +2,7 @@
 
 let
   base = "/aleph/state/services";
+  libBase = "${base}/lib";
   cacheBase = "${base}/cache";
 
   uids = {
@@ -32,7 +33,7 @@ let
     { name
     , unit ? name
     , uid ? uids.${name}
-    , source ? "${base}/${name}"          # host path
+    , source ? "${libBase}/${name}"       # host path
     , stateMount ? "/state/${name}"       # inside VM (virtiofs mountpoint)
     , bindTarget ? null                   # explicit override
     , stateDirName ? (privateStateDir.${name} or null)  # auto from map
@@ -115,6 +116,7 @@ in {
     mkMany
     uids
     base
+    libBase
     cacheBase
     privateStateDir
     privateCacheDir;
