@@ -38,7 +38,7 @@ let
     , bindTarget ? null                   # explicit override
     , stateDirName ? (privateStateDir.${name} or null)  # auto from map
     , virtioTag ? "svc-${name}"
-    , persistCache ? true
+    , persistCache ? false
     , cacheSource ? "${cacheBase}/${name}"       # host path
     , cacheMount ? "/cache/${name}"              # inside VM (virtiofs mountpoint)
     , cacheBindTarget ? null                     # explicit override

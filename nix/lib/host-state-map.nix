@@ -11,5 +11,6 @@ in {
       "d ${svc.cacheBase} 0755 root root -"
     ]
     ++ lib.mapAttrsToList mkStateRule svc.uids
-    ++ lib.mapAttrsToList mkCacheRule svc.uids;
+    ++ lib.mapAttrsToList mkCacheRule svc.uids
+    ;
 }
