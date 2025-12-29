@@ -3,7 +3,7 @@ let svc = import ../../lib/vm-service-state.nix { inherit lib; };
     addrs = import ../../lib/lan-address.nix;
     hostname = "SOTO";
 in {
-  imports = [ (svc.mkOne { name = "jellyfin" persistCache = true; })  (svc.mkOne  { name = "jellyseerr" } ) ];
+  imports = [ (svc.mkOne { name = "jellyfin"; persistCache = true; })  (svc.mkOne  { name = "jellyseerr" } ) ];
 
   services.jellyseerr.enable = true;
   services.jellyfin =  {
