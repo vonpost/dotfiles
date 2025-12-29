@@ -17,7 +17,6 @@ let
 
   # Services we *know* use StateDirectory -> /var/lib/private/<name>
   privateStateDir = {
-    prowlarr = "prowlarr";
   };
 
   # Services we *know* use CacheDirectory -> /var/cache/private/<name>
