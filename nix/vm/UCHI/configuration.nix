@@ -1,11 +1,25 @@
 { config, pkgs, lib, microvm, bleeding, ... }:
 let svc = import ../../lib/vm-service-state.nix { inherit lib; };
-    addrs = import ../../lib/lan-address.nix
+    addrs = import ../../lib/lan-address.nix;
     hostname = "UCHI";
 in
 {
   imports = svc.mkMany [ "sonarr" "radarr" "prowlarr" ];
 
+  microvm.shares = [
+    {
+          source = "/nix/store";
+          mountPoint = "/nix/.ro-store";
+          tag = "ro-store";
+          proto = "virtiofs";
+    }
+    {
+      proto = "virtiofs";
+      tag = "theta";
+      source = "/theta/";
+      mountPoint = "/theta";
+    }
+  ];
   services.sonarr.enable = true;
   services.radarr.enable = true;
   services.prowlarr.enable = true;
@@ -21,7 +35,7 @@ in
     matchConfig.MACAddress = "${addrs.${hostname}.mac}";
     networkConfig = {
       Address = "${addrs.${hostname}.ip}/24";
-      Gateway = addrs.gateway;
+      Gateway = addrs.gateway.ip;
 
       # Upstream DNS for the VM itself (nix, ntp, etc.)
       DNS = [ addrs.DARE.ip ];

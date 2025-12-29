@@ -1,12 +1,30 @@
 { config, pkgs, lib, microvm, bleeding, ... }:
 let svc = import ../../lib/vm-service-state.nix { inherit lib; };
-    addrs = import ../../lib/lan-address.nix
+    addrs = import ../../lib/lan-address.nix;
     hostname = "SOTO";
 in {
   imports = svc.mkMany [ "jellyfin" "jellyseerr" ];
 
   services.jellyseerr.enable = true;
-  services.jellyfin.enable = true;
+  services.jellyfin =  {
+    enable = true;
+    package = bleeding.jellyfin;
+  };
+
+  microvm.shares = [
+    {
+          source = "/nix/store";
+          mountPoint = "/nix/.ro-store";
+          tag = "ro-store";
+          proto = "virtiofs";
+    }
+    {
+      proto = "virtiofs";
+      tag = "theta";
+      source = "/theta/";
+      mountPoint = "/theta";
+    }
+  ];
 
   microvm.hypervisor = "cloud-hypervisor";
   microvm.vcpu = 8;
@@ -22,8 +40,8 @@ in {
   systemd.network.networks."10-lan" = {
     matchConfig.MACAddress = "${addrs.${hostname}.mac}";
     networkConfig = {
-      Address = "${addrs.${hostname}.ip}/24";
-      Gateway = addrs.gateway;
+      Address = "${addrs."${hostname}".ip}/24";
+      Gateway = addrs.gateway.ip;
 
       # Upstream DNS for the VM itself (nix, ntp, etc.)
       DNS = [ addrs.DARE.ip ];

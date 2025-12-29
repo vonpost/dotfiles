@@ -47,6 +47,15 @@ in
     linkConfig.RequiredForOnline = "yes";
   };
 
+  microvm.shares = [
+    {
+          source = "/nix/store";
+          mountPoint = "/nix/.ro-store";
+          tag = "ro-store";
+          proto = "virtiofs";
+    }
+  ];
+
   services.timesyncd.enable = true;
 
   # --- Unbound DNS ---
@@ -92,7 +101,7 @@ in
     {
       type = "tap";
       id = "vm-${hostname}";
-      mac = adds.${hostname}.mac;
+      mac = addrs.${hostname}.mac;
     }
   ];
 }
