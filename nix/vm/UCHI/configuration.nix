@@ -1,6 +1,9 @@
 { config, pkgs, lib, microvm, bleeding, ... }:
 let svc = import ../../lib/vm-service-state.nix { inherit lib; };
-in {
+    addrs = import ../../lib/lan-address.nix
+    hostname = "UCHI";
+in
+{
   imports = svc.mkMany [ "sonarr" "radarr" "prowlarr" ];
 
   services.sonarr.enable = true;
@@ -8,18 +11,35 @@ in {
   services.prowlarr.enable = true;
   services.prowlarr.package = bleeding.prowlarr;
 
-  networking.hostName = "UCHI";
-  networking.useDHCP = true;
+  networking.hostName = hostname;
+  networking.useDHCP = false;
+  networking.useNetworkd = true;
   networking.enableIPv6 = false;
   networking.firewall.enable = false;
-  networking.useHostResolvConf = false;
-  networking.nameservers = [
-    "192.168.1.53"
-  ];
+  systemd.network.enable = true;
+  systemd.network.networks."10-lan" = {
+    matchConfig.MACAddress = "${addrs.${hostname}.mac}";
+    networkConfig = {
+      Address = "${addrs.${hostname}.ip}/24";
+      Gateway = addrs.gateway;
+
+      # Upstream DNS for the VM itself (nix, ntp, etc.)
+      DNS = [ addrs.DARE.ip ];
+    };
+    linkConfig.RequiredForOnline = "yes";
+  };
   services.openssh.enable = true;
   users.users.root.openssh.authorizedKeys.keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDG2YxFYwcWwrsS0TecE+6wPLGzerQAbVDyKy4HvSev+ ed25519-key-20221208"
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINaBarHkA8npoU1VmJPcRIdAAIdvQN7E1D+a+LXp7hmg daniel.j.collin@gmail.com"
+  ];
+
+  microvm.interfaces = [
+    {
+      type = "tap";
+      id = "vm-${hostname}";
+      mac = addrs.${hostname}.mac;
+    }
   ];
 
   microvm.hypervisor = "cloud-hypervisor";
@@ -27,12 +47,5 @@ in {
   microvm.mem = 2000;
   #microvm.hotplugMem = 8400;
 
-  microvm.interfaces = [
-    {
-      type = "tap";
-      id = "vm-UCHI";
-      mac = "02:00:00:00:00:01";
-    }
-  ];
 
 }

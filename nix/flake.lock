@@ -6,14 +6,20 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "path": "./vm/DARE",
-        "type": "path"
+        "dir": "nix/vm/DARE",
+        "lastModified": 1766966833,
+        "narHash": "sha256-x5uYQm3EBLiE9F05iMxEyx0yrO9duKGN6g3jDL5GPDI=",
+        "ref": "refs/heads/main",
+        "rev": "d806a0449bd9c1804abcd1261c334ae3c6d7e114",
+        "revCount": 66,
+        "type": "git",
+        "url": "file:///root/dotfiles/"
       },
       "original": {
-        "path": "./vm/DARE",
-        "type": "path"
-      },
-      "parent": []
+        "dir": "nix/vm/DARE",
+        "type": "git",
+        "url": "file:///root/dotfiles/"
+      }
     },
     "KAIZOKU": {
       "inputs": {
@@ -22,14 +28,20 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "path": "./vm/KAIZOKU",
-        "type": "path"
+        "dir": "nix/vm/KAIZOKU",
+        "lastModified": 1766966833,
+        "narHash": "sha256-x5uYQm3EBLiE9F05iMxEyx0yrO9duKGN6g3jDL5GPDI=",
+        "ref": "refs/heads/main",
+        "rev": "d806a0449bd9c1804abcd1261c334ae3c6d7e114",
+        "revCount": 66,
+        "type": "git",
+        "url": "file:///root/dotfiles"
       },
       "original": {
-        "path": "./vm/KAIZOKU",
-        "type": "path"
-      },
-      "parent": []
+        "dir": "nix/vm/KAIZOKU",
+        "type": "git",
+        "url": "file:///root/dotfiles"
+      }
     },
     "SOTO": {
       "inputs": {
@@ -38,14 +50,20 @@
         "nixpkgs": "nixpkgs_3"
       },
       "locked": {
-        "path": "./vm/SOTO",
-        "type": "path"
+        "dir": "nix/vm/SOTO",
+        "lastModified": 1766966833,
+        "narHash": "sha256-x5uYQm3EBLiE9F05iMxEyx0yrO9duKGN6g3jDL5GPDI=",
+        "ref": "refs/heads/main",
+        "rev": "d806a0449bd9c1804abcd1261c334ae3c6d7e114",
+        "revCount": 66,
+        "type": "git",
+        "url": "file:///root/dotfiles"
       },
       "original": {
-        "path": "./vm/SOTO",
-        "type": "path"
-      },
-      "parent": []
+        "dir": "nix/vm/SOTO",
+        "type": "git",
+        "url": "file:///root/dotfiles"
+      }
     },
     "UCHI": {
       "inputs": {
@@ -54,14 +72,20 @@
         "nixpkgs": "nixpkgs_4"
       },
       "locked": {
-        "path": "./vm/UCHI",
-        "type": "path"
+        "dir": "nix/vm/UCHI",
+        "lastModified": 1766966833,
+        "narHash": "sha256-x5uYQm3EBLiE9F05iMxEyx0yrO9duKGN6g3jDL5GPDI=",
+        "ref": "refs/heads/main",
+        "rev": "d806a0449bd9c1804abcd1261c334ae3c6d7e114",
+        "revCount": 66,
+        "type": "git",
+        "url": "file:///root/dotfiles"
       },
       "original": {
-        "path": "./vm/UCHI",
-        "type": "path"
-      },
-      "parent": []
+        "dir": "nix/vm/UCHI",
+        "type": "git",
+        "url": "file:///root/dotfiles"
+      }
     },
     "bleeding": {
       "locked": {

@@ -3,7 +3,6 @@
 let
   addrs = import ../../lib/lan-address.nix;
 
-  lanIf = "eth0";          # adjust if needed
   lanPrefix = 24;
   lanSubnet = "192.168.1.0/24";
 
@@ -13,11 +12,12 @@ let
   # Build {"mother.lan."="192.168.1.11"; ...} from addrs (excluding gateway)
   hosts =
     lib.mapAttrs'
-      (name: ip: { name = "${name}.lan."; value = ip; })
+      (name: value: { name = "${name}.lan."; value = value.ip; })
       (lib.removeAttrs addrs [ "gateway" ]);
+  hostname = "DARE";
 in
 {
-  networking.hostName = "DARE";
+  networking.hostName = hostname;
   networking.enableIPv6 = false;
   networking.useDHCP = false;
   # --- networkd static IP ---
@@ -36,13 +36,13 @@ in
   systemd.network.enable = true;
 
   systemd.network.networks."10-lan" = {
-    matchConfig.MACAddress = "02:00:00:00:00:53";
+    matchConfig.MACAddress = addrs.${hostname}.mac;
     networkConfig = {
-      Address = "${addrs.DARE}/${toString lanPrefix}";
-      Gateway = addrs.gateway;
+      Address = "${addrs.${hostname}.ip}/${toString lanPrefix}";
+      Gateway = addrs.gateway.ip;
 
       # Upstream DNS for the VM itself (nix, ntp, etc.)
-      DNS = [ addrs.gateway ];
+      DNS = [ addrs.gateway.ip ];
     };
     linkConfig.RequiredForOnline = "yes";
   };
@@ -54,7 +54,7 @@ in
     enable = true;
 
     settings.server = {
-      interface = [ addrs.DARE "127.0.0.1" ];
+      interface = [ addrs.${hostname}.ip "127.0.0.1" ];
 
       access-control = [
         "${lanSubnet} allow"
@@ -75,7 +75,7 @@ in
 
     settings.forward-zone = [{
       name = ".";
-      forward-addr = [ addrs.gateway ];
+      forward-addr = [ addrs.gateway.ip ];
     }];
   };
 
@@ -91,8 +91,8 @@ in
   microvm.interfaces = [
     {
       type = "tap";
-      id = "vm-DARE";
-      mac = "02:00:00:00:00:53";
+      id = "vm-${hostname}";
+      mac = adds.${hostname}.mac;
     }
   ];
 }
