@@ -2,6 +2,7 @@
 
 let
   base = "/aleph/state/services";
+  cacheBase = "${base}/cache";
 
   uids = {
     prowlarr    = 2101;
@@ -18,8 +19,14 @@ let
     prowlarr = "prowlarr";
   };
 
+  # Services we *know* use CacheDirectory -> /var/cache/private/<name>
+  privateCacheDir = { };
+
   defaultBindTarget = name: "/var/lib/${name}";
   privateBindTarget = sd: "/var/lib/private/${sd}";
+
+  defaultCacheBindTarget = name: "/var/cache/${name}";
+  privateCacheBindTarget = sd: "/var/cache/private/${sd}";
 
   mkOne =
     { name
@@ -30,6 +37,12 @@ let
     , bindTarget ? null                   # explicit override
     , stateDirName ? (privateStateDir.${name} or null)  # auto from map
     , virtioTag ? "svc-${name}"
+    , persistCache ? true
+    , cacheSource ? "${cacheBase}/${name}"       # host path
+    , cacheMount ? "/cache/${name}"              # inside VM (virtiofs mountpoint)
+    , cacheBindTarget ? null                     # explicit override
+    , cacheDirName ? (privateCacheDir.${name} or null)  # auto from map
+    , cacheVirtioTag ? "cache-${name}"
     , disableDynamicUser ? true
     }:
     { ... }:
@@ -38,6 +51,11 @@ let
         if bindTarget != null then bindTarget
         else if stateDirName != null then privateBindTarget stateDirName
         else defaultBindTarget name;
+
+      chosenCacheBindTarget =
+        if cacheBindTarget != null then cacheBindTarget
+        else if cacheDirName != null then privateCacheBindTarget cacheDirName
+        else defaultCacheBindTarget name;
     in
     {
       users.groups.${name}.gid = lib.mkForce uid;
@@ -51,27 +69,53 @@ let
         serviceConfig.DynamicUser = lib.mkForce false;
         serviceConfig.User = lib.mkForce name;
         serviceConfig.Group = lib.mkForce name;
-        unitConfig.RequiresMountsFor = [ chosenBindTarget ];
+        unitConfig.RequiresMountsFor =
+          [ chosenBindTarget ]
+          ++ lib.optional persistCache chosenCacheBindTarget;
       };
 
-      microvm.shares = [
-        {
+      microvm.shares =
+        [
+          {
+            proto = "virtiofs";
+            tag = virtioTag;
+            source = source;
+            mountPoint = stateMount;
+          }
+        ]
+        ++ lib.optional persistCache {
           proto = "virtiofs";
-          tag = virtioTag;
-          source = source;
-          mountPoint = stateMount;
-        }
-      ];
+          tag = cacheVirtioTag;
+          source = cacheSource;
+          mountPoint = cacheMount;
+        };
 
-      fileSystems.${chosenBindTarget} = {
-        device = stateMount;
-        fsType = "none";
-        options = [ "bind" ];
-      };
+      fileSystems =
+        {
+          ${chosenBindTarget} = {
+            device = stateMount;
+            fsType = "none";
+            options = [ "bind" ];
+          };
+        }
+        // lib.optionalAttrs persistCache {
+          ${chosenCacheBindTarget} = {
+            device = cacheMount;
+            fsType = "none";
+            options = [ "bind" ];
+          };
+        };
     };
 
   mkMany = names: map (n: mkOne { name = n; }) names;
 
 in {
-  inherit mkOne mkMany uids base privateStateDir;
+  inherit
+    mkOne
+    mkMany
+    uids
+    base
+    cacheBase
+    privateStateDir
+    privateCacheDir;
 }
