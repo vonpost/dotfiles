@@ -1,4 +1,4 @@
-rec {
+{
   description = "NixOS configuration (flake)";
   inputs =
         {
@@ -10,10 +10,10 @@ rec {
           sops-nix.inputs.nixpkgs.follows = "nixpkgs";
           microvm.url = "github:microvm-nix/microvm.nix";
           microvm.inputs.nixpkgs.follows = "nixpkgs";
-          UCHI.url = "git+file:///root/dotfiles?dir=nix/vm/UCHI";
-          SOTO.url = "git+file:///root/dotfiles?dir=nix/vm/SOTO";
-          KAIZOKU.url = "git+file:///root/dotfiles?dir=nix/vm/KAIZOKU";
-          DARE.url = "git+file:///root/dotfiles/?dir=nix/vm/DARE";
+          UCHI.url = "./vm/UCHI";
+          SOTO.url = "./vm/SOTO";
+          KAIZOKU.url = "./vm/KAIZOKU";
+          DARE.url = "./vm/DARE";
         };
 
   outputs =
@@ -69,10 +69,10 @@ rec {
             networking.hostName = "MOTHER";
             microvm.stateDir = "/aleph/vm-pool/microvm";
             microvm.autostart = ["UCHI" "SOTO" "DARE" "KAIZOKU"];
-            microvm.vms.UCHI = { flake = UCHI; updateFlake = inputs.UCHI.url; };
-            microvm.vms.SOTO = { flake = SOTO; updateFlake = inputs.SOTO.url; };
-            microvm.vms.DARE = { flake = DARE; updateFlake = inputs.DARE.url; };
-            microvm.vms.KAIZOKU = { flake = KAIZOKU; updateFlake = inputs.KAIZOKU.url; };
+            microvm.vms.UCHI = { flake = UCHI; updateFlake = "${self}/vm/UCHI"; };
+            microvm.vms.SOTO = { flake = SOTO; updateFlake = "${self}/vm/SOTO"; };
+            microvm.vms.DARE = { flake = DARE; updateFlake = "${self}/vm/DARE"; };
+            microvm.vms.KAIZOKU = { flake = KAIZOKU; updateFlake = "${self}/vm/KAIZOKU"; };
           }
         ];
       };
