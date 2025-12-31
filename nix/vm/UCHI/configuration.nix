@@ -19,18 +19,18 @@ in
       source = "/theta/";
       mountPoint = "/theta";
     }
-    {
-      proto = "virtiofs";
-      tag = "qbit-loc";
-      source = "/aleph/qbit";
-      mountPoint = "/aleph/qbit";
-    }
-
+    
     {
       proto = "virtiofs";
       tag = "sabnzbd-loc";
       source = "/aleph/nzb/complete";
       mountPoint = "/aleph/nzb/complete";
+    }
+  {
+      proto = "virtiofs";
+      tag = "qbit-loc";
+      source = "/aleph/qbit";
+      mountPoint = "/aleph/qbit";
     }
   ];
   services.sonarr.enable = true;
@@ -43,14 +43,13 @@ in
   networking.useNetworkd = true;
   networking.enableIPv6 = false;
   networking.firewall.enable = false;
+  networking.nameservers = [ addrs.DARE.ip ];
   systemd.network.enable = true;
   systemd.network.networks."10-lan" = {
     matchConfig.MACAddress = "${addrs.${hostname}.mac}";
     networkConfig = {
       Address = "${addrs.${hostname}.ip}/24";
       Gateway = addrs.gateway.ip;
-
-      # Upstream DNS for the VM itself (nix, ntp, etc.)
       DNS = [ addrs.DARE.ip ];
     };
     linkConfig.RequiredForOnline = "yes";

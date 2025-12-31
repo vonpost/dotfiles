@@ -35,6 +35,8 @@ in {
   networking.useNetworkd = true;
   networking.useDHCP = false;
   networking.enableIPv6 = false;
+  networking.nameservers = [ addrs.DARE.ip ];
+
   networking.firewall.enable = false;
   systemd.network.enable = true;
   systemd.network.networks."10-lan" = {

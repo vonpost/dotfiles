@@ -3,7 +3,13 @@ let svc = import ../../lib/vm-service-state.nix { inherit lib; };
     addrs = import ../../lib/lan-address.nix;
     hostname = "KAIZOKU";
 in {
-  imports = svc.mkMany [ "qbittorrent" "sabnzbd" ];
+  imports = ( [ (svc.mkOne {name = "qbittorrent"; bindTarget="/var/lib/qBittorrent";}) (svc.mkOne {name = "sabnzbd";}) ]);
+  services.mullvad-vpn.enable = true;
+  systemd.services.mullvad-daemon.environment = {
+    MULLVAD_SETTINGS_DIR = "/var/lib/mullvad";
+  };
+
+
   nixpkgs.config.allowUnfree = true;
   services.sabnzbd.enable = true;
   services.qbittorrent.enable = true;
@@ -13,6 +19,7 @@ in {
   networking.enableIPv6 = false;
   networking.firewall.enable = false;
   networking.useNetworkd = true;
+  networking.nameservers = [ addrs.DARE.ip ];
   systemd.network.enable = true;
   systemd.network.networks."10-lan" = {
     matchConfig.MACAddress = "${addrs.${hostname}.mac}";
@@ -43,6 +50,32 @@ in {
       tag = "theta";
       source = "/theta/";
       mountPoint = "/theta";
+    }
+    {
+      proto = "virtiofs";
+      tag = "nzb";
+      source = "/aleph/nzb/";
+      mountPoint = "/aleph/nzb";
+    }
+    {
+      proto = "virtiofs";
+      tag = "QBIT";
+      source = "/aleph/qbit/";
+      mountPoint = "/aleph/qbit";
+    }
+
+    {
+      proto = "virtiofs";
+      tag = "host-secrets";
+      source = "/run/secrets";
+      mountPoint = "/run/host-secrets";
+    }
+
+    {
+      proto = "virtiofs";
+      tag = "mullvad";
+      source = "/aleph/state/services/lib/mullvad";
+      mountPoint = "/var/lib/mullvad";
     }
   ];
 

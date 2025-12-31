@@ -71,8 +71,8 @@ in
         "127.0.0.0/8 allow"
       ];
 
-      local-zone = [ "lan. static" ];
-      local-data = lib.mapAttrsToList (n: ip: "\"${n} IN A ${ip}\"") hosts;
+      local-zone = [ ''"lan." static'' ];
+      local-data = lib.mapAttrsToList (n: ip: ''"${n} IN A ${ip}"'') hosts;
 
       hide-identity = "yes";
       hide-version = "yes";
