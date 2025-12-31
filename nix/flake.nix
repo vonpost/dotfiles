@@ -61,7 +61,6 @@
           microvm.nixosModules.host
 
           ./MOTHER/configuration.nix
-          ./MOTHER/contain-qbit-mullvad.nix
           ./MOTHER/contain-vpn.nix
           ./lib/host-state-map.nix
 
