@@ -3,7 +3,7 @@ let svc = import ../../lib/vm-service-state.nix { inherit lib; };
     addrs = import ../../lib/lan-address.nix;
     hostname = "KAIZOKU";
 in {
-  imports = ( [ (svc.mkOne {name = "qbittorrent"; bindTarget="/var/lib/qBittorrent";}) (svc.mkOne {name = "sabnzbd";}) ]);
+  imports = ( [ (svc.mkOne {name = "qbittorrent"; bindTarget="/var/lib/qBittorrent"; downloadsGroup = true; }) (svc.mkOne {name = "sabnzbd"; downloadsGroup=true; }) ]);
   services.mullvad-vpn.enable = true;
   systemd.services.mullvad-daemon.environment = {
     MULLVAD_SETTINGS_DIR = "/var/lib/mullvad";
@@ -53,19 +53,6 @@ in {
     }
     {
       proto = "virtiofs";
-      tag = "nzb";
-      source = "/aleph/nzb/";
-      mountPoint = "/aleph/nzb";
-    }
-    {
-      proto = "virtiofs";
-      tag = "QBIT";
-      source = "/aleph/qbit/";
-      mountPoint = "/aleph/qbit";
-    }
-
-    {
-      proto = "virtiofs";
       tag = "host-secrets";
       source = "/run/secrets";
       mountPoint = "/run/host-secrets";
@@ -88,6 +75,6 @@ in {
   ];
   microvm.hypervisor = "cloud-hypervisor";
   microvm.vcpu = 2;
-  microvm.mem = 1000;
+  microvm.mem = 4000;
 
 }

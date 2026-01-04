@@ -14,6 +14,7 @@
           SOTO.url = "./vm/SOTO";
           KAIZOKU.url = "./vm/KAIZOKU";
           DARE.url = "./vm/DARE";
+          OKAMI.url = "./vm/OKAMI";
         };
 
   outputs =
@@ -27,6 +28,7 @@
       SOTO,
       KAIZOKU,
       DARE,
+      OKAMI,
       ... }:
     let
       system = "x86_64-linux";
@@ -67,11 +69,12 @@
           {
             networking.hostName = "MOTHER";
             microvm.stateDir = "/aleph/vm-pool/microvm";
-            microvm.autostart = ["UCHI" "SOTO" "DARE" "KAIZOKU"];
+            microvm.autostart = ["UCHI" "SOTO" "DARE" "OKAMI" "KAIZOKU"];
             microvm.vms.UCHI = { flake = UCHI; updateFlake = "${self}/vm/UCHI"; };
             microvm.vms.SOTO = { flake = SOTO; updateFlake = "${self}/vm/SOTO"; };
             microvm.vms.DARE = { flake = DARE; updateFlake = "${self}/vm/DARE"; };
             microvm.vms.KAIZOKU = { flake = KAIZOKU; updateFlake = "${self}/vm/KAIZOKU"; };
+            microvm.vms.OKAMI = { flake = OKAMI; updateFlake = "${self}/vm/OKAMI"; };
           }
         ];
       };

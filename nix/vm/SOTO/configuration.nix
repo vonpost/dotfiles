@@ -44,8 +44,6 @@ in {
     networkConfig = {
       Address = "${addrs."${hostname}".ip}/24";
       Gateway = addrs.gateway.ip;
-
-      # Upstream DNS for the VM itself (nix, ntp, etc.)
       DNS = [ addrs.DARE.ip ];
     };
     linkConfig.RequiredForOnline = "yes";

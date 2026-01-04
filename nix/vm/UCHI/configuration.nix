@@ -4,14 +4,14 @@ let svc = import ../../lib/vm-service-state.nix { inherit lib; };
     hostname = "UCHI";
 in
 {
-  imports = svc.mkMany [ "sonarr" "radarr" "prowlarr" ];
+  imports = (map (name: svc.mkOne { name = name; downloadsGroup = true; } ) [ "sonarr" "radarr"]) ++ svc.mkMany [ "prowlarr" ];
 
   microvm.shares = [
     {
-          source = "/nix/store";
-          mountPoint = "/nix/.ro-store";
-          tag = "ro-store";
-          proto = "virtiofs";
+      source = "/nix/store";
+      mountPoint = "/nix/.ro-store";
+      tag = "ro-store";
+      proto = "virtiofs";
     }
     {
       proto = "virtiofs";
@@ -19,20 +19,8 @@ in
       source = "/theta/";
       mountPoint = "/theta";
     }
-    
-    {
-      proto = "virtiofs";
-      tag = "sabnzbd-loc";
-      source = "/aleph/nzb/complete";
-      mountPoint = "/aleph/nzb/complete";
-    }
-  {
-      proto = "virtiofs";
-      tag = "qbit-loc";
-      source = "/aleph/qbit";
-      mountPoint = "/aleph/qbit";
-    }
   ];
+
   services.sonarr.enable = true;
   services.radarr.enable = true;
   services.prowlarr.enable = true;

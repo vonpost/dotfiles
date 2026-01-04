@@ -13,7 +13,11 @@ let
     jellyseerr  = 2105;
     sabnzbd     = 2106;
     qbittorrent = 2107;
+    wolf = 2108;
   };
+
+  downloadsGID= 3000;
+  hasDownloadsDir = [ "qbittorrent" "sabnzbd" ];
 
   # Services we *know* use StateDirectory -> /var/lib/private/<name>
   privateStateDir = {
@@ -44,6 +48,7 @@ let
     , cacheDirName ? (privateCacheDir.${name} or null)  # auto from map
     , cacheVirtioTag ? "cache-${name}"
     , disableDynamicUser ? true
+    , downloadsGroup ? false
     }:
     { ... }:
     let
@@ -63,6 +68,11 @@ let
         uid = lib.mkForce uid;
         group = lib.mkForce name;
         isSystemUser = lib.mkForce true;
+        extraGroups = lib.mkIf downloadsGroup ["downloads"] ;
+      };
+
+      users.groups.downloads = lib.mkIf downloadsGroup {
+        gid = downloadsGID;
       };
 
       systemd.services.${unit} = {
@@ -79,32 +89,45 @@ let
           {
             proto = "virtiofs";
             tag = virtioTag;
-            source = source;
-            mountPoint = stateMount;
+            source = "${base}";
+            mountPoint = "/state";
           }
-        ]
-        ++ lib.optional persistCache {
-          proto = "virtiofs";
-          tag = cacheVirtioTag;
-          source = cacheSource;
-          mountPoint = cacheMount;
-        };
+        ];
+        # ++ lib.optional persistCache {
+        # proto = "virtiofs";
+        # tag = cacheVirtioTag;
+        # source = cacheSource;
+        # mountPoint = cacheMount;
+        # }
+        # ++ lib.optional downloadsGroup {
+        # proto = "virtiofs";
+        # tag = "downloadsDir-${name}";
+        # source = "${base}/downloads/${name}";
+        # mountPoint = "/downloads/${name}";
+        # };
 
       fileSystems =
         {
           ${chosenBindTarget} = {
-            device = stateMount;
+            device = "/state/lib/${name}";
             fsType = "none";
             options = [ "bind" ];
           };
         }
         // lib.optionalAttrs persistCache {
           ${chosenCacheBindTarget} = {
-            device = cacheMount;
+            device = "/state/cache/${name}";
             fsType = "none";
             options = [ "bind" ];
           };
+        }
+      // lib.optionalAttrs downloadsGroup {
+        "/downloads" = {
+            device = "/state/downloads";
+            fsType = "none";
+            options = [ "bind" ];
         };
+      };
     };
 
   mkMany = names: map (n: mkOne { name = n; }) names;
@@ -117,6 +140,8 @@ in {
     base
     libBase
     cacheBase
+    hasDownloadsDir
+    downloadsGID
     privateStateDir
     privateCacheDir;
 }
