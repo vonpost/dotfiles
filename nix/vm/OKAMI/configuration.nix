@@ -12,7 +12,6 @@ let
   sessionUID  = 1000;
   sessionGID  = 1000;
   sessionHome = "/home/${sessionUser}";
-
   wolfStateRoot = "/var/lib/wolf";
   wolfHomesRoot = "${wolfStateRoot}/home";
   wolfGamesRoot = "${wolfStateRoot}/games";
@@ -31,10 +30,10 @@ let
 
     # Redirect Steam game storage to /games (persisted, excluded from backups)
     if [ -d /games ]; then
-      mkdir -p "$HOME/.local/share/Steam"
-      if [ ! -e "$HOME/.local/share/Steam/steamapps" ]; then
-        ln -s /games "$HOME/.local/share/Steam/steamapps"
-      fi
+    mkdir -p "$HOME/.local/share/Steam"
+    if [ ! -e "$HOME/.local/share/Steam/steamapps" ]; then
+    ln -s /games "$HOME/.local/share/Steam/steamapps"
+    fi
     fi
 
     exec ${pkgs.dbus}/bin/dbus-run-session -- ${pkgs.fvwm}/bin/fvwm
@@ -67,8 +66,98 @@ let
       WorkingDir = "/tmp";
     };
   };
+  curlbin   = "${pkgs.curl}/bin/curl";
+
+  nvidiaDriverVol = "nvidia-driver-vol";
+
 in
 {
+  systemd.services.docker-build-nvidia-driver-image = {
+    description = "Build Gow Nvidia driver bundle image (Wolf manual method)";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "docker.service" "network-online.target" ];
+    wants = [ "network-online.target" ];
+    requires = [ "docker.service" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      WorkingDirectory = "/tmp";
+      # Allows reading /sys/module/nvidia/version
+      ExecStart = pkgs.writeShellScript "build-nvidia-driver-image" ''
+        set -euo pipefail
+
+        if [ ! -r /sys/module/nvidia/version ]; then
+          echo "ERROR: /sys/module/nvidia/version not readable; nvidia module not loaded?"
+          exit 1
+        fi
+
+        NV_VERSION="$(cat /sys/module/nvidia/version)"
+        echo "Detected NV_VERSION=$NV_VERSION"
+
+        # Build versioned tag; also tag :latest for convenience
+        ${curlbin} -fsSL https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile \
+          | ${docker} build \
+              -t gow/nvidia-driver:"$NV_VERSION" \
+              -t gow/nvidia-driver:latest \
+              -f - \
+              --build-arg NV_VERSION="$NV_VERSION" \
+              .
+
+        # Record the version in the local image label (optional)
+        echo "Built gow/nvidia-driver:$NV_VERSION"
+      '';
+    };
+  };
+
+  systemd.services.docker-populate-nvidia-driver-volume = {
+    description = "Populate Docker volume with Nvidia driver bundle (Wolf manual method)";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "docker.service" "docker-build-nvidia-driver-image.service" ];
+    requires = [ "docker.service" "docker-build-nvidia-driver-image.service" ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+
+      ExecStart = pkgs.writeShellScript "populate-nvidia-driver-vol" ''
+        set -euo pipefail
+
+        NV_VERSION="$(cat /sys/module/nvidia/version)"
+        echo "Target NV_VERSION=$NV_VERSION"
+        VOL="${nvidiaDriverVol}"
+
+        # Ensure volume exists
+        if ! ${docker} volume inspect "$VOL" >/dev/null 2>&1; then
+          echo "Creating volume $VOL"
+          ${docker} volume create "$VOL" >/dev/null
+        fi
+
+        # Read existing version marker (if any)
+        existing="$(${docker} run --rm -v "$VOL":/usr/nvidia:rw alpine:3.20 sh -lc 'cat /usr/nvidia/.nv_version 2>/dev/null || true' || true)"
+        if [ "$existing" = "$NV_VERSION" ]; then
+          echo "Volume already matches NV_VERSION=$NV_VERSION; nothing to do."
+          exit 0
+        fi
+
+        echo "Volume version mismatch (existing='$existing', want='$NV_VERSION'); repopulating"
+
+        # Nuke and recreate the volume to avoid stale files across driver upgrades
+        ${docker} volume rm -f "$VOL" >/dev/null || true
+        ${docker} volume create "$VOL" >/dev/null
+
+        # Populate volume using the driver bundle image:
+        # Equivalent to Wolf's: docker create --rm --mount source=VOL,destination=/usr/nvidia gow/nvidia-driver sh
+        ${docker} create --rm --mount source="$VOL",destination=/usr/nvidia gow/nvidia-driver:"$NV_VERSION" sh >/dev/null
+
+        # Write version marker inside the volume
+        ${docker} run --rm -v "$VOL":/usr/nvidia:rw alpine:3.20 sh -lc 'echo "$0" > /usr/nvidia/.nv_version' "$NV_VERSION"
+
+        echo "Populated $VOL with NV_VERSION=$NV_VERSION"
+      '';
+    };
+  };
+
   imports = [
     (svc.mkOne { name = "wolf"; })
   ];
@@ -79,12 +168,12 @@ in
 
   microvm.hypervisor = "cloud-hypervisor";
   microvm.vcpu = 8;
-  microvm.mem  = 32000;
+  microvm.mem  = 16000;
 
-  # microvm.devices = [
-  #   { bus = "pci"; path = "0000:09:00.0"; } # GPU
-  #   { bus = "pci"; path = "0000:09:00.1"; } # HDMI audio
-  # ];
+  microvm.devices = [
+    { bus = "pci"; path = "0000:09:00.0"; } # GPU
+    { bus = "pci"; path = "0000:09:00.1"; } # HDMI audio
+  ];
 
   microvm.shares = [
     {
@@ -179,7 +268,6 @@ in
   boot.kernelParams = [ "nvidia_drm.modeset=1" ];
   boot.kernelModules = [ "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm" ];
 
-  services.xserver.videoDrivers = [ "nvidia" ];
   hardware.nvidia = {
     open = false; # required to be explicit on >= 560
     package = config.boot.kernelPackages.nvidiaPackages.stable;
@@ -193,9 +281,18 @@ in
   ## ─────────────────────────────────────────────
 
   virtualisation.docker.enable = true;
+
   virtualisation.docker.daemon.settings = {
     data-root = "/var/lib/docker";
+      iptables = true;
+      ip-forward = true;
   };
+
+  boot.kernel.sysctl = {
+    "net.ipv4.ip_forward" = 1;
+    "net.ipv4.conf.all.forwarding" = 1;
+  };
+  services.xserver.videoDrivers = ["nvidia"];
 
   # svc.mkOne forces wolf.service to run as user 'wolf', so grant docker socket access
   users.users.wolf.extraGroups = [ "docker" ];
@@ -225,75 +322,25 @@ in
     };
   };
 
-  # Create/populate the NVIDIA driver volume as per Wolf docs
-  systemd.services.gow-nvidia-driver-vol = {
-    description = "Populate NVIDIA driver volume for Wolf from /run/opengl-driver";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "docker.service" ];
-    requires = [ "docker.service" ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = pkgs.writeShellScript "gow-nvidia-driver-vol" ''
-        set -euo pipefail
-
-        # Sanity: ensure NVIDIA is loaded
-        test -r /sys/module/nvidia/version
-        echo "NV_VERSION=$(cat /sys/module/nvidia/version)"
-
-        # Ensure the volume exists
-        ${docker} volume inspect nvidia-driver-vol >/dev/null 2>&1 || ${docker} volume create nvidia-driver-vol >/dev/null
-
-        # Populate the volume from the NixOS driver runtime paths
-        # (Alpine includes busybox cp; good enough. You can switch to coreutils if you prefer.)
-        ${docker} run --rm \
-          -v /run/opengl-driver:/src64:ro \
-          -v /run/opengl-driver-32:/src32:ro \
-          -v nvidia-driver-vol:/usr/nvidia:rw \
-          alpine:latest sh -euxc '
-            rm -rf /usr/nvidia/*
-
-            mkdir -p /usr/nvidia
-            cp -a /src64/. /usr/nvidia/
-
-            # Put 32-bit libs under a predictable subdir
-            mkdir -p /usr/nvidia/lib32
-            cp -a /src32/lib/. /usr/nvidia/lib32/ || true
-
-            # Ensure EGL/Vulkan config dirs exist (Wolf expects these paths)
-            mkdir -p /usr/nvidia/share/glvnd/egl_vendor.d
-            mkdir -p /usr/nvidia/share/egl/egl_external_platform.d
-          '
-
-        # Verify modeset flag (Wolf doc requirement)
-        if [ -r /sys/module/nvidia_drm/parameters/modeset ]; then
-          echo "nvidia_drm.modeset=$(cat /sys/module/nvidia_drm/parameters/modeset)"
-        else
-          echo "WARNING: nvidia_drm modeset parameter not present"
-        fi
-      '';
-    };
-  };
-
   systemd.services.wolf = {
     description = "Games on Whales – Wolf";
     wantedBy = [ "multi-user.target" ];
     after = [
       "network-online.target"
       "docker.service"
-      "gow-nvidia-driver-vol.service"
+      "docker-populate-nvidia-driver-volume.service"
       "docker-load-wolf-desktop.service"
     ];
     requires = [
       "docker.service"
-      "gow-nvidia-driver-vol.service"
+      "docker-populate-nvidia-driver-volume.service"
       "docker-load-wolf-desktop.service"
     ];
     wants = [ "network-online.target" ];
 
     serviceConfig = {
       Restart = "always";
-      RestartSec = 2;
+      RestartSec = 5;
 
       ExecStartPre = [
         "${docker} pull ${wolfImage}"
@@ -305,19 +352,25 @@ in
         "--name" "wolf"
         "--rm"
         "--network=host"
+        # Wolf manual method: driver bundle volume
+        "-e" "NVIDIA_DRIVER_VOLUME_NAME=${nvidiaDriverVol}"
+        "-e" "WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock"
+        "-v" "/var/run/wolf:/var/run/wolf"
 
-        # Wolf manual NVIDIA driver volume method
-        "-e" "NVIDIA_DRIVER_VOLUME_NAME=nvidia-driver-vol"
-        "-v" "nvidia-driver-vol:/usr/nvidia:rw"
 
-        "-v" "/etc/wolf:/etc/wolf:rw"
+        "-v" "${nvidiaDriverVol}:/usr/nvidia:rw"
+
+        "-v" "/var/lib/wolf:/etc/wolf:rw"
+
         "-v" "/var/run/docker.sock:/var/run/docker.sock:rw"
+
 
         # Devices (per Wolf docs)
         "--device" "/dev/nvidia-uvm"
         "--device" "/dev/nvidia-uvm-tools"
-        "--device" "/dev/nvidia-caps/nvidia-cap1"
-        "--device" "/dev/nvidia-caps/nvidia-cap2"
+        # CANT FIND MODPROBE THESE FOR SOME REASON
+        # "--device" "/dev/nvidia-caps/nvidia-cap1"
+        # "--device" "/dev/nvidia-caps/nvidia-cap2"
         "--device" "/dev/nvidiactl"
         "--device" "/dev/nvidia0"
         "--device" "/dev/nvidia-modeset"
@@ -325,8 +378,6 @@ in
         "--device" "/dev/uinput"
         "--device" "/dev/uhid"
         "--device-cgroup-rule" ''"c 13:* rmw"''
-
-        # Broad mounts the docs recommend
         "-v" "/dev:/dev:rw"
         "-v" "/run/udev:/run/udev:rw"
 
@@ -334,6 +385,39 @@ in
       ];
 
       ExecStop = "-${docker} rm -f wolf";
+    };
+  };
+
+  systemd.services.wolf-den = {
+    description = "Games on Whales – Wolf Den";
+    wantedBy = [ "multi-user.target" ];
+    after = [
+      "wolf.service"
+    ];
+    requires = [
+      "wolf.service"
+    ];
+
+    serviceConfig = {
+      Restart = "no";
+
+      ExecStartPre = [
+        "${docker} pull ghcr.io/games-on-whales/wolf-den:stable"
+        "-${docker} rm -f wolf-den"
+      ];
+
+      ExecStart = lib.concatStringsSep " " [
+        docker "run"
+        "--name" "wolf-den"
+        "--rm"
+        "-p" "8080:8080"
+        "-v" "/var/lib/wolf/wolf-den:/app/wolf-den:rw"
+        "-v" "/var/run/wolf:/var/run/wolf"
+        "-e" "WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock"
+        "ghcr.io/games-on-whales/wolf-den:stable"
+      ];
+
+      ExecStop = "-${docker} rm -f wolf-den";
     };
   };
 
@@ -351,5 +435,8 @@ in
     pciutils
     vulkan-tools
     curl
+    config.hardware.nvidia.package.bin
+    iptables
+    tcpdump
   ];
 }
