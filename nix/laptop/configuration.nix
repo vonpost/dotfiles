@@ -197,6 +197,7 @@ in
         wlp3s0.useDHCP = true;
         enp7s0f3u2c4i2.useDHCP = true;
       };
+      networkmanager.enable = true;
       wireless.enable = true;
       firewall.enable = false;
     };
@@ -224,7 +225,7 @@ in
       createHome = true;
       home = "/home/dcol/";
       description = "Daniel Collin";
-      extraGroups = ["video" "audio" "wheel" "libvirtd" "docker"];
+      extraGroups = ["video" "audio" "wheel" "libvirtd" "docker" "networkmanager"];
       useDefaultShell = true;
     };
 
