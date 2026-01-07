@@ -168,7 +168,7 @@ in
 
   microvm.hypervisor = "cloud-hypervisor";
   microvm.vcpu = 8;
-  microvm.mem  = 16000;
+  microvm.mem  = 32000;
 
   microvm.devices = [
     { bus = "pci"; path = "0000:09:00.0"; } # GPU

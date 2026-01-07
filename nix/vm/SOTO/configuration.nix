@@ -6,6 +6,7 @@ in {
   imports = [ (svc.mkOne { name = "jellyfin"; persistCache = true; })
               (svc.mkOne  { name = "jellyseerr"; })
               ../../common/nginx.nix
+              ../../common/myaddr.nix
             ];
 
   services.jellyseerr.enable = true;

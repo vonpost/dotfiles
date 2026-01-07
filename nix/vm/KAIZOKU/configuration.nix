@@ -53,9 +53,9 @@ in {
     }
     {
       proto = "virtiofs";
-      tag = "host-secrets";
-      source = "/run/secrets";
-      mountPoint = "/run/host-secrets";
+      tag = "mullvad-key";
+      source = "/run/secrets/mullvad";
+      mountPoint = "/mullvad";
     }
 
     {

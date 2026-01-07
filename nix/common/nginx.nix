@@ -4,6 +4,7 @@ let
   in
 {
   security.acme.acceptTerms = true;
+  security.acme.defaults.email = "daniel.j.collin@gmail.com";
   services.nginx = {
     enable = true;
     recommendedProxySettings = true;
@@ -11,7 +12,6 @@ let
     recommendedOptimisation = true;
     recommendedGzipSettings = true;
     sslCiphers = "AES256+EECDH:AES256+EDH:!aNULL";
-
 
     virtualHosts."jellyfin.${url}" = {
       forceSSL = true;
