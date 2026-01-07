@@ -9,7 +9,7 @@ let
     ip="''$(${pkgs.curl}/bin/curl -fsS https://api.ipify.org)"
     url="https://myaddr.tools/update?key=''${MYADDR_KEY}&ip=''${ip}"
 
-    ${pkgs.curl}/bin/curl -fsS --retry 3 --retry-delay 1 "''$url" >/dev/null
+    ${pkgs.curl}/bin/curl -fsS --retry 3 --retry-delay 1 "''$url"
 
     echo "myaddr.tools updated to $ip"
   '';
