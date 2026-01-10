@@ -1,4 +1,4 @@
-{ config, pkgs, lib, microvm, bleeding, ... }:
+{ self, config, pkgs, lib, microvm, bleeding, ... }:
 let
   svc = import ../../lib/vm-service-state.nix { inherit lib; };
   addrs = import ../../lib/lan-address.nix;
@@ -88,8 +88,8 @@ in
         set -euo pipefail
 
         if [ ! -r /sys/module/nvidia/version ]; then
-          echo "ERROR: /sys/module/nvidia/version not readable; nvidia module not loaded?"
-          exit 1
+        echo "ERROR: /sys/module/nvidia/version not readable; nvidia module not loaded?"
+        exit 1
         fi
 
         NV_VERSION="$(cat /sys/module/nvidia/version)"
@@ -97,12 +97,12 @@ in
 
         # Build versioned tag; also tag :latest for convenience
         ${curlbin} -fsSL https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile \
-          | ${docker} build \
-              -t gow/nvidia-driver:"$NV_VERSION" \
-              -t gow/nvidia-driver:latest \
-              -f - \
-              --build-arg NV_VERSION="$NV_VERSION" \
-              .
+        | ${docker} build \
+        -t gow/nvidia-driver:"$NV_VERSION" \
+        -t gow/nvidia-driver:latest \
+        -f - \
+        --build-arg NV_VERSION="$NV_VERSION" \
+        .
 
         # Record the version in the local image label (optional)
         echo "Built gow/nvidia-driver:$NV_VERSION"
@@ -129,15 +129,15 @@ in
 
         # Ensure volume exists
         if ! ${docker} volume inspect "$VOL" >/dev/null 2>&1; then
-          echo "Creating volume $VOL"
-          ${docker} volume create "$VOL" >/dev/null
+        echo "Creating volume $VOL"
+        ${docker} volume create "$VOL" >/dev/null
         fi
 
         # Read existing version marker (if any)
         existing="$(${docker} run --rm -v "$VOL":/usr/nvidia:rw alpine:3.20 sh -lc 'cat /usr/nvidia/.nv_version 2>/dev/null || true' || true)"
         if [ "$existing" = "$NV_VERSION" ]; then
-          echo "Volume already matches NV_VERSION=$NV_VERSION; nothing to do."
-          exit 0
+        echo "Volume already matches NV_VERSION=$NV_VERSION; nothing to do."
+        exit 0
         fi
 
         echo "Volume version mismatch (existing='$existing', want='$NV_VERSION'); repopulating"
@@ -160,6 +160,8 @@ in
 
   imports = [
     (svc.mkOne { name = "wolf"; })
+    (svc.mkOne { name = "llama-cpp"; })
+    ../../common/share_journald.nix
   ];
 
   ## ─────────────────────────────────────────────
@@ -284,8 +286,8 @@ in
 
   virtualisation.docker.daemon.settings = {
     data-root = "/var/lib/docker";
-      iptables = true;
-      ip-forward = true;
+    iptables = true;
+    ip-forward = true;
   };
 
   boot.kernel.sysctl = {
@@ -439,4 +441,18 @@ in
     iptables
     tcpdump
   ];
+
+
+  ## NON WOLF ###
+  ##
+
+
+  services.llama-cpp = {
+    enable = true;
+    package = pkgs.llama-cpp-vulkan;
+    port = 8888;
+    host = "0.0.0.0";
+    model = "/var/lib/llama-cpp/models/gpt-oss-20b-MXFP4.gguf";
+  };
+
 }

@@ -1,5 +1,4 @@
 { lib }:
-
 let
   base = "/aleph/state/services";
   libBase = "${base}/lib";
@@ -14,6 +13,7 @@ let
     sabnzbd     = 2106;
     qbittorrent = 2107;
     wolf = 2108;
+    llama-cpp = 2109;
   };
 
   downloadsGID= 3000;

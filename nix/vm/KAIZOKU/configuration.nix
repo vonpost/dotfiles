@@ -1,9 +1,9 @@
-{ config, pkgs, lib, microvm, bleeding, ... }:
+{ self, config, pkgs, lib, microvm, bleeding, ... }:
 let svc = import ../../lib/vm-service-state.nix { inherit lib; };
     addrs = import ../../lib/lan-address.nix;
     hostname = "KAIZOKU";
 in {
-  imports = ( [ (svc.mkOne {name = "qbittorrent"; bindTarget="/var/lib/qBittorrent"; downloadsGroup = true; }) (svc.mkOne {name = "sabnzbd"; downloadsGroup=true; }) ]);
+  imports = ( [ (svc.mkOne {name = "qbittorrent"; bindTarget="/var/lib/qBittorrent"; downloadsGroup = true; }) (svc.mkOne {name = "sabnzbd"; downloadsGroup=true; }) ]) ++ [ ../../common/share_journald.nix ];
   services.mullvad-vpn.enable = true;
   systemd.services.mullvad-daemon.environment = {
     MULLVAD_SETTINGS_DIR = "/var/lib/mullvad";
@@ -51,13 +51,6 @@ in {
       source = "/theta/";
       mountPoint = "/theta";
     }
-    {
-      proto = "virtiofs";
-      tag = "mullvad-key";
-      source = "/run/secrets/mullvad";
-      mountPoint = "/mullvad";
-    }
-
     {
       proto = "virtiofs";
       tag = "mullvad";

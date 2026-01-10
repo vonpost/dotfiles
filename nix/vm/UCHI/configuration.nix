@@ -1,10 +1,10 @@
-{ config, pkgs, lib, microvm, bleeding, ... }:
+{ self, config, pkgs, lib, microvm, bleeding, ... }:
 let svc = import ../../lib/vm-service-state.nix { inherit lib; };
     addrs = import ../../lib/lan-address.nix;
     hostname = "UCHI";
 in
 {
-  imports = (map (name: svc.mkOne { name = name; downloadsGroup = true; } ) [ "sonarr" "radarr"]) ++ svc.mkMany [ "prowlarr" ];
+  imports = (map (name: svc.mkOne { name = name; downloadsGroup = true; } ) [ "sonarr" "radarr"]) ++ svc.mkMany [ "prowlarr" ] ++ [ ../../common/share_journald.nix ];
 
   microvm.shares = [
     {

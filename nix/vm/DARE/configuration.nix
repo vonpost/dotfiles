@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ self, config, lib, pkgs, ... }:
 
 let
   addrs = import ../../lib/lan-address.nix;
@@ -17,6 +17,7 @@ let
   hostname = "DARE";
 in
 {
+  imports = [ ../../common/share_journald.nix ];
   networking.hostName = hostname;
   networking.enableIPv6 = false;
   networking.useDHCP = false;

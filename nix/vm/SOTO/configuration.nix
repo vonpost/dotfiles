@@ -1,4 +1,4 @@
-{ config, pkgs, lib, microvm, bleeding, ... }:
+{ self, config, pkgs, lib, microvm, bleeding, ... }:
 let svc = import ../../lib/vm-service-state.nix { inherit lib; };
     addrs = import ../../lib/lan-address.nix;
     hostname = "SOTO";
@@ -7,6 +7,7 @@ in {
               (svc.mkOne  { name = "jellyseerr"; })
               ../../common/nginx.nix
               ../../common/myaddr.nix
+              ../../common/share_journald.nix
             ];
 
   services.jellyseerr.enable = true;
