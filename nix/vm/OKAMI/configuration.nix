@@ -274,7 +274,6 @@ in
     open = false; # required to be explicit on >= 560
     package = config.boot.kernelPackages.nvidiaPackages.stable;
     modesetting.enable = true;
-    nvidiaPersistenced = true;
   };
   hardware.graphics.enable = true;
 
@@ -449,10 +448,16 @@ in
 
   services.llama-cpp = {
     enable = true;
-    package = pkgs.llama-cpp-vulkan;
+    package = bleeding.llama-cpp-vulkan;
     port = 8888;
     host = "0.0.0.0";
-    model = "/var/lib/llama-cpp/models/gpt-oss-20b-MXFP4.gguf";
+    model = null;
+    modelsDir = "/var/lib/llama-cpp/models/";
+    extraFlags = [
+      "--jinja"
+      "--sleep-idle-seconds" "30"
+      "--models-max" "1"
+    ];
   };
 
 }
