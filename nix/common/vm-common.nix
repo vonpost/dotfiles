@@ -27,12 +27,15 @@ in
 {
   imports = [ ./share_journald.nix ];
 
-  networking.hostName = hostname;
-  networking.useNetworkd = lib.mkDefault true;
-  networking.useDHCP = lib.mkDefault false;
-  networking.enableIPv6 = lib.mkDefault false;
-  networking.firewall.enable = lib.mkDefault false;
-  networking.nameservers = nameservers;
+  boot.kernelParams = [ "ipv6.disable=1" ];
+  networking = {
+    hostName = hostname;
+    useNetworkd = lib.mkDefault true;
+    useDHCP = lib.mkDefault false;
+    enableIPv6 = lib.mkDefault false;
+    firewall.enable = lib.mkDefault false;
+    nameservers = nameservers;
+  };
 
   systemd.network.enable = lib.mkDefault true;
   systemd.network.networks."10-lan" = {

@@ -57,7 +57,7 @@ in
 
     settings.forward-zone = [{
       name = ".";
-      forward-addr = [ addrs.gateway.ip ];
+      forward-addr = [ "9.9.9.9" "1.1.1.1" ];
     }];
   };
 
