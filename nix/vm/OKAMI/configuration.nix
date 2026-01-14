@@ -1,7 +1,6 @@
 { self, config, pkgs, lib, microvm, bleeding, ... }:
 let
   svc = import ../../lib/vm-service-state.nix { inherit lib; };
-  addrs = import ../../lib/lan-address.nix;
 
   hostname = "OKAMI";
 
@@ -159,31 +158,21 @@ in
   };
 
   imports = [
+    (import ../../common/vm-common.nix { hostname = hostname; })
     (svc.mkOne { name = "wolf"; })
     (svc.mkOne { name = "llama-cpp"; })
-    ../../common/share_journald.nix
   ];
 
   ## ─────────────────────────────────────────────
   ## microvm basics
   ## ─────────────────────────────────────────────
 
-  microvm.hypervisor = "cloud-hypervisor";
   microvm.vcpu = 8;
   microvm.mem  = 32000;
 
   microvm.devices = [
     { bus = "pci"; path = "0000:09:00.0"; } # GPU
     { bus = "pci"; path = "0000:09:00.1"; } # HDMI audio
-  ];
-
-  microvm.shares = [
-    {
-      source = "/nix/store";
-      mountPoint = "/nix/.ro-store";
-      tag = "ro-store";
-      proto = "virtiofs";
-    }
   ];
 
   # Mount the block volume directly where Docker expects it
@@ -196,36 +185,6 @@ in
       autoCreate = true;
     }
   ];
-
-  microvm.interfaces = [
-    {
-      type = "tap";
-      id   = "vm-${hostname}";
-      mac  = addrs.${hostname}.mac;
-    }
-  ];
-
-  ## ─────────────────────────────────────────────
-  ## Networking
-  ## ─────────────────────────────────────────────
-
-  networking.hostName = hostname;
-  networking.useNetworkd = true;
-  networking.useDHCP = false;
-  networking.enableIPv6 = false;
-  networking.nameservers = [ addrs.DARE.ip ];
-  networking.firewall.enable = false;
-
-  systemd.network.enable = true;
-  systemd.network.networks."10-lan" = {
-    matchConfig.MACAddress = addrs.${hostname}.mac;
-    networkConfig = {
-      Address = "${addrs.${hostname}.ip}/24";
-      Gateway = addrs.gateway.ip;
-      DNS = [ addrs.DARE.ip ];
-    };
-    linkConfig.RequiredForOnline = "yes";
-  };
 
   ## ─────────────────────────────────────────────
   ## Users & persistent layout
@@ -425,12 +384,6 @@ in
   ## ─────────────────────────────────────────────
   ## Admin & debugging
   ## ─────────────────────────────────────────────
-
-  services.openssh.enable = true;
-  users.users.root.openssh.authorizedKeys.keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDG2YxFYwcWwrsS0TecE+6wPLGzerQAbVDyKy4HvSev+"
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINaBarHkA8npoU1VmJPcRIdAAIdvQN7E1D+a+LXp7hmg"
-  ];
 
   environment.systemPackages = with pkgs; [
     pciutils

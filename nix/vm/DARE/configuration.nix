@@ -3,7 +3,6 @@
 let
   addrs = import ../../lib/lan-address.nix;
 
-  lanPrefix = 24;
   lanSubnet = "192.168.1.0/24";
 
   # WireGuard client subnet (adjust to your real one)
@@ -17,45 +16,18 @@ let
   hostname = "DARE";
 in
 {
-  imports = [ ../../common/share_journald.nix ];
-  networking.hostName = hostname;
-  networking.enableIPv6 = false;
-  networking.useDHCP = false;
-  # --- networkd static IP ---
-  networking.useNetworkd = true;
-  services.openssh.enable = true;
-  users.users.root.openssh.authorizedKeys.keys = [
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDG2YxFYwcWwrsS0TecE+6wPLGzerQAbVDyKy4HvSev+ ed25519-key-20221208"
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINaBarHkA8npoU1VmJPcRIdAAIdvQN7E1D+a+LXp7hmg daniel.j.collin@gmail.com"
-];
+  imports = [
+    (import ../../common/vm-common.nix {
+      hostname = hostname;
+      nameserverHost = null;
+      dnsHost = "gateway";
+    })
+  ];
+
   services.openssh.settings.PasswordAuthentication = false;
   services.openssh.extraConfig = ''
     AllowAgentForwarding yes
   '';
-
-
-  systemd.network.enable = true;
-
-  systemd.network.networks."10-lan" = {
-    matchConfig.MACAddress = addrs.${hostname}.mac;
-    networkConfig = {
-      Address = "${addrs.${hostname}.ip}/${toString lanPrefix}";
-      Gateway = addrs.gateway.ip;
-
-      # Upstream DNS for the VM itself (nix, ntp, etc.)
-      DNS = [ addrs.gateway.ip ];
-    };
-    linkConfig.RequiredForOnline = "yes";
-  };
-
-  microvm.shares = [
-    {
-          source = "/nix/store";
-          mountPoint = "/nix/.ro-store";
-          tag = "ro-store";
-          proto = "virtiofs";
-    }
-  ];
 
   services.timesyncd.enable = true;
 
@@ -90,19 +62,8 @@ in
   };
 
   # --- Firewall ---
-  networking.firewall.enable = false;
   networking.firewall.allowedUDPPorts = [ 53 22 ];
   networking.firewall.allowedTCPPorts = [ 53 22 ];
 
   environment.systemPackages = with pkgs; [ dig ];
-
-  # --- MicroVM device ---
-  microvm.hypervisor = "cloud-hypervisor";
-  microvm.interfaces = [
-    {
-      type = "tap";
-      id = "vm-${hostname}";
-      mac = addrs.${hostname}.mac;
-    }
-  ];
 }
