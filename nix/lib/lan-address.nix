@@ -1,5 +1,5 @@
 {
-  MOTHER = { ip = "192.168.1.11"; mac = null; machineId = null; } ;
+  MOTHER = { ip = "192.168.1.11"; mac = "70:88:88:88:6c:e1"; machineId = "f8883f0664be459f8312278bde07dd17"; } ;
   UCHI   = { ip = "192.168.1.20"; mac = "02:00:00:00:00:01"; machineId = "3692d4ba23994c3a818e8d577625d60c";};
   SOTO   = { ip = "192.168.1.21"; mac = "02:00:00:00:00:02"; machineId = "056de0236c6346f795b053689ca0468f";};
   KAIZOKU   = { ip = "192.168.1.22"; mac = "02:00:00:00:00:03"; machineId = "d7c79cedf4a24584ad28503505507e04";};

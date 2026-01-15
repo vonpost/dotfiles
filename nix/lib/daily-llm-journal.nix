@@ -106,7 +106,7 @@ in
 
     outputDir = lib.mkOption {
       type = lib.types.str;
-      default = "/var/lib/daily-llm-logs";
+      default = "/var/lib/dailyLlmJournal";
       description = "Directory for daily log inputs and summaries.";
     };
 
@@ -183,32 +183,18 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    systemd.tmpfiles.rules = [
-      "d ${cfg.outputDir} 0750 llm-summarizer systemd-journal - -"
-    ];
 
-    users.users.llm-summarizer = {
-      isSystemUser = true;
-      group = "systemd-journal";
+    users.users.dailyLlmJournal = {
+      extraGroups = ["systemd-journal"];
     };
 
     systemd.services.dailyLlmJournal = {
       description = "Daily journal summary via llama-server";
       serviceConfig = {
         Type = "oneshot";
+        User = "dailyLlmJournal";
+        Group = "dailyLlmJournal";
         ExecStart = "${program}/bin/daily-llm-journal";
-        User = "llm-summarizer";
-        Group = "systemd-journal";
-        UMask = "0027";
-
-        # security hardening
-        CapabilityBoundingSet = "";
-        PrivateTmp = true;
-        PrivateDevices = true;
-        ProtectSystem = "full";
-        ProtectHome = true;
-        ReadWriteDirectories = cfg.outputDir;
-
         # no retry loop for a daily job
         Restart = "on-failure";
         RestartSec = "360s";

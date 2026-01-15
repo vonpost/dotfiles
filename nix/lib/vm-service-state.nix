@@ -14,6 +14,7 @@ let
     qbittorrent = 2107;
     wolf = 2108;
     llama-cpp = 2109;
+    dailyLlmJournal = 2110;
   };
 
   downloadsGID= 3000;

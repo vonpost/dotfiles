@@ -16,6 +16,10 @@ in {
     package = bleeding.jellyfin;
   };
 
+  environment.systemPackages = with pkgs; [
+      bleeding.jellyfin-ffmpeg
+  ];
+
   microvm.vcpu = 8;
   microvm.mem = 8000;
   #microvm.hotplugMem = 8400;

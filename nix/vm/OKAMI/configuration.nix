@@ -158,10 +158,13 @@ in
   };
 
   imports = [
-    (import ../../common/vm-common.nix { hostname = hostname; })
-    (svc.mkOne { name = "wolf"; })
-    (svc.mkOne { name = "llama-cpp"; })
-  ];
+    ../../lib/daily-llm-journal.nix
+    ../../common/share_journald.nix
+    (import ../../common/vm-common.nix { hostname = hostname; shareJournal=false; })
+  ] ++ svc.mkMany [
+    "wolf"
+    "llama-cpp"
+    "dailyLlmJournal" ];
 
   ## ─────────────────────────────────────────────
   ## microvm basics
@@ -411,6 +414,32 @@ in
       "--sleep-idle-seconds" "30"
       "--models-max" "1"
     ];
+  };
+
+  services.dailyLlmJournal = {
+    enable = true;
+    url = "http://localhost";
+    model = "gpt-oss-20b-MXFP4";
+    port = 8888;
+    logSlices = [
+      {
+        title = "PRIORITY: warning..emerg";
+        filter = "-p warning..emerg";
+      }
+    ]
+    ++ (map (service : { title = "UNIT: ${service} (info+)"; filter = "_SYSTEMD_UNIT=${service}.service"; })
+      [
+      "sshd"
+      "nginx"
+      "wolf"
+      "radarr"
+      "sonarr"
+      "jellyfin"
+      "unbound"
+      "jellyseerr"
+      "mullvad-daemon"
+      ]
+    );
   };
 
 }

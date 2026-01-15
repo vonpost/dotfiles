@@ -3,6 +3,7 @@
 , nameserverHost ? "DARE"
 , dnsHost ? nameserverHost
 , media ? false
+, shareJournal ? true
 , mediaShares ? [
     {
       proto = "virtiofs";
@@ -25,7 +26,7 @@ let
   mediaSharesList = if media then mediaShares else [];
 in
 {
-  imports = [ ./share_journald.nix ];
+  imports = lib.optionals shareJournal [ ./share_journald.nix ];
 
   boot.kernelParams = [ "ipv6.disable=1" ];
   networking = {

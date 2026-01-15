@@ -11,7 +11,7 @@ in
 
   microvm.shares = [ {
     # On the host
-    source = "/aleph/vm-pool/microvm/${config.networking.hostName}/journal";
+    source = "/var/log/journal";
     # In the MicroVM
     mountPoint = "/var/log/journal";
     tag = "journal";
