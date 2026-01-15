@@ -211,7 +211,6 @@ in
 
     fonts = {
       packages = with pkgs; [
-        tewi-font
         nerd-fonts.blex-mono
         eb-garamond
       ];
