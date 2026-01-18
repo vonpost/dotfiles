@@ -17,6 +17,8 @@ in {
   nixpkgs.config.allowUnfree = true;
   services.sabnzbd.enable = true;
   services.qbittorrent.enable = true;
+  systemd.services.qbittorrent.serviceConfig.UMask = "002";
+  systemd.services.sabnzbd.serviceConfig.UMask = "002";
 
   microvm.shares = [
     {

@@ -10,12 +10,16 @@ in
       (import ../../common/vm-common.nix { hostname = hostname; media = true; })
     ];
 
-  services.sonarr.enable = true;
-  services.radarr.enable = true;
-  services.prowlarr.enable = true;
-  services.prowlarr.package = bleeding.prowlarr;
+  services = {
+    sonarr.enable = true;
+    radarr.enable = true;
+    prowlarr = {
+      enable = true;
+      package = bleeding.prowlarr;
+    };
+  };
   microvm.vcpu = 2;
-  microvm.mem = 2000;
+  microvm.mem = 4000;
   #microvm.hotplugMem = 8400;
 
 
