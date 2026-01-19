@@ -36,7 +36,10 @@ let
   mkOne =
     { name
     , unit ? name
+    , user ? name
+    , group ? user
     , uid ? uids.${name}
+    , gid ? uid
     , source ? "${libBase}/${name}"       # host path
     , stateMount ? "/state/${name}"       # inside VM (virtiofs mountpoint)
     , bindTarget ? null                   # explicit override
@@ -64,10 +67,10 @@ let
         else defaultCacheBindTarget name;
     in
     {
-      users.groups.${name}.gid = lib.mkForce uid;
-      users.users.${name} = {
+      users.groups.${group}.gid = lib.mkForce gid;
+      users.users.${user} = {
         uid = lib.mkForce uid;
-        group = lib.mkForce name;
+        group = lib.mkForce group;
         isSystemUser = lib.mkForce true;
         extraGroups = lib.mkIf downloadsGroup ["downloads"] ;
       };
@@ -78,8 +81,8 @@ let
 
       systemd.services.${unit} = {
         serviceConfig.DynamicUser = lib.mkForce false;
-        serviceConfig.User = lib.mkForce name;
-        serviceConfig.Group = lib.mkForce name;
+        serviceConfig.User = lib.mkForce user;
+        serviceConfig.Group = lib.mkForce group;
         unitConfig.RequiresMountsFor =
           [ chosenBindTarget ]
           ++ lib.optional persistCache chosenCacheBindTarget;
