@@ -331,9 +331,8 @@ in
         # Devices (per Wolf docs)
         "--device" "/dev/nvidia-uvm"
         "--device" "/dev/nvidia-uvm-tools"
-        # CANT FIND MODPROBE THESE FOR SOME REASON
-        # "--device" "/dev/nvidia-caps/nvidia-cap1"
-        # "--device" "/dev/nvidia-caps/nvidia-cap2"
+        "--device" "/dev/nvidia-caps/nvidia-cap1"
+        "--device" "/dev/nvidia-caps/nvidia-cap2"
         "--device" "/dev/nvidiactl"
         "--device" "/dev/nvidia0"
         "--device" "/dev/nvidia-modeset"

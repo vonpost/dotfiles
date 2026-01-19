@@ -2,11 +2,11 @@
   "nodes": {
     "bleeding": {
       "locked": {
-        "lastModified": 1768256584,
-        "narHash": "sha256-1lKdibL9y84hqnLzeVmdLivAsFD9iJiRv/QeHWy7vww=",
+        "lastModified": 1768851127,
+        "narHash": "sha256-qUgwwOF5pzvu0IzlxdhAZ6kcLE6R+NO8kyQYxtTLLgw=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "33f9339b9e9aad1a915c6fda277bf80e35321b09",
+        "rev": "7f805255d6eeaeb3f2fa414ee1c884ca8a0b3837",
         "type": "github"
       },
       "original": {
@@ -24,11 +24,11 @@
         "spectrum": "spectrum"
       },
       "locked": {
-        "lastModified": 1768085909,
-        "narHash": "sha256-VmLSHlimAq+em9rXX9YhBS0Shu5MBCAQi2Kd//8OOgQ=",
+        "lastModified": 1768682386,
+        "narHash": "sha256-mKrMf7eG9TM2AM3pTuhIiCGmZ/JwDegCQH3ThVqcTuc=",
         "owner": "microvm-nix",
         "repo": "microvm.nix",
-        "rev": "4f267df275361406cda9a3f8e349035be207b307",
+        "rev": "f469c1dfede623bbbf1ac605f6359316fd4002ef",
         "type": "github"
       },
       "original": {
