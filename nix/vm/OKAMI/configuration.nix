@@ -285,6 +285,17 @@ in
     };
   };
 
+  # Added to run nvidia-smi before running wolf to populate the required caps etc.
+  systemd.services.nvidia-smi = {
+    description = "Run nvidia-smi on boot to populate /dev/nvidia-caps. (BAND AID)";
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      User = "root";
+      Type = "oneshot";
+      ExecStart = "${config.hardware.nvidia.package.bin}/bin/nvidia-smi";
+    };
+  };
+
   systemd.services.wolf = {
     description = "Games on Whales – Wolf";
     wantedBy = [ "multi-user.target" ];
@@ -293,13 +304,14 @@ in
       "docker.service"
       "docker-populate-nvidia-driver-volume.service"
       "docker-load-wolf-desktop.service"
+      "nvidia-smi.service"
     ];
     requires = [
       "docker.service"
       "docker-populate-nvidia-driver-volume.service"
       "docker-load-wolf-desktop.service"
     ];
-    wants = [ "network-online.target" ];
+    wants = [ "network-online.target" "nvidia-smi.service" ];
 
     serviceConfig = {
       Restart = "always";
@@ -308,6 +320,7 @@ in
       ExecStartPre = [
         "${docker} pull ${wolfImage}"
         "-${docker} rm -f wolf"
+        # This is needed to ensure nvidia-caps is loaded when mounting
       ];
 
       ExecStart = lib.concatStringsSep " " [
