@@ -1,7 +1,7 @@
 { self, config, pkgs, lib, microvm, bleeding, ... }:
 let svc = import ../../lib/vm-service-state.nix { inherit lib; };
 hostname = "KAIZOKU";
-sabnzbdSecretMount = "/secrets/sabnzbd";
+sabnzbdSecretMount = "/sabnzbd";
 in {
   imports =
     [
@@ -18,7 +18,10 @@ in {
         MULLVAD_CACHE_DIR = "/var/cache/mullvad";
       };
       qbittorrent.serviceConfig.UMask = "002";
-      sabnzbd.serviceConfig.UMask = "002";
+      sabnzbd.serviceConfig = {
+        PermissionsStartOnly=true; # Needed to read the virtiofs mounted secret properly.
+        UMask = "002";
+      };
     };
 
     nixpkgs.config.allowUnfree = true;

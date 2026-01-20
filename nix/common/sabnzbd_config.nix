@@ -1,5 +1,5 @@
-{ config, lib, pkgs, ... }:
-{secretFilePath }:
+{ secretFilePath }:
+{lib, config, pkgs, ... }:
 {
   services.sabnzbd = {
     secretFiles = [ secretFilePath ];
@@ -17,9 +17,15 @@
       servers = {
         "eunews.frugalusenet.com" = {
           priority = 0;
+          displayname = "eunews.frugalusenet.com";
+          name = "eunews.frugalusenet.com";
+          host = "eunews.frugalusenet.com";
         };
         "bonus.frugalusenet.com" = {
           priority = 1;
+          displayname = "bonus.frugalusenet.com";
+          name = "eunews.frugalusenet.com";
+          host = "bonus.frugalusenet.com";
         };
       };
     };

@@ -58,6 +58,8 @@ in
     }
   ];
 
+  #microvm.vsock.cid = addrs.${hostname}.vsock_cid;
+
   microvm.shares = [
     {
       source = "/nix/store";
@@ -69,4 +71,5 @@ in
 
   services.openssh.enable = lib.mkDefault true;
   users.users.root.openssh.authorizedKeys.keys = sshKeys;
+  system.stateVersion = "26.05";
 }
