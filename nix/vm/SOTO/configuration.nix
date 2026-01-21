@@ -6,6 +6,7 @@ in {
     (import ../../common/vm-common.nix { hostname = hostname; media = true; })
     (svc.mkOne { name = "jellyfin"; persistCache = true; })
     (svc.mkOne  { name = "jellyseerr"; })
+    (svc.mkOne { name = "acme"; unit="acme-setup"; })
     ../../common/nginx.nix
     ../../common/myaddr.nix
   ];

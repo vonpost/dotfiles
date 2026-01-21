@@ -15,6 +15,7 @@ let
     wolf = 2108;
     llama-cpp = 2109;
     dailyLlmJournal = 2110;
+    acme = 2111;
   };
 
   downloadsGID= 3000;
