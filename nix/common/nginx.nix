@@ -30,6 +30,7 @@ let
 
   security.acme.acceptTerms = true;
   security.acme.defaults.email = "daniel.j.collin@gmail.com";
+  users.users.nginx.extraGroups = [ "geoip" ];
   services.nginx = {
     package = pkgs.nginx.override {
       modules = with pkgs.nginxModules; [geoip2];
