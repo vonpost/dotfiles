@@ -16,6 +16,7 @@ let
     llama-cpp = 2109;
     dailyLlmJournal = 2110;
     acme = 2111;
+    geoipupdate = 2112;
   };
 
   downloadsGID= 3000;

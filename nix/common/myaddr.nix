@@ -16,15 +16,6 @@ let
 in
 {
 
-  microvm.shares = [
-    {
-      proto = "virtiofs";
-      tag = "myaddr";
-      source = "/run/secrets/myaddr";
-      mountPoint = "/myaddr";
-    }
-  ];
-
   systemd.services.myaddr-update = {
     description = "Update myaddr.tools dynamic DNS";
     after = [ "network-online.target" ];
@@ -34,7 +25,7 @@ in
       Type = "oneshot";
       ExecStart = myaddrUpdateScript;
 
-      EnvironmentFile = "/myaddr/env";
+      EnvironmentFile = "/run/secrets/myaddr/env";
       DynamicUser = true;
       NoNewPrivileges = true;
       PrivateTmp = true;

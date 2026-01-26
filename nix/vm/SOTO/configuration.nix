@@ -7,18 +7,43 @@ in {
     (svc.mkOne { name = "jellyfin"; persistCache = true; })
     (svc.mkOne  { name = "jellyseerr"; })
     (svc.mkOne { name = "acme"; unit="acme-setup"; })
+    (svc.mkOne { name = "geoipupdate"; user="geoip"; unit="geoipupdate"; })
     ../../common/nginx.nix
     ../../common/myaddr.nix
-  ];
+  ] ;
 
   services.jellyseerr.enable = true;
   services.jellyfin =  {
     enable = true;
     package = bleeding.jellyfin;
   };
+  services.geoipupdate = {
+    enable = true;
+    settings = {
+      AccountID = 1286842;
+      EditionIDs = [ "GeoLite2-Country" ];
+      LicenseKey = { _secret = "/run/secrets/maxmind/license_key"; };
+      DatabaseDirectory = "/var/lib/geoipupdate";
+    };
+  };
 
   environment.systemPackages = with pkgs; [
       bleeding.jellyfin-ffmpeg
+  ];
+
+  microvm.shares = [
+    {
+      proto = "virtiofs";
+      tag = "maxmind-license";
+      source = "/run/secrets/maxmind";
+      mountPoint = "/run/secrets/maxmind";
+    }
+    {
+      proto = "virtiofs";
+      tag = "myaddr";
+      source = "/run/secrets/myaddr";
+      mountPoint = "/run/secrets/myaddr";
+    }
   ];
 
   microvm.vcpu = 8;
