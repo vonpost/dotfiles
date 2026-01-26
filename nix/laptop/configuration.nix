@@ -110,6 +110,8 @@ in
 
       htop
       # bleeding.jellyfin-media-player , relies on insecure qtwebengine
+
+      jellyfin-desktop
       acpi
       brightnessctl
       wpa_supplicant_gui
@@ -159,7 +161,6 @@ in
           group = "systemd-network";
         };
         "ssh/TERRA" = {};
-        "mullvad" = {};
       };
     };
 
