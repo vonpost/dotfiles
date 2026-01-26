@@ -23,6 +23,7 @@ in
     #./wayland.nix
     ];
     services.fwupd.enable = true;
+    services.tailscale.enable = true;
 
     # periodic GC
     nix.gc.automatic = true;
@@ -185,7 +186,7 @@ in
     services.resolved = {
       enable = true;
       # Optional: use this as fallback for non-lan stuff if Mullvad isn't enforcing its own
-      fallbackDns = [ "9.9.9.9" ];
+      settings.Resolve.FallbackDNS = [ "9.9.9.9" ];
     };
 
     networking = {
@@ -298,17 +299,18 @@ in
         supportedFeatures = ["big-parallel" "kvm" "nixos-test"];
       }
     ];
+  nix.settings.builders-use-substitutes = true;
+  nix.distributedBuilds = true;
 
-	    nix.distributedBuilds = true;
-      fileSystems."/theta" = {
-        device = "mother.lan:/theta";
-        fsType = "nfs";
-        options = [
-          "x-systemd.automount"
-          "noauto"
-          "_netdev"
-          "x-systemd.idle-timeout=300"
-          "nofail" ];
-      };
+  fileSystems."/theta" = {
+    device = "mother.lan:/theta";
+    fsType = "nfs";
+    options = [
+      "x-systemd.automount"
+      "noauto"
+      "_netdev"
+      "x-systemd.idle-timeout=300"
+      "nofail" ];
+  };
 
 }
