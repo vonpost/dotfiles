@@ -1,4 +1,4 @@
-{ self, config, lib, pkgs, isHost ? false, ... }:
+{ config, lib, pkgs, isHost ? false, ... }:
 let
   addr = import ../lib/lan-address.nix;
   hostname=config.networking.hostName;
