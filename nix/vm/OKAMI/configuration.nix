@@ -159,8 +159,7 @@ in
 
   imports = [
     ../../lib/daily-llm-journal.nix
-    ../../common/share_journald.nix
-    (import ../../common/vm-common.nix { hostname = hostname; shareJournal=false; })
+    (import ../../common/vm-common.nix { hostname = hostname; isJournalHost = true; })
   ] ++ svc.mkMany [
     "wolf"
     "llama-cpp"

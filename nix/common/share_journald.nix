@@ -1,19 +1,22 @@
-{ self, config, lib, pkgs, ... }:
+{ self, config, lib, pkgs, isHost ? false, ... }:
 let
   addr = import ../lib/lan-address.nix;
+  hostname=config.networking.hostName;
+  mid=addr.${hostname}.machineId;
+  mountPath = if isHost then "" else mid;
 in
 {
   environment.etc."machine-id" = {
     mode = "0644";
     text =
-      addr.${config.networking.hostName}.machineId + "\n";
+      mid + "\n";
   };
 
   microvm.shares = [ {
     # On the host
-    source = "/var/log/journal";
+    source = "/var/log/journal${mountPath}";
     # In the MicroVM
-    mountPoint = "/var/log/journal";
+    mountPoint = "/var/log/journal${mountPath}";
     tag = "journal";
     proto = "virtiofs";
     socket = "journal.sock";

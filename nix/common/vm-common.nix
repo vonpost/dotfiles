@@ -16,6 +16,7 @@
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDG2YxFYwcWwrsS0TecE+6wPLGzerQAbVDyKy4HvSev+ ed25519-key-20221208"
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINaBarHkA8npoU1VmJPcRIdAAIdvQN7E1D+a+LXp7hmg daniel.j.collin@gmail.com"
   ]
+, isJournalHost ? false
 }:
 { lib, ... }:
 let
@@ -26,7 +27,7 @@ let
   mediaSharesList = if media then mediaShares else [];
 in
 {
-  imports = lib.optionals shareJournal [ ./share_journald.nix ];
+  imports = lib.optionals shareJournal [ (import ./share_journald.nix { isHost = isJournalHost; } ) ];
 
   boot.kernelParams = [ "ipv6.disable=1" ];
   networking = {
