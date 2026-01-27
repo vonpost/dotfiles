@@ -17,6 +17,7 @@
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINaBarHkA8npoU1VmJPcRIdAAIdvQN7E1D+a+LXp7hmg daniel.j.collin@gmail.com"
   ]
 , isJournalHost ? false
+, vlan ? "wan"
 }:
 { lib, ... }:
 let
@@ -54,7 +55,7 @@ in
   microvm.interfaces = [
     {
       type = "tap";
-      id = "vm-${hostname}";
+      id = "tap-${vlan}-${hostname}";
       mac = addrs.${hostname}.mac;
     }
   ];
@@ -71,6 +72,12 @@ in
   ] ++ mediaSharesList;
 
   services.openssh.enable = lib.mkDefault true;
+  services.openssh.settings = {
+    PasswordAuthentication = false;
+    KbdInteractiveAuthentication = false;
+    PermitRootLogin = "yes";
+  };
+
   users.users.root.openssh.authorizedKeys.keys = sshKeys;
   system.stateVersion = "26.05";
 }

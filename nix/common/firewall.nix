@@ -1,67 +1,67 @@
-{ config, lib, pkgs, ... }:
+{ lib, config, pkgs, ... }:
 
 let
+  addr = import ../lib/lan-address.nix;
+  wanMac  = addr.${config.networking.hostName}.mac;
+  mgmtMac = "02:00:00:01:00:10";
+  srvMac  = "02:00:00:01:00:20";
+  dmzMac  = "02:00:00:01:00:30";
 
-  addrs = (import ../lib/lan-address.nix);
-  wanMac = addrs.${config.networking.hostName}.mac;
-  lanMac = "02:00:00:00:20:02";
-
-  vlans = {
-    mgmt = { id = 10; gw = "10.10.10.1"; prefix = 24; ifname = "lan.10"; };
-    srv  = { id = 20; gw = "10.10.20.1"; prefix = 24; ifname = "lan.20"; };
-    dmz  = { id = 30; gw = "10.10.30.1"; prefix = 24; ifname = "lan.30"; };
-  };
+  # Subnets (edit if you want different addressing)
+  mgmtGw = "10.10.10.1";
+  srvGw  = "10.10.20.1";
+  dmzGw  = "10.10.30.1";
 in
 {
-  services.udev.extraRules = ''
-    SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="${wanMac}", NAME="wan"
-    SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="${lanMac}", NAME="lan"
-  '';
+  systemd.network.enable = true;
 
-  # LAN trunk, no IP; attach VLANs
-  systemd.network.networks."20-lan-trunk" = {
-    matchConfig.MACAddress = lanMac;
-    networkConfig = {
-      LinkLocalAddressing = "no";
-      IPv6AcceptRA = false;
-      VLAN = [ vlans.mgmt.ifname vlans.srv.ifname vlans.dmz.ifname ];
-    };
+  systemd.network.links."20-custom-name" = {
+    matchConfig.PermanentMACAddress = wanMac; # Replace with your MAC
+    linkConfig.Name = "wan"; # Desired new name
   };
 
-  # VLAN devices
-  systemd.network.netdevs = {
-    "10-vlan10" = { netdevConfig = { Name = vlans.mgmt.ifname; Kind = "vlan"; }; vlanConfig.Id = vlans.mgmt.id; };
-    "11-vlan20" = { netdevConfig = { Name = vlans.srv.ifname;  Kind = "vlan"; }; vlanConfig.Id = vlans.srv.id;  };
-    "12-vlan30" = { netdevConfig = { Name = vlans.dmz.ifname;  Kind = "vlan"; }; vlanConfig.Id = vlans.dmz.id;  };
+  systemd.network.links."21-custom-name" = {
+    matchConfig.PermanentMACAddress = mgmtMac; # Replace with your MAC
+    linkConfig.Name = "mgmt"; # Desired new name
   };
 
-  # Static gateway IPs on VLANs
-  systemd.network.networks."30-vlan10" = {
-    matchConfig.Name = vlans.mgmt.ifname;
-    address = [ "${vlans.mgmt.gw}/${toString vlans.mgmt.prefix}" ];
-  };
-  systemd.network.networks."31-vlan20" = {
-    matchConfig.Name = vlans.srv.ifname;
-    address = [ "${vlans.srv.gw}/${toString vlans.srv.prefix}" ];
-  };
-  systemd.network.networks."32-vlan30" = {
-    matchConfig.Name = vlans.dmz.ifname;
-    address = [ "${vlans.dmz.gw}/${toString vlans.dmz.prefix}" ];
+  systemd.network.links."22-custom-name" = {
+    matchConfig.PermanentMACAddress = srvMac; # Replace with your MAC
+    linkConfig.Name = "srv"; # Desired new name
   };
 
-  # Enable forwarding
+  systemd.network.links."23-custom-name" = {
+    matchConfig.PermanentMACAddress = dmzMac; # Replace with your MAC
+    linkConfig.Name = "dmz"; # Desired new name
+  };
+
+  # LAN interfaces: static gateways
+  systemd.network.networks."20-mgmt" = {
+    matchConfig.MACAddress = mgmtMac;
+    address = [ "${mgmtGw}/24" ];
+    networkConfig = { IPv6AcceptRA = false; };
+  };
+
+  systemd.network.networks."21-srv" = {
+    matchConfig.MACAddress = srvMac;
+    address = [ "${srvGw}/24" ];
+    networkConfig = { IPv6AcceptRA = false; };
+  };
+
+  systemd.network.networks."22-dmz" = {
+    matchConfig.MACAddress = dmzMac;
+    address = [ "${dmzGw}/24" ];
+    networkConfig = { IPv6AcceptRA = false; };
+  };
+
+  # Forwarding
   boot.kernel.sysctl = {
     "net.ipv4.ip_forward" = 1;
     "net.ipv4.conf.all.rp_filter" = 1;
     "net.ipv4.conf.default.rp_filter" = 1;
   };
 
-  microvm.interfaces = [
-    { type = "tap"; id = "lan"; mac = lanMac; bridge = "br-lan"; }
-    ];
-
   networking.nftables.enable = true;
-
   networking.nftables.ruleset = ''
     table inet filter {
       chain input {
@@ -73,13 +73,11 @@ in
         # Optional diagnostics
         ip protocol icmp accept
 
-        # Allow SSH to firewall only from mgmt VLAN
-        iifname "${vlans.mgmt.ifname}" tcp dport 22 accept
-        # Remove this when happy
-        iifname "wan" tcp dport 22 accept
+        # Allow SSH to firewall only from mgmt LAN
+        iifname "mgmt" tcp dport 22 accept
 
-        # WireGuard handshake allowed on WAN
-        iif "wan" udp dport 51820 accept
+        # If WireGuard enabled, allow handshake from WAN
+        # iifname "wan" udp dport 51820 accept
       }
 
       chain forward {
@@ -87,22 +85,23 @@ in
 
         ct state established,related accept
 
-        # Allow VLANs -> WAN
-        iifname { "${vlans.mgmt.ifname}", "${vlans.srv.ifname}", "${vlans.dmz.ifname}" } oif "wan" accept
+        # Allow LANs out to WAN
+        iifname { "mgmt", "srv", "dmz" } oifname "wan" accept
 
-        # Allow WireGuard -> all VLANs (management access to any port/UI)
-        iifname "wg0" oifname { "${vlans.mgmt.ifname}", "${vlans.srv.ifname}", "${vlans.dmz.ifname}" } accept
+        # Inter-LAN default deny (add specific rules as needed)
+        # Example allow mgmt -> srv (ssh + https):
+        # iifname "mgmt" oifname "srv" tcp dport { 22, 443 } accept
 
-        # Default: deny inter-VLAN until explicitly opened
+        # WireGuard -> all LANs (if WireGuard enabled)
+        # iifname "wg0" oifname { "mgmt", "srv", "dmz" } accept
       }
     }
 
     table ip nat {
       chain postrouting {
         type nat hook postrouting priority 100;
-        oif "wan" masquerade
+        oifname "wan" masquerade
       }
     }
   '';
-
 }
