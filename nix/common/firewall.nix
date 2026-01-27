@@ -2,7 +2,8 @@
 
 let
   addr = import ../lib/lan-address.nix;
-  wanMac  = addr.${config.networking.hostName}.mac;
+  hostname=config.networking.hostName;
+  wanMac  = addr.${hostname}.mac;
   mgmtMac = "02:00:00:01:00:10";
   srvMac  = "02:00:00:01:00:20";
   dmzMac  = "02:00:00:01:00:30";
@@ -60,6 +61,26 @@ in
     "net.ipv4.conf.all.rp_filter" = 1;
     "net.ipv4.conf.default.rp_filter" = 1;
   };
+
+  microvm.interfaces = [
+    {
+      type = "tap";
+      id = "tap-mgmt-${hostname}";
+      mac = mgmtMac;
+    }
+
+    {
+      type = "tap";
+      id = "tap-dmz-${hostname}";
+      mac = dmzMac;
+    }
+
+    {
+      type = "tap";
+      id = "tap-srv-${hostname}";
+      mac = srvMac;
+    }
+  ];
 
   networking.nftables.enable = true;
   networking.nftables.ruleset = ''
