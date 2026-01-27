@@ -12,7 +12,7 @@ let
   hosts =
     lib.mapAttrs'
       (name: value: { name = "${name}.lan."; value = value.ip; })
-      (lib.removeAttrs addrs [ "gateway" ]);
+      (lib.removeAttrs addrs [ "gateway" "br-wan" "br-lan" ]);
   hostname = "DARE";
 in
 {
