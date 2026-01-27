@@ -5,7 +5,6 @@
   KAIZOKU   = { ip = "192.168.1.22"; mac = "02:00:00:00:00:03"; machineId = "d7c79cedf4a24584ad28503505507e04"; vsock_cid=3003; isVm=true; };
   DARE   = { ip = "192.168.1.53"; mac = "02:00:00:00:00:53"; machineId = "332120c0300145b2b762d1db81546caf"; vsock_cid=3004; isVm=true; };
   OKAMI = { ip = "192.168.1.100"; mac = "02:00:00:00:01:00"; machineId = "72a6254779a04b32976185f178e50ea0"; vsock_cid=3005; isVm=true; };
-  "br-wan" = { ip = "192.168.1.210"; mac="02:00:00:00:10:00"; isVm=false; machineId = null; };
-  "br-lan" = { mac="02:00:00:00:10:00"; isVm=false; machineId = null; };
+  MAMORU = { ip = "192.168.1.210"; mac="02:00:00:00:10:00"; isVm=true; machineId = "d13cdd34121748a997cfa8d4e2355da3"; };
   gateway = { ip = "192.168.1.1"; mac = null; isVm=false; };
 }
