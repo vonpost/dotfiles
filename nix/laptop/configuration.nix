@@ -24,6 +24,8 @@ in
     ];
     services.fwupd.enable = true;
     services.tailscale.enable = true;
+    services.tailscale.extraDaemonFlags = ["--no-logs-no-support"];
+
 
     # periodic GC
     nix.gc.automatic = true;
