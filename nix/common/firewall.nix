@@ -57,7 +57,7 @@ in
   };
 
   microvm.interfaces = [
-    { type = "tap"; id = "lan0"; mac = lanMac; bridge = "br-lan"; }
+    { type = "tap"; id = "lan"; mac = lanMac; bridge = "br-lan"; }
     ];
 
   networking.nftables.enable = true;
