@@ -76,6 +76,9 @@ in
         # Allow SSH to firewall only from mgmt LAN
         iifname "mgmt" tcp dport 22 accept
 
+        # Temporary until done configuring. Note, this is still behind double NAT so not really exposed to the internet yet.
+        iifname "wan" tcp dport 22 accept
+
         # If WireGuard enabled, allow handshake from WAN
         # iifname "wan" udp dport 51820 accept
       }
@@ -87,9 +90,6 @@ in
 
         # Allow LANs out to WAN
         iifname { "mgmt", "srv", "dmz" } oifname "wan" accept
-
-        # Temporary until done configuring. Note, this is still behind double NAT so not really exposed to the internet yet.
-        iifname "wan" tcp dport 22 accept
 
         # Inter-LAN default deny (add specific rules as needed)
         # Example allow mgmt -> srv (ssh + https):
