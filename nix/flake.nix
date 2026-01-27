@@ -30,6 +30,7 @@
       KAIZOKU,
       DARE,
       OKAMI,
+      MAMORU,
       ... }:
     let
       system = "x86_64-linux";
