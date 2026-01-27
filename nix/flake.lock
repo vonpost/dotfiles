@@ -31,11 +31,27 @@
       },
       "parent": []
     },
-    "OKAMI": {
+    "MAMORU": {
       "inputs": {
         "bleeding": "bleeding_2",
         "microvm": "microvm_3",
         "nixpkgs": "nixpkgs_3"
+      },
+      "locked": {
+        "path": "vm/MAMORU",
+        "type": "path"
+      },
+      "original": {
+        "path": "vm/MAMORU",
+        "type": "path"
+      },
+      "parent": []
+    },
+    "OKAMI": {
+      "inputs": {
+        "bleeding": "bleeding_3",
+        "microvm": "microvm_4",
+        "nixpkgs": "nixpkgs_4"
       },
       "locked": {
         "path": "vm/OKAMI",
@@ -49,9 +65,9 @@
     },
     "SOTO": {
       "inputs": {
-        "bleeding": "bleeding_3",
-        "microvm": "microvm_4",
-        "nixpkgs": "nixpkgs_4"
+        "bleeding": "bleeding_4",
+        "microvm": "microvm_5",
+        "nixpkgs": "nixpkgs_5"
       },
       "locked": {
         "path": "vm/SOTO",
@@ -65,9 +81,9 @@
     },
     "UCHI": {
       "inputs": {
-        "bleeding": "bleeding_4",
-        "microvm": "microvm_5",
-        "nixpkgs": "nixpkgs_5"
+        "bleeding": "bleeding_5",
+        "microvm": "microvm_6",
+        "nixpkgs": "nixpkgs_6"
       },
       "locked": {
         "path": "vm/UCHI",
@@ -97,11 +113,11 @@
     },
     "bleeding_2": {
       "locked": {
-        "lastModified": 1768851127,
-        "narHash": "sha256-qUgwwOF5pzvu0IzlxdhAZ6kcLE6R+NO8kyQYxtTLLgw=",
+        "lastModified": 1769540155,
+        "narHash": "sha256-1RctsHxtoeQ0yT+TAhAmnkkqOG3wvmhLv1t/Bxl6UeQ=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "7f805255d6eeaeb3f2fa414ee1c884ca8a0b3837",
+        "rev": "7a6746ae292e46bedbd532f422eff4434607f6fb",
         "type": "github"
       },
       "original": {
@@ -144,6 +160,22 @@
       }
     },
     "bleeding_5": {
+      "locked": {
+        "lastModified": 1768851127,
+        "narHash": "sha256-qUgwwOF5pzvu0IzlxdhAZ6kcLE6R+NO8kyQYxtTLLgw=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "7f805255d6eeaeb3f2fa414ee1c884ca8a0b3837",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "master",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "bleeding_6": {
       "locked": {
         "lastModified": 1768874021,
         "narHash": "sha256-o0eGMNb6y3KtOgtJi+8+DkjnEsqJfnydlA5FVSeBSbw=",
@@ -206,7 +238,7 @@
     "microvm_3": {
       "inputs": {
         "nixpkgs": [
-          "OKAMI",
+          "MAMORU",
           "nixpkgs"
         ],
         "spectrum": "spectrum_3"
@@ -228,7 +260,7 @@
     "microvm_4": {
       "inputs": {
         "nixpkgs": [
-          "SOTO",
+          "OKAMI",
           "nixpkgs"
         ],
         "spectrum": "spectrum_4"
@@ -250,7 +282,7 @@
     "microvm_5": {
       "inputs": {
         "nixpkgs": [
-          "UCHI",
+          "SOTO",
           "nixpkgs"
         ],
         "spectrum": "spectrum_5"
@@ -272,9 +304,31 @@
     "microvm_6": {
       "inputs": {
         "nixpkgs": [
+          "UCHI",
           "nixpkgs"
         ],
         "spectrum": "spectrum_6"
+      },
+      "locked": {
+        "lastModified": 1768682386,
+        "narHash": "sha256-mKrMf7eG9TM2AM3pTuhIiCGmZ/JwDegCQH3ThVqcTuc=",
+        "owner": "microvm-nix",
+        "repo": "microvm.nix",
+        "rev": "f469c1dfede623bbbf1ac605f6359316fd4002ef",
+        "type": "github"
+      },
+      "original": {
+        "owner": "microvm-nix",
+        "repo": "microvm.nix",
+        "type": "github"
+      }
+    },
+    "microvm_7": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "spectrum": "spectrum_7"
       },
       "locked": {
         "lastModified": 1768682386,
@@ -339,6 +393,22 @@
     },
     "nixpkgs_3": {
       "locked": {
+        "lastModified": 1769170682,
+        "narHash": "sha256-oMmN1lVQU0F0W2k6OI3bgdzp2YOHWYUAw79qzDSjenU=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "c5296fdd05cfa2c187990dd909864da9658df755",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_4": {
+      "locked": {
         "lastModified": 1767742796,
         "narHash": "sha256-RZ3Ctl3lyFg8ehqOr1fnWPgM+J2EXNK6Pm5wZMGcwNo=",
         "owner": "NixOS",
@@ -350,22 +420,6 @@
         "owner": "NixOS",
         "repo": "nixpkgs",
         "rev": "90bc71c88c6f507c85913b1f11d3e619f0044e75",
-        "type": "github"
-      }
-    },
-    "nixpkgs_4": {
-      "locked": {
-        "lastModified": 1768564909,
-        "narHash": "sha256-Kell/SpJYVkHWMvnhqJz/8DqQg2b6PguxVWOuadbHCc=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "e4bae1bd10c9c57b2cf517953ab70060a828ee6f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
         "type": "github"
       }
     },
@@ -401,17 +455,34 @@
         "type": "github"
       }
     },
+    "nixpkgs_7": {
+      "locked": {
+        "lastModified": 1768564909,
+        "narHash": "sha256-Kell/SpJYVkHWMvnhqJz/8DqQg2b6PguxVWOuadbHCc=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "e4bae1bd10c9c57b2cf517953ab70060a828ee6f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "DARE": "DARE",
         "KAIZOKU": "KAIZOKU",
+        "MAMORU": "MAMORU",
         "OKAMI": "OKAMI",
         "SOTO": "SOTO",
         "UCHI": "UCHI",
-        "bleeding": "bleeding_5",
-        "microvm": "microvm_6",
+        "bleeding": "bleeding_6",
+        "microvm": "microvm_7",
         "nixos-hardware": "nixos-hardware",
-        "nixpkgs": "nixpkgs_6",
+        "nixpkgs": "nixpkgs_7",
         "sops-nix": "sops-nix"
       }
     },
@@ -516,6 +587,22 @@
       }
     },
     "spectrum_6": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1759482047,
+        "narHash": "sha256-H1wiXRQHxxPyMMlP39ce3ROKCwI5/tUn36P8x6dFiiQ=",
+        "ref": "refs/heads/main",
+        "rev": "c5d5786d3dc938af0b279c542d1e43bce381b4b9",
+        "revCount": 996,
+        "type": "git",
+        "url": "https://spectrum-os.org/git/spectrum"
+      },
+      "original": {
+        "type": "git",
+        "url": "https://spectrum-os.org/git/spectrum"
+      }
+    },
+    "spectrum_7": {
       "flake": false,
       "locked": {
         "lastModified": 1759482047,

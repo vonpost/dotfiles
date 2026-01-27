@@ -4,6 +4,7 @@ let svc = import ../../lib/vm-service-state.nix { inherit lib; };
 in {
   imports = [
     (import ../../common/vm-common.nix { hostname = hostname; })
+    (import ../../common/firewall.nix)
   ] ;
 
   microvm.vcpu = 4;
