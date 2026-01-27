@@ -70,6 +70,7 @@ in
     systemd.network.networks."50-${cfg.device}" = {
       matchConfig.Name = "${cfg.device}";
 
+
       networkConfig = {
         Address = [ "${cfg.clientIp}/24" ];
         DNS     = [ "${cfg.localDns}" ];
@@ -80,6 +81,18 @@ in
         { Destination = "${cfg.localSubnet}/24"; }
         { Destination = "${cfg.subnet}/24";  }
       ];
+
+      # ENSURE ENDPOINT DOESNT GET ROUTE THROUGH MULLVAD
+      routingPolicyRules = lib.optionals cfg.bypassMullvad [
+        {
+          Priority = 50;
+          Family = "ipv4";
+          IPProtocol = "udp";
+          DestinationPort = 51822;
+          Table = "main";
+        }
+      ];
+
 
 
       linkConfig.RequiredForOnline = "no";
@@ -113,7 +126,7 @@ in
 
     networking.nftables = mkIf cfg.bypassMullvad {
       enable = true;
-      tables.excludeTraffic = {
+      tables.excludeDNSTraffic = {
         family = "inet";
         content = ''
           define RESOLVER_ADDRS = { ${cfg.localDns} }
@@ -123,6 +136,25 @@ in
           ip daddr $RESOLVER_ADDRS udp dport 53 ct mark set 0x00000f41 meta mark set 0x6d6f6c65;
           ip daddr $RESOLVER_ADDRS tcp dport 53 ct mark set 0x00000f41 meta mark set 0x6d6f6c65;
           }
+        '';
+      };
+      tables.excludeTailscale = {
+        family = "inet";
+        content = ''
+            chain output {
+              type route hook output priority 0; policy accept;
+              ip daddr 100.64.0.0/10 ct mark set 0x00000f41 meta mark set 0x6d6f6c65;
+            }
+     '';
+      };
+      # FOR NOW THIS IS USING A FIXED IP WHICH CAN CHANGE. PROBABLY SHOULD FETCH WITH A SYSTEMD TIMER OR SOMETHING..
+      tables.excludeWG_ENDPOINT = {
+        family = "inet";
+        content = ''
+        chain excludeOutgoing {
+          type route hook output priority 0; policy accept;
+          ip daddr ${cfg.endpoint} ct mark set 0x00000f41 meta mark set 0x6d6f6c65;
+        }
         '';
       };
     };
