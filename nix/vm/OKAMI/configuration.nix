@@ -159,7 +159,7 @@ in
 
   imports = [
     ../../lib/daily-llm-journal.nix
-    (import ../../common/vm-common.nix { hostname = hostname; isJournalHost = true; })
+    (import ../../common/vm-common.nix { hostname = hostname; isJournalHost = true; vlan="dmz";})
   ] ++ svc.mkMany [
     "wolf"
     "llama-cpp"
@@ -452,5 +452,23 @@ in
       ]
     );
   };
+  # TEMPORARY FIX
+
+  systemd.network.networks."11-lan" = {
+    matchConfig.MACAddress = "02:01:01:01:01:01";
+    networkConfig = {
+      Address = "192.168.1.100/24";
+      Gateway = "192.168.1.1";
+      DNS = "192.168.1.53";
+    };
+    linkConfig.RequiredForOnline = "yes";
+  };
+  microvm.interfaces = [
+    {
+      type = "tap";
+      id = "tap-wan-OKAMI";
+      mac = "02:01:01:01:01:01";
+    }
+  ];
 
 }

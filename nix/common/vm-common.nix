@@ -45,12 +45,11 @@ in
     matchConfig.MACAddress = addrs.${hostname}.mac;
     networkConfig = {
       Address = "${addrs.${hostname}.ip}/${toString lanPrefix}";
-      Gateway = addrs.gateway.ip;
+      Gateway = addrs.${hostname}.gateway;
       DNS = dnsServers;
     };
     linkConfig.RequiredForOnline = "yes";
   };
-
   microvm.hypervisor = lib.mkDefault "cloud-hypervisor";
   microvm.interfaces = [
     {
@@ -60,7 +59,7 @@ in
     }
   ];
 
-  #microvm.vsock.cid = addrs.${hostname}.vsock_cid;
+  microvm.vsock.cid = addrs.${hostname}.vsock_cid;
 
   microvm.shares = [
     {
