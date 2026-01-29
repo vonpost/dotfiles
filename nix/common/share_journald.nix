@@ -15,7 +15,7 @@ in
     # On the host
     source = "/var/log/journal${mountPath}";
     # In the MicroVM
-    mountPoint = "/var/log/journal${mountPath}";
+    mountPoint = "/var/log/journal";
     tag = "journal";
     proto = "virtiofs";
     socket = "journal.sock";

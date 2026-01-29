@@ -88,7 +88,7 @@ in
           Priority = 50;
           Family = "ipv4";
           IPProtocol = "udp";
-          DestinationPort = 51822;
+          DestinationPort = cfg.port;
           Table = "main";
         }
       ];

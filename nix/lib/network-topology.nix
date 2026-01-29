@@ -8,8 +8,8 @@ let
     firewallRules = {
       dns = { port = 53; proto = "udp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU" "MAMORU" ]; };
       http = { port = 80; proto = "tcp"; allowFrom = [ "external" ];  };
-      https = { port = 80; proto = "tcp"; allowFrom = [ "external" ]; };
-      ssh = { port = 22; proto = "tcp"; allowFrom = [ "MAMORU" ]; };
+      https = { port = 443; proto = "tcp"; allowFrom = [ "external" ]; };
+      ssh = { port = 22; proto = "tcp"; allowFrom = [ "external" ]; };
       wireguard = { port = 51820; proto = "udp"; allowFrom = [ "MAMORU"]; };
     };
 
@@ -48,7 +48,7 @@ let
     };
   };
 
-  wanMac = "03:00:00:00:00:00";
+  wanMac = "02:00:00:00:00:90";
   wanBridge = "br0";
   vlans = {
     mgmt = { id = 10; };
@@ -91,7 +91,7 @@ in {
               # Bridges online without carrier
               name = "50-tap-wan";
               value = {
-                matchConfig.Name = "tap-wan";
+                matchConfig.Name = "tap-wan-*";
                 networkConfig = {
                   Bridge = wanBridge;
                   ConfigureWithoutCarrier = true;
@@ -177,9 +177,12 @@ in {
         "net.ipv4.conf.default.rp_filter" = 1;
       };
 
+    systemd.network.links."50-custom-name-wan" = {
+        matchConfig.PermanentMACAddress = wanMac;
+        linkConfig.Name = "wan"; # Desired new name
+    };
     systemd.network.networks."10-wan" = {
       matchConfig.MACAddress = wanMac;
-
       networkConfig = {
         Address = "192.168.1.166/24";
         Gateway = "192.168.1.1";
@@ -193,13 +196,13 @@ in {
       #   UseRoutes = true;
       #   UseGateway = true;
       # };
-      linkConfig.RequiredForOnline = "yes";
+      linkConfig.RequiredForOnline = "no";
     };
 
     microvm.interfaces = [
       {
         type = "tap";
-        id = "tap-wan";
+        id = "tap-wan-${topology.gatewayVM}";
         mac = wanMac;
       }
     ];
@@ -216,11 +219,11 @@ in {
               vlanSrc = if intersectedVlan == [] then lib.head topology.vms.${src}.assignedVlans else lib.head intersectedVlan;
               vlanDest = if intersectedVlan == [] then lib.head cfg.assignedVlans else lib.head intersectedVlan;
           in
-            "iifname ${vlanSrc} oifname ${vlanDest} ip daddr ${getIp name vlanDest} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} accept")
+            "iifname ${vlanSrc} oifname ${vlanDest} ip saddr ${getIp src vlanSrc} ip daddr ${getIp name vlanDest} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} accept")
             firewallRules.${rule}.allowFrom)) cfg.provides)) topology.vms));
           natRules = lib.concatStringsSep "\n" (lib.flatten (lib.mapAttrsToList (name: cfg: (map (rule: (map (src:
             "iifname wan ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} dnat to ${getIp name (lib.head cfg.assignedVlans)}")
-            firewallRules.${rule}.allowFrom)) cfg.provides)) topology.vms));
+            (builtins.filter (ssrc: ssrc == "external") firewallRules.${rule}.allowFrom))) cfg.provides)) topology.vms));
         in ''
           table inet filter {
             chain input {

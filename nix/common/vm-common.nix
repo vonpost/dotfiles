@@ -18,15 +18,16 @@
 , isJournalHost ? false
 , vlan ? "wan"
 }:
-{ lib, ... }:
+{ lib, config, ... }:
 let
   addrs = import ../lib/lan-address.nix;
   netLib = import ../lib/network-topology.nix { inherit lib; };
   mediaSharesList = if media then mediaShares else [];
 in
 {
+  networking.hostName = hostname;
   imports = [ (netLib.mkGuest hostname) (import ./share_journald.nix { isHost = isJournalHost; hostname=hostname; } ) ];
-  microvm.hypervisor = lib.mkDefault "cloud-hypervisor";
+  microvm.hypervisor = lib.mkDefault "qemu";
   microvm.vsock.cid = addrs.${hostname}.vsock_cid;
   microvm.shares = [
     {
