@@ -3,6 +3,7 @@
 let
   addrs = import ../../lib/lan-address.nix;
 
+  netLib = import ../../lib/network-topology.nix;
   lanSubnet = "192.168.1.0/24";
 
   # WireGuard client subnet (adjust to your real one)
@@ -22,6 +23,7 @@ in
       nameserverHost = null;
       dnsHost = "gateway";
     })
+    netLib.mkDns
   ];
 
   services.openssh.settings.PasswordAuthentication = false;
@@ -32,34 +34,34 @@ in
   services.timesyncd.enable = true;
 
   # --- Unbound DNS ---
-  services.unbound = {
-    enable = true;
+  # services.unbound = {
+  #   enable = true;
 
-    settings.server = {
-      interface = [ addrs.${hostname}.ip "127.0.0.1" ];
+  #   settings.server = {
+  #     interface = [ addrs.${hostname}.ip "127.0.0.1" ];
 
-      access-control = [
-        "${lanSubnet} allow"
-        "${wgSubnet} allow"
-        "127.0.0.0/8 allow"
-      ];
+  #     access-control = [
+  #       "${lanSubnet} allow"
+  #       "${wgSubnet} allow"
+  #       "127.0.0.0/8 allow"
+  #     ];
 
-      local-zone = [ ''"lan." static'' ];
-      local-data = lib.mapAttrsToList (n: ip: ''"${n} IN A ${ip}"'') hosts;
+  #     local-zone = [ ''"lan." static'' ];
+  #     local-data = lib.mapAttrsToList (n: ip: ''"${n} IN A ${ip}"'') hosts;
 
-      hide-identity = "yes";
-      hide-version = "yes";
-      qname-minimisation = "yes";
-      prefetch = "yes";
-      cache-min-ttl = 60;
-      cache-max-ttl = 86400;
-    };
+  #     hide-identity = "yes";
+  #     hide-version = "yes";
+  #     qname-minimisation = "yes";
+  #     prefetch = "yes";
+  #     cache-min-ttl = 60;
+  #     cache-max-ttl = 86400;
+  #   };
 
-    settings.forward-zone = [{
-      name = ".";
-      forward-addr = [ "9.9.9.9" "1.1.1.1" ];
-    }];
-  };
+  #   settings.forward-zone = [{
+  #     name = ".";
+  #     forward-addr = [ "9.9.9.9" "1.1.1.1" ];
+  #   }];
+  # };
 
   # --- Firewall ---
   networking.firewall.allowedUDPPorts = [ 53 22 ];

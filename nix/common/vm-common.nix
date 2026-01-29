@@ -22,45 +22,16 @@
 { lib, ... }:
 let
   addrs = import ../lib/lan-address.nix;
+  netLib = import ../lib/network-topology.nix;
   nameservers =
     if nameserverHost == null then [] else [ addrs.${nameserverHost}.ip ];
   dnsServers = if dnsHost == null then [] else [ addrs.${dnsHost}.ip ];
   mediaSharesList = if media then mediaShares else [];
 in
 {
-  imports = lib.optionals shareJournal [ (import ./share_journald.nix { isHost = isJournalHost; } ) ];
-
-  boot.kernelParams = [ "ipv6.disable=1" ];
-  networking = {
-    hostName = hostname;
-    useNetworkd = lib.mkDefault true;
-    useDHCP = lib.mkDefault false;
-    enableIPv6 = lib.mkDefault false;
-    firewall.enable = lib.mkDefault false;
-    nameservers = nameservers;
-  };
-
-  systemd.network.enable = lib.mkDefault true;
-  systemd.network.networks."10-lan" = {
-    matchConfig.MACAddress = addrs.${hostname}.mac;
-    networkConfig = {
-      Address = "${addrs.${hostname}.ip}/${toString lanPrefix}";
-      Gateway = addrs.${hostname}.gateway;
-      DNS = dnsServers;
-    };
-    linkConfig.RequiredForOnline = "yes";
-  };
+  imports = [ (netLib.mkGuest hostname) ] ++ lib.optionals shareJournal [ (import ./share_journald.nix { isHost = isJournalHost; } ) ];
   microvm.hypervisor = lib.mkDefault "cloud-hypervisor";
-  microvm.interfaces = [
-    {
-      type = "tap";
-      id = "tap-${vlan}-${hostname}";
-      mac = addrs.${hostname}.mac;
-    }
-  ];
-
   microvm.vsock.cid = addrs.${hostname}.vsock_cid;
-
   microvm.shares = [
     {
       source = "/nix/store";
