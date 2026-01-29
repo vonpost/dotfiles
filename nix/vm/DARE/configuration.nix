@@ -2,8 +2,8 @@
 
 let
   addrs = import ../../lib/lan-address.nix;
-
-  netLib = import ../../lib/network-topology.nix;
+  netLib = import ../../lib/network-topology.nix {inherit lib;};
+  # netLib = import ../../lib/network-topology.nix {inherit lib;};
   lanSubnet = "192.168.1.0/24";
 
   # WireGuard client subnet (adjust to your real one)
@@ -19,9 +19,7 @@ in
 {
   imports = [
     (import ../../common/vm-common.nix {
-      hostname = hostname;
-      nameserverHost = null;
-      dnsHost = "gateway";
+      inherit hostname;
     })
     netLib.mkDns
   ];

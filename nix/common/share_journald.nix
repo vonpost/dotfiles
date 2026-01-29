@@ -1,8 +1,6 @@
-{ isHost ? false, ... }:
-{config, lib, ... }:
+{ isHost ? false, hostname}:
 let
   addr = import ../lib/lan-address.nix;
-  hostname=config.networking.hostName;
   mid=addr.${hostname}.machineId;
   mountPath = if isHost then "" else "/${mid}";
 in

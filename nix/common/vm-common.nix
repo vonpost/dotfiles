@@ -3,7 +3,6 @@
 , nameserverHost ? "DARE"
 , dnsHost ? nameserverHost
 , media ? false
-, shareJournal ? true
 , mediaShares ? [
     {
       proto = "virtiofs";
@@ -22,14 +21,11 @@
 { lib, ... }:
 let
   addrs = import ../lib/lan-address.nix;
-  netLib = import ../lib/network-topology.nix;
-  nameservers =
-    if nameserverHost == null then [] else [ addrs.${nameserverHost}.ip ];
-  dnsServers = if dnsHost == null then [] else [ addrs.${dnsHost}.ip ];
+  netLib = import ../lib/network-topology.nix { inherit lib; };
   mediaSharesList = if media then mediaShares else [];
 in
 {
-  imports = [ (netLib.mkGuest hostname) ] ++ lib.optionals shareJournal [ (import ./share_journald.nix { isHost = isJournalHost; } ) ];
+  imports = [ (netLib.mkGuest hostname) (import ./share_journald.nix { isHost = isJournalHost; hostname=hostname; } ) ];
   microvm.hypervisor = lib.mkDefault "cloud-hypervisor";
   microvm.vsock.cid = addrs.${hostname}.vsock_cid;
   microvm.shares = [
