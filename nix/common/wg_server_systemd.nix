@@ -40,7 +40,7 @@ in
     };
 
     port = mkOption {
-      default = 51820;
+      default = 51821;
       type = types.port;
       description = "UDP listen port for WireGuard.";
     };

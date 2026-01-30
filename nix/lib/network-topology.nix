@@ -4,12 +4,16 @@ let
     domain = "lan";
     gatewayVM = "MAMORU"; # The VM acting as the router/firewall
     dnsVM = "DARE";
+    hostIp = "10.10.10.99";
 
     firewallRules = {
-      dns_udp = { port = 53; proto = "udp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU" "MAMORU" ]; };
-      dns_tcp = { port = 53; proto = "tcp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU" "MAMORU" ]; };
+      dns_udp = { port = 53; proto = "udp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU"  ]; };
+      dns_tcp = { port = 53; proto = "tcp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU" ]; };
       sonarr = { port=8989; proto = "tcp"; allowFrom = [ "SOTO" "KAIZOKU" ]; };
       radarr = { port=7878; proto = "tcp"; allowFrom = [ "SOTO" "KAIZOKU" ]; };
+
+      qbit = { port=8080; proto = "tcp"; allowFrom = [ "UCHI" ]; };
+      sabnzbd = { port=1337; proto = "tcp"; allowFrom = [ "UCHI" ]; };
       jellyfin = { port=8096; proto = "tcp"; allowFrom = [ "UCHI" ]; };
       ssh = { port = 22; proto = "tcp"; allowFrom = [ "MAMORU" ]; };
       sshRouter = { port = 22; proto = "tcp"; allowFrom = [ "UCHI" ]; }; # Just temporary for testing
@@ -25,13 +29,13 @@ let
       MAMORU = {
         id = 10;
         assignedVlans = [ "mgmt" "srv" "dmz" ]; # WAN is handled manually
-        provides = [ "sshRouter" ];
+        provides = [ ];
         portForward = [ "wireguard" ];
       };
       KAIZOKU = {
         id = 15;
         assignedVlans = [ "srv" ]; # WAN is handled manually
-        provides = [ "ssh" ];
+        provides = [ "ssh" "qbit" "sabnzbd" ];
         portForward = [];
       };
 
@@ -103,7 +107,24 @@ in {
             }
 
             {
-              # Bridges online without carrier
+              name = "20-br-mgmt";
+              value = {
+                matchConfig.Name = "br-mgmt";
+                address = [ "${topology.hostIp}/24" ];
+                gateway = [ (getGateway "mgmt") ];
+                dns = [ (getDns) ];
+                routes = map (vlan:
+                  {
+                    Destination="${getSubnet vlan}.0/24";
+                    Gateway=getGateway "mgmt";
+                  }
+                ) (builtins.attrNames (builtins.removeAttrs vlans ["mgmt"]));
+                linkConfig.RequiredForOnline = "no";
+            };
+          }
+
+          {
+            # Bridges online without carrier
               name = "50-tap-wan";
               value = {
                 matchConfig.Name = "tap-wan-*";
@@ -243,7 +264,7 @@ in {
 
           redirectRules = lib.concatStringsSep "\n" (map (rule:
             "iifname wan ${topology.natRules.${rule}.proto} dport ${toString topology.natRules.${rule}.externalPort} redirect to :${toString topology.natRules.${rule}.port}"
-          ) topology.vms.${topology.gatewayVM}.portForward);
+          ) (builtins.filter (x: topology.natRules.${x}.port != topology.natRules.${x}.externalPort) topology.vms.${topology.gatewayVM}.portForward));
 
           fwRules = lib.concatStringsSep "\n" (lib.flatten (lib.mapAttrsToList (name: cfg: (map (rule: (builtins.filter (x: x!="") (map (src:
           let
@@ -256,6 +277,8 @@ in {
             else
               ""
           ) firewallRules.${rule}.allowFrom))) cfg.provides)) vms));
+
+          mgmtRules = lib.concatStringsSep "\n" (map (vlan: "iifname mgmt oifname ${vlan} ct state new accept") (builtins.attrNames (builtins.removeAttrs vlans ["mgmt"])));
 
           fwRulesExt = lib.concatStringsSep "\n" (lib.flatten (lib.mapAttrsToList (name: cfg: (map (rule:
             "iifname wan oifname ${lib.head cfg.assignedVlans} ip daddr ${getIp name (lib.head cfg.assignedVlans)} ${topology.natRules.${rule}.proto} dport ${toString topology.natRules.${rule}.port} ct state new accept"
@@ -276,6 +299,7 @@ in {
               ${inputRules}
               ${inputRulesExt}
               iifname "wan" limit rate 10/second burst 20 packets counter log prefix "INP_WAN_DROP " drop
+              iifname "mgmt" limit rate 5/second burst 10 packets counter log prefix "MGMT_TO_ROUTER_DROP " drop
 
             }
             chain forward {
@@ -284,6 +308,7 @@ in {
               iifname { ${lib.strings.concatStringsSep "," (builtins.attrNames (builtins.removeAttrs vlans ["dmz"])) } } oifname wan ct state new accept
               iifname "dmz" oifname "wan" ct state new tcp dport {80,443} accept
               iifname "dmz" oifname "wan" ct state new udp dport {53,123} accept
+              ${mgmtRules}
               ${fwRules}
               ${fwRulesExt}
               iifname "wan" limit rate 10/second burst 20 packets counter log prefix "FWD_WAN_DROP " drop
