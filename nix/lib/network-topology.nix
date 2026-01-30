@@ -6,44 +6,55 @@ let
     dnsVM = "DARE";
 
     firewallRules = {
-      dns = { port = 53; proto = "udp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU" "MAMORU" ]; };
-      http = { port = 80; proto = "tcp"; allowFrom = [ "external" ];  };
-      https = { port = 443; proto = "tcp"; allowFrom = [ "external" ]; };
-      ssh = { port = 22; proto = "tcp"; allowFrom = [ "external" ]; };
-      wireguard = { port = 51820; proto = "udp"; allowFrom = [ "MAMORU"]; };
+      dns_udp = { port = 53; proto = "udp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU" "MAMORU" ]; };
+      dns_tcp = { port = 53; proto = "tcp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU" "MAMORU" ]; };
+      ssh = { port = 22; proto = "tcp"; allowFrom = [ "MAMORU" ]; };
+      sshRouter = { port = 22; proto = "tcp"; allowFrom = [ "UCHI" ]; }; # Just temporary for testing
+    };
+
+    natRules = {
+      http = { port = 80; proto = "tcp"; externalPort = 80; };
+      wireguard = { port = 51820; proto = "udp"; externalPort = 51822; };
+      https = { port = 443; proto = "tcp"; externalPort = 443; };
     };
 
     vms = {
       MAMORU = {
         id = 10;
         assignedVlans = [ "mgmt" "srv" "dmz" ]; # WAN is handled manually
-        provides = [ "ssh" "wireguard" ];
+        provides = [ "sshRouter" ];
+        portForward = [ "wireguard" ];
       };
       KAIZOKU = {
         id = 15;
         assignedVlans = [ "srv" ]; # WAN is handled manually
         provides = [ "ssh" ];
+        portForward = [];
       };
 
       UCHI = {
         id = 20;
         assignedVlans = [ "srv" ];
         provides = [ "ssh" ];
+        portForward = [];
       };
       DARE = {
         id = 53;
         assignedVlans = [ "srv" ];
-        provides = [ "dns" "ssh" ];
+        provides = [ "dns_tcp" "dns_udp" "ssh" ];
+        portForward = [];
       };
       SOTO = {
         id = 25;
         assignedVlans = [ "dmz" ];
-        provides = [ "http" "https" "ssh" ];
+        provides = [ "ssh" ];
+        portForward = [ "http" "https" ];
       };
       OKAMI = {
         id = 30;
         assignedVlans = [ "dmz" ];
         provides = [ "ssh" ];
+        portForward = [];
       };
     };
   };
@@ -107,7 +118,7 @@ in {
                 matchConfig.Name = "tap-${vlan}-*";
                 linkConfig.RequiredForOnline = "no";
                 networkConfig = {
-                  Bridge = "br-${vlan}";
+                  Bridge = "br-vlan-${vlan}";
                   ConfigureWithoutCarrier = true;
                 };
               };
@@ -206,39 +217,75 @@ in {
         mac = wanMac;
       }
     ];
-      networking.nftables = {
+    networking.firewall.enable = lib.mkForce false;
+    networking.nftables = {
         enable = true;
         ruleset = let
+          vms = builtins.removeAttrs topology.vms [ topology.gatewayVM ];
           # NOTE: FW Rules will pick the first VLAN when multiple are available.
-          fwRules = lib.concatStringsSep "\n" (lib.flatten (lib.mapAttrsToList (name: cfg: (map (rule: (map (src:
-          if src == "external" then
-            "iifname wan oifname ${lib.head cfg.assignedVlans} ip daddr ${getIp name (lib.head cfg.assignedVlans)} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} accept"
-          else
+          inputRules = lib.concatStringsSep "\n" (lib.flatten (map (rule: (map (src:
+          let
+            vlanSrc = lib.head topology.vms.${src}.assignedVlans;
+          in
+            "iifname ${vlanSrc} ip saddr ${getIp src vlanSrc} ip daddr ${getIp topology.gatewayVM vlanSrc} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} ct state new accept"
+          ) firewallRules.${rule}.allowFrom)) topology.vms.${topology.gatewayVM}.provides));
+
+          inputRulesExt = lib.concatStringsSep "\n" (map (rule:
+            "iifname wan ${topology.natRules.${rule}.proto} dport ${toString topology.natRules.${rule}.port} ct state new accept"
+          ) topology.vms.${topology.gatewayVM}.portForward);
+
+          redirectRules = lib.concatStringsSep "\n" (map (rule:
+            "iifname wan ${topology.natRules.${rule}.proto} dport ${toString topology.natRules.${rule}.externalPort} redirect to :${toString topology.natRules.${rule}.port}"
+          ) topology.vms.${topology.gatewayVM}.portForward);
+
+          fwRules = lib.concatStringsSep "\n" (lib.flatten (lib.mapAttrsToList (name: cfg: (map (rule: (builtins.filter (x: x!="") (map (src:
           let
               intersectedVlan = lib.intersectLists cfg.assignedVlans topology.vms.${src}.assignedVlans;
               vlanSrc = if intersectedVlan == [] then lib.head topology.vms.${src}.assignedVlans else lib.head intersectedVlan;
               vlanDest = if intersectedVlan == [] then lib.head cfg.assignedVlans else lib.head intersectedVlan;
           in
-            "iifname ${vlanSrc} oifname ${vlanDest} ip saddr ${getIp src vlanSrc} ip daddr ${getIp name vlanDest} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} accept")
-            firewallRules.${rule}.allowFrom)) cfg.provides)) topology.vms));
-          natRules = lib.concatStringsSep "\n" (lib.flatten (lib.mapAttrsToList (name: cfg: (map (rule: (map (src:
-            "iifname wan ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} dnat to ${getIp name (lib.head cfg.assignedVlans)}")
-            (builtins.filter (ssrc: ssrc == "external") firewallRules.${rule}.allowFrom))) cfg.provides)) topology.vms));
+            if (intersectedVlan == []) then
+              "iifname ${vlanSrc} oifname ${vlanDest} ip saddr ${getIp src vlanSrc} ip daddr ${getIp name vlanDest} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} ct state new accept"
+            else
+              ""
+          ) firewallRules.${rule}.allowFrom))) cfg.provides)) vms));
+
+          fwRulesExt = lib.concatStringsSep "\n" (lib.flatten (lib.mapAttrsToList (name: cfg: (map (rule:
+            "iifname wan oifname ${lib.head cfg.assignedVlans} ip daddr ${getIp name (lib.head cfg.assignedVlans)} ${topology.natRules.${rule}.proto} dport ${toString topology.natRules.${rule}.port} ct state new accept"
+          ) cfg.portForward)) vms));
+
+          natRules = lib.concatStringsSep "\n" (lib.flatten (lib.mapAttrsToList (name: cfg: (map (rule:
+            "iifname wan ${topology.natRules.${rule}.proto} dport ${toString topology.natRules.${rule}.externalPort} dnat to ${getIp name (lib.head cfg.assignedVlans)}:${toString topology.natRules.${rule}.port}"
+          ) cfg.portForward)) vms));
         in ''
           table inet filter {
             chain input {
               type filter hook input priority 0; policy drop;
               iif "lo" accept
+              ct state invalid drop
+              ct state established,related accept
+              ip protocol icmp icmp type { destination-unreachable, time-exceeded, parameter-problem } accept
+              iifname "mgmt" ip protocol icmp icmp type echo-request accept
+              ${inputRules}
+              ${inputRulesExt}
+              iifname "wan" limit rate 10/second burst 20 packets counter log prefix "INP_WAN_DROP " drop
+
             }
             chain forward {
               type filter hook forward priority 0; policy drop;
               ct state established,related accept
+              iifname { ${lib.strings.concatStringsSep "," (builtins.attrNames (builtins.removeAttrs vlans ["dmz"])) } } oifname wan ct state new accept
+              iifname "dmz" oifname "wan" ct state new tcp dport {80,443} accept
+              iifname "dmz" oifname "wan" ct state new udp dport {53,123} accept
               ${fwRules}
+              ${fwRulesExt}
+              iifname "wan" limit rate 10/second burst 20 packets counter log prefix "FWD_WAN_DROP " drop
             }
           }
           table ip nat {
             chain prerouting {
               type nat hook prerouting priority dstnat;
+              ${redirectRules}
               ${natRules}
             }
             chain postrouting {
