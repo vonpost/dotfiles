@@ -8,6 +8,9 @@ let
     firewallRules = {
       dns_udp = { port = 53; proto = "udp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU" "MAMORU" ]; };
       dns_tcp = { port = 53; proto = "tcp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU" "MAMORU" ]; };
+      sonarr = { port=8989; proto = "tcp"; allowFrom = [ "SOTO" "KAIZOKU" ]; };
+      radarr = { port=7878; proto = "tcp"; allowFrom = [ "SOTO" "KAIZOKU" ]; };
+      jellyfin = { port=8096; proto = "tcp"; allowFrom = [ "UCHI" ]; };
       ssh = { port = 22; proto = "tcp"; allowFrom = [ "MAMORU" ]; };
       sshRouter = { port = 22; proto = "tcp"; allowFrom = [ "UCHI" ]; }; # Just temporary for testing
     };
@@ -35,7 +38,7 @@ let
       UCHI = {
         id = 20;
         assignedVlans = [ "srv" ];
-        provides = [ "ssh" ];
+        provides = [ "ssh" "sonarr" "radarr" ];
         portForward = [];
       };
       DARE = {
@@ -47,7 +50,7 @@ let
       SOTO = {
         id = 25;
         assignedVlans = [ "dmz" ];
-        provides = [ "ssh" ];
+        provides = [ "ssh" "jellyfin" ];
         portForward = [ "http" "https" ];
       };
       OKAMI = {
@@ -74,14 +77,15 @@ let
   getDns = getIp topology.dnsVM "srv";
   firewallRules = topology.firewallRules;
 in {
+  inherit getGateway getDns getSubnet vlans;
     # HOST CONFIG: Bridges and Taps
     mkHostNetwork = {
       systemd.network = {
         netdevs = builtins.listToAttrs (map (vlan: {
-          name = "40-br-vlan-${vlan}";
+          name = "40-br-${vlan}";
           value = {
             netdevConfig = {
-              Name = "br-vlan-${vlan}";
+              Name = "br-${vlan}";
               Kind = "bridge";
             };
           };
@@ -92,7 +96,7 @@ in {
               # Bridges online without carrier
               name = "50-br-vlan";
               value = {
-                matchConfig.Name = "br-vlan-*";
+                matchConfig.Name = "br-*";
                 networkConfig.ConfigureWithoutCarrier = true;
                 linkConfig.RequiredForOnline = "no";
               };
@@ -118,7 +122,7 @@ in {
                 matchConfig.Name = "tap-${vlan}-*";
                 linkConfig.RequiredForOnline = "no";
                 networkConfig = {
-                  Bridge = "br-vlan-${vlan}";
+                  Bridge = "br-${vlan}";
                   ConfigureWithoutCarrier = true;
                 };
               };
@@ -168,14 +172,22 @@ in {
         # Rest of the networking config
         boot.kernelParams = [ "ipv6.disable=1" ];
         networking = {
+          nftables.enable = true;
           useDHCP = false;
           useNetworkd = true;
           enableIPv6 = false;
           # Not sure if this is needed as well since we did set dns for the systemd definition.. nameservers = [ (getIp dnsVM "srv") ];
-          firewall = {
+          firewall =
+          let
+            fwtcp=map (p: firewallRules.${p}.port) (builtins.filter (p: firewallRules.${p}.proto == "tcp") vm.provides);
+            fwudp=map (p: firewallRules.${p}.port) (builtins.filter (p: firewallRules.${p}.proto == "udp") vm.provides);
+            nattcp=map (p: topology.natRules.${p}.port) (builtins.filter (p: topology.natRules.${p}.proto == "tcp") vm.portForward);
+            natudp=map (p: topology.natRules.${p}.port) (builtins.filter (p: topology.natRules.${p}.proto == "udp") vm.portForward);
+          in
+          {
             enable = true;
-            allowedTCPPorts = map (p: firewallRules.${p}.port) (builtins.filter (p: firewallRules.${p}.proto == "tcp") vm.provides);
-            allowedUDPPorts = map (p: firewallRules.${p}.port) (builtins.filter (p: firewallRules.${p}.proto == "udp") vm.provides);
+            allowedTCPPorts = fwtcp++nattcp;
+            allowedUDPPorts = fwudp++natudp;
           };
         };
       };
@@ -195,18 +207,13 @@ in {
     systemd.network.networks."10-wan" = {
       matchConfig.MACAddress = wanMac;
       networkConfig = {
-        Address = "192.168.1.166/24";
-        Gateway = "192.168.1.1";
-        DNS = "9.9.9.9";
+        DHCP="ipv4";
       };
-      # networkConfig = {
-      #   DHCP="ipv4";
-      # };
-      # dhcpV4Config = {
-      #   UseDNS = true;
-      #   UseRoutes = true;
-      #   UseGateway = true;
-      # };
+      dhcpV4Config = {
+        UseDNS = true;
+        UseRoutes = true;
+        UseGateway = true;
+      };
       linkConfig.RequiredForOnline = "no";
     };
 
@@ -302,13 +309,25 @@ in {
     services.unbound = {
       enable = true;
       settings.server = {
-        interface = [ "0.0.0.0" ];
+        interface = [ (getIp topology.dnsVM "srv") "127.0.0.1" ];
         access-control = [ "10.0.0.0/8 allow" ];
         local-zone = ''"${topology.domain}." static'';
         local-data = lib.mapAttrsToList (name: conf:
         ''"${name}.${topology.domain}. IN A ${getIp name (lib.head conf.assignedVlans)}"''
         ) topology.vms;
+
+        hide-identity = "yes";
+        hide-version = "yes";
+        qname-minimisation = "yes";
+        prefetch = "yes";
+        cache-min-ttl = 60;
+        cache-max-ttl = 86400;
       };
+
+      settings.forward-zone = [{
+        name = ".";
+        forward-addr = [ "9.9.9.9" "1.1.1.1" ];
+      }];
     };
   };
 }

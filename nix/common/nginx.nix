@@ -1,6 +1,7 @@
 { config, lib, pkgs, ... }:
 let
   url = "daddyz.myaddr.io";
+  jellyfin_host = "localhost";
   geoDbCountryPath = "/var/lib/geoipupdate/GeoLite2-Country.mmdb";
   allowedCountries = [ "SE" ];
   geoIpConfig = ''
@@ -68,7 +69,7 @@ let
       };
 
       locations."/" = {
-        proxyPass = "http://SOTO.lan:8096";
+        proxyPass = "http://${jellyfin_host}:8096";
         proxyWebsockets = true;
         extraConfig = ''
           proxy_buffering off;
@@ -88,7 +89,7 @@ let
       };
 
       locations."/" = {
-        proxyPass = "http://SOTO.lan:5055";
+        proxyPass = "http://${jellyfin_host}:5055";
         proxyWebsockets = true;
         extraConfig = ''
           proxy_buffering off;
