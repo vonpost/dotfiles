@@ -11,7 +11,6 @@ let
       dns_tcp = { port = 53; proto = "tcp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU" ]; };
       sonarr = { port=8989; proto = "tcp"; allowFrom = [ "SOTO" "KAIZOKU" ]; };
       radarr = { port=7878; proto = "tcp"; allowFrom = [ "SOTO" "KAIZOKU" ]; };
-
       qbit = { port=8080; proto = "tcp"; allowFrom = [ "UCHI" ]; };
       sabnzbd = { port=1337; proto = "tcp"; allowFrom = [ "UCHI" ]; };
       jellyfin = { port=8096; proto = "tcp"; allowFrom = [ "UCHI" ]; };
@@ -30,7 +29,7 @@ let
         id = 10;
         assignedVlans = [ "mgmt" "srv" "dmz" ]; # WAN is handled manually
         provides = [ ];
-        portForward = [ "wireguard" ];
+        portForward = [ ];
       };
       KAIZOKU = {
         id = 15;
@@ -308,6 +307,7 @@ in {
               iifname { ${lib.strings.concatStringsSep "," (builtins.attrNames (builtins.removeAttrs vlans ["dmz"])) } } oifname wan ct state new accept
               iifname "dmz" oifname "wan" ct state new tcp dport {80,443} accept
               iifname "dmz" oifname "wan" ct state new udp dport {53,123} accept
+              iifname "wan" oifname "mgmt" ip daddr ${topology.hostIp} udp dport 51820 ct state new accept
               ${mgmtRules}
               ${fwRules}
               ${fwRulesExt}
@@ -317,6 +317,7 @@ in {
           table ip nat {
             chain prerouting {
               type nat hook prerouting priority dstnat;
+              iifname wan udp dport 51822 dnat to ${topology.hostIp}:51820
               ${redirectRules}
               ${natRules}
             }
