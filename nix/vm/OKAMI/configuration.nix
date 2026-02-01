@@ -449,6 +449,9 @@ in
       "unbound"
       "jellyseerr"
       "mullvad-daemon"
+      "acme"
+      "sabnzbd"
+      "qbittorrent-nox"
       ]
     );
   };
