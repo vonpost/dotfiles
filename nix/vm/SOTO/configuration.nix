@@ -4,7 +4,7 @@ let svc = import ../../lib/vm-service-state.nix { inherit lib; };
 in {
   imports = [
     (import ../../common/vm-common.nix { hostname = hostname; media = true; })
-    (svc.mkOne { name = "jellyfin"; persistCache = true; })
+    (svc.mkOne { name = "jellyfin"; persistCache = true; mediaGroup=true; })
     (svc.mkOne  { name = "jellyseerr"; })
     (svc.mkOne { name = "acme"; unit="acme-setup"; })
     (svc.mkOne { name = "geoipupdate"; user="geoip"; unit="geoipupdate"; })
@@ -17,6 +17,7 @@ in {
     enable = true;
     package = bleeding.jellyfin;
   };
+  users.users.jellyseerr.extraGroups = [ "media" ];
   services.geoipupdate = {
     enable = true;
     settings = {

@@ -20,15 +20,14 @@
 }:
 { lib, config, ... }:
 let
-  addrs = import ../lib/lan-address.nix;
   netLib = import ../lib/network-topology.nix { inherit lib; };
   mediaSharesList = if media then mediaShares else [];
 in
 {
   networking.hostName = hostname;
-  imports = [ (netLib.mkGuest hostname) (import ./share_journald.nix { isHost = isJournalHost; hostname=hostname; } ) ];
+  imports = [ (netLib.mkGuest hostname) (import ./share_journald.nix { isHost = isJournalHost; hostname=hostname; }) ../lib/microvm-shares.nix ];
   microvm.hypervisor = lib.mkDefault "qemu";
-  microvm.vsock.cid = addrs.${hostname}.vsock_cid;
+  microvm.vsock.cid = netLib.vms.${hostname}.id;
   microvm.shares = [
     {
       source = "/nix/store";

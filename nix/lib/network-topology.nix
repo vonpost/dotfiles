@@ -16,6 +16,14 @@ let
       jellyfin = { port=8096; proto = "tcp"; allowFrom = [ "UCHI" ]; };
       ssh = { port = 22; proto = "tcp"; allowFrom = [ "MAMORU" ]; };
       sshRouter = { port = 22; proto = "tcp"; allowFrom = [ "UCHI" ]; }; # Just temporary for testing
+      wolf_https = { port = 47984; proto = "tcp"; allowFrom = [];};
+      wolf_http = { port = 47989; proto = "tcp"; allowFrom = [];};
+      wolf_control = { port = 47999; proto = "udp"; allowFrom = [];};
+      wolf_rtsp_setup = { port = 48010; proto = "tcp"; allowFrom = [];};
+      wolf_video_ping = { port = 48100; proto = "udp"; allowFrom = [];};
+      wolf_audio_ping = { port = 48200; proto = "udp"; allowFrom = [];};
+      wolf_den = {port = 8080; proto = "tcp"; allowFrom  = []; };
+      llama_server = { port = 8888; proto = "tcp"; allowFrom = []; };
     };
 
     natRules = {
@@ -59,7 +67,7 @@ let
       OKAMI = {
         id = 30;
         assignedVlans = [ "dmz" ];
-        provides = [ "ssh" ];
+        provides = [ "ssh" "wolf_http" "wolf_https" "wolf_control" "wolf_rtsp_setup" "wolf_video_ping" "wolf_audio_ping" "llama_server" "wolf_den"];
         portForward = [];
       };
     };
@@ -81,6 +89,7 @@ let
   firewallRules = topology.firewallRules;
 in {
   inherit getGateway getDns getSubnet vlans;
+  inherit (topology) vms;
     # HOST CONFIG: Bridges and Taps
     mkHostNetwork = {
       systemd.network = {

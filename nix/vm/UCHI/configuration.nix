@@ -4,7 +4,7 @@ let svc = import ../../lib/vm-service-state.nix { inherit lib; };
 in
 {
   imports =
-    (map (name: svc.mkOne { name = name; downloadsGroup = true; } ) [ "sonarr" "radarr"]) ++
+    (map (name: svc.mkOne { name = name; downloadsGroup = true; mediaGroup=true;} ) [ "sonarr" "radarr"]) ++
     svc.mkMany [ "prowlarr" ] ++
     [
       (import ../../common/vm-common.nix { hostname = hostname; media = true; })

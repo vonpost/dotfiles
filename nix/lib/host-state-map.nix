@@ -8,6 +8,10 @@ let
     "d ${svc.base}/downloads/${service}/complete 2775 root ${toString svc.downloadsGID} -"
     "d ${svc.base}/downloads/${service}/incomplete 2775 root ${toString svc.downloadsGID} -"
   ];
+
+  mkMediaDir = service: [
+    "d ${svc.mediaRoot}/${service} 2750 ${toString svc.uids.${service}} ${toString svc.mediaGID} -"
+  ];
 in {
   systemd.tmpfiles.rules =
     [
@@ -16,6 +20,7 @@ in {
       "d ${svc.cacheBase} 0755 root root -"
     ]
     ++ lib.lists.flatten (map mkDownloadsDir svc.hasDownloadsDir)
+    ++ lib.lists.flatten (map mkMediaDir svc.hasMediaDir)
     ++ lib.mapAttrsToList mkStateRule svc.uids
     ++ lib.mapAttrsToList mkCacheRule svc.uids
     ;

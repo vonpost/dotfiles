@@ -3,6 +3,9 @@ let
   base = "/aleph/state/services";
   libBase = "${base}/lib";
   cacheBase = "${base}/cache";
+  mediaRoot = "/omega/media";
+
+
 
   uids = {
     prowlarr    = 2101;
@@ -20,7 +23,9 @@ let
   };
 
   downloadsGID= 3000;
+  mediaGID= 3001;
   hasDownloadsDir = [ "qbittorrent" "sabnzbd" ];
+  hasMediaDir = [ "sonarr" "radarr" ];
 
   # Services we *know* use StateDirectory -> /var/lib/private/<name>
   privateStateDir = {
@@ -46,15 +51,14 @@ let
     , stateMount ? "/state/${name}"       # inside VM (virtiofs mountpoint)
     , bindTarget ? null                   # explicit override
     , stateDirName ? (privateStateDir.${name} or null)  # auto from map
-    , virtioTag ? "svc-${name}"
     , persistCache ? false
     , cacheSource ? "${cacheBase}/${name}"       # host path
     , cacheMount ? "/cache/${name}"              # inside VM (virtiofs mountpoint)
     , cacheBindTarget ? null                     # explicit override
     , cacheDirName ? (privateCacheDir.${name} or null)  # auto from map
-    , cacheVirtioTag ? "cache-${name}"
     , disableDynamicUser ? true
     , downloadsGroup ? false
+    , mediaGroup ? false
     }:
     { ... }:
     let
@@ -74,11 +78,15 @@ let
         uid = lib.mkForce uid;
         group = lib.mkForce group;
         isSystemUser = lib.mkForce true;
-        extraGroups = lib.mkIf downloadsGroup ["downloads"] ;
+        extraGroups = (lib.optional downloadsGroup "downloads") ++ (lib.optional mediaGroup "media") ;
       };
 
       users.groups.downloads = lib.mkIf downloadsGroup {
         gid = downloadsGID;
+      };
+
+      users.groups.media = lib.mkIf mediaGroup {
+        gid = mediaGID;
       };
 
       systemd.services.${unit} = {
@@ -90,15 +98,21 @@ let
           ++ lib.optional persistCache chosenCacheBindTarget;
       };
 
-      microvm.shares =
-        [
+      my.microvmShares.state = lib.mkDefault
           {
             proto = "virtiofs";
-            tag = virtioTag;
+            tag = "state";
             source = "${base}";
             mountPoint = "/state";
-          }
-        ];
+          };
+
+      my.microvmShares.media = lib.mkIf mediaGroup (lib.mkDefault
+          {
+            proto = "virtiofs";
+            tag = "media";
+            source = "${mediaRoot}";
+            mountPoint = "/media";
+          });
         # ++ lib.optional persistCache {
         # proto = "virtiofs";
         # tag = cacheVirtioTag;
@@ -146,8 +160,11 @@ in {
     base
     libBase
     cacheBase
+    mediaRoot
     hasDownloadsDir
+    hasMediaDir
     downloadsGID
+    mediaGID
     privateStateDir
     privateCacheDir;
 }
