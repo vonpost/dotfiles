@@ -5,10 +5,7 @@ sabnzbdSecretMount = "/sabnzbd";
 in {
   imports =
     [
-      (import ../../common/vm-common.nix { hostname = hostname; media = true; })
-      (svc.mkOne { name = "qbittorrent"; bindTarget="/var/lib/qBittorrent"; downloadsGroup = true; })
-      (svc.mkOne { name = "sabnzbd"; downloadsGroup=true; })
-      (svc.mkOne { name = "mullvad"; unit = "mullvad-daemon"; user="root"; uid=0; persistCache=true; })
+      (import ../../common/vm-common.nix { hostname = hostname; })
       (import ../../common/sabnzbd_config.nix { secretFilePath = "${sabnzbdSecretMount}/secretConfig"; } )
     ];
 

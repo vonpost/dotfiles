@@ -4,15 +4,29 @@ let svc = import ../../lib/vm-service-state.nix { inherit lib; };
 in
 {
   imports =
-    (map (name: svc.mkOne { name = name; downloadsGroup = true; mediaGroup=true;} ) [ "sonarr" "radarr"]) ++
-    svc.mkMany [ "prowlarr" ] ++
     [
-      (import ../../common/vm-common.nix { hostname = hostname; media = true; })
+      (import ../../common/vm-common.nix { hostname = hostname; })
+      ../../common/recyclarr.nix
     ];
 
+  microvm.shares = [
+    {
+      proto = "virtiofs";
+      tag = "sabnzbdSecret";
+      source = "/run/secrets/arrApiKeys";
+      mountPoint = "/run/arrApiKeys";
+    }
+  ];
   services = {
     sonarr.enable = true;
     radarr.enable = true;
+    recyclarr = {
+      enable = true;
+      configuration = {
+        radarr.radarrMain.api_key._secret="/run/arrApiKeys/radarr";
+        sonarr.sonarrMain.api_key._secret="/run/arrApiKeys/sonarr";
+      };
+    };
     prowlarr = {
       enable = true;
       package = bleeding.prowlarr;

@@ -3,11 +3,7 @@ let svc = import ../../lib/vm-service-state.nix { inherit lib; };
     hostname = "SOTO";
 in {
   imports = [
-    (import ../../common/vm-common.nix { hostname = hostname; media = true; })
-    (svc.mkOne { name = "jellyfin"; persistCache = true; mediaGroup=true; })
-    (svc.mkOne  { name = "jellyseerr"; })
-    (svc.mkOne { name = "acme"; unit="acme-setup"; })
-    (svc.mkOne { name = "geoipupdate"; user="geoip"; unit="geoipupdate"; })
+    (import ../../common/vm-common.nix { hostname = hostname;  })
     ../../common/nginx.nix
     ../../common/myaddr.nix
   ] ;

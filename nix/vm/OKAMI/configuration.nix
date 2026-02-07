@@ -159,11 +159,8 @@ in
 
   imports = [
     ../../lib/daily-llm-journal.nix
-    (import ../../common/vm-common.nix { hostname = hostname; isJournalHost = true; vlan="dmz";})
-  ] ++ svc.mkMany [
-    "wolf"
-    "llama-cpp"
-    "dailyLlmJournal" ];
+    (import ../../common/vm-common.nix { hostname = hostname; isJournalHost = true; })
+  ];
 
   ## ─────────────────────────────────────────────
   ## microvm basics
@@ -442,16 +439,9 @@ in
       [
       "sshd"
       "nginx"
-      "wolf"
       "radarr"
       "sonarr"
       "jellyfin"
-      "unbound"
-      "jellyseerr"
-      "mullvad-daemon"
-      "acme"
-      "sabnzbd"
-      "qbittorrent-nox"
       ]
     );
   };

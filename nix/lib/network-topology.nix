@@ -11,6 +11,7 @@ let
       dns_tcp = { port = 53; proto = "tcp"; allowFrom = [ "OKAMI" "SOTO" "UCHI" "KAIZOKU" ]; };
       sonarr = { port=8989; proto = "tcp"; allowFrom = [ "SOTO" "KAIZOKU" ]; };
       radarr = { port=7878; proto = "tcp"; allowFrom = [ "SOTO" "KAIZOKU" ]; };
+      prowlarr = { port=9696; proto = "tcp"; allowFrom = [  ]; };
       qbit = { port=8080; proto = "tcp"; allowFrom = [ "UCHI" ]; };
       sabnzbd = { port=1337; proto = "tcp"; allowFrom = [ "UCHI" ]; };
       jellyfin = { port=8096; proto = "tcp"; allowFrom = [ "UCHI" ]; };
@@ -30,18 +31,21 @@ let
       http = { port = 80; proto = "tcp"; externalPort = 80; };
       wireguard = { port = 51820; proto = "udp"; externalPort = 51822; };
       https = { port = 443; proto = "tcp"; externalPort = 443; };
+      battle_net = { port = 1119; proto = "tcp"; externalPort = 1119; };
     };
 
     vms = {
       MAMORU = {
         id = 10;
         assignedVlans = [ "mgmt" "srv" "dmz" ]; # WAN is handled manually
+        ipv6 = true;
         provides = [ ];
         portForward = [ ];
       };
       KAIZOKU = {
         id = 15;
         assignedVlans = [ "srv" ]; # WAN is handled manually
+        ipv6 = true;
         provides = [ "ssh" "qbit" "sabnzbd" ];
         portForward = [];
       };
@@ -49,26 +53,30 @@ let
       UCHI = {
         id = 20;
         assignedVlans = [ "srv" ];
-        provides = [ "ssh" "sonarr" "radarr" ];
+        ipv6 = false;
+        provides = [ "ssh" "sonarr" "radarr" "prowlarr"];
         portForward = [];
       };
       DARE = {
         id = 53;
         assignedVlans = [ "srv" ];
+        ipv6 = false;
         provides = [ "dns_tcp" "dns_udp" "ssh" ];
         portForward = [];
       };
       SOTO = {
         id = 25;
         assignedVlans = [ "dmz" ];
+        ipv6 = false;
         provides = [ "ssh" "jellyfin" ];
         portForward = [ "http" "https" ];
       };
       OKAMI = {
         id = 30;
-        assignedVlans = [ "dmz" ];
+        assignedVlans = [ "srv" ];
+        ipv6 = true;
         provides = [ "ssh" "wolf_http" "wolf_https" "wolf_control" "wolf_rtsp_setup" "wolf_video_ping" "wolf_audio_ping" "llama_server" "wolf_den"];
-        portForward = [];
+        portForward = [ "battle_net"];
       };
     };
   };
@@ -109,8 +117,13 @@ in {
               name = "50-br-vlan";
               value = {
                 matchConfig.Name = "br-*";
-                networkConfig.ConfigureWithoutCarrier = true;
                 linkConfig.RequiredForOnline = "no";
+                networkConfig = {
+                  DHCP=false;
+                  IPv6AcceptRA=false;
+                  LinkLocalAddressing=false;
+                  ConfigureWithoutCarrier = true;
+                };
               };
             }
 
@@ -119,9 +132,9 @@ in {
               value = {
                 matchConfig.Name = "br-mgmt";
                 address = [ "${topology.hostIp}/24" ];
-                gateway = [ (getGateway "mgmt") ];
                 dns = [ (getDns) ];
-                routes = map (vlan:
+                networkConfig.BindCarrier = "enp8s0";
+                routes = [ { Gateway=getGateway "mgmt"; Metric=100; } ] ++ map (vlan:
                   {
                     Destination="${getSubnet vlan}.0/24";
                     Gateway=getGateway "mgmt";
@@ -183,7 +196,12 @@ in {
                 Address = "${getIp name vlan}/24";
                 Gateway = if (name != topology.gatewayVM) then (getGateway vlan) else null;
                 DNS = getDns;
-              };
+                IPv6AcceptRA = (name != topology.gatewayVM);
+
+              } // (if name == topology.gatewayVM then {
+                IPv6SendRA = true;            # advertise to clients
+                DHCPPrefixDelegation = true;  # get a /64 per VLAN from the WAN PD pool
+              } else {});
             };
           }) vm.assignedVlans);
 
@@ -199,12 +217,12 @@ in {
         };
 
         # Rest of the networking config
-        boot.kernelParams = [ "ipv6.disable=1" ];
+        boot.kernelParams = [ "ipv6.disable=${if vm.ipv6 then "0" else "1"}" ];
         networking = {
           nftables.enable = true;
           useDHCP = false;
           useNetworkd = true;
-          enableIPv6 = false;
+          enableIPv6 = vm.ipv6;
           # Not sure if this is needed as well since we did set dns for the systemd definition.. nameservers = [ (getIp dnsVM "srv") ];
           firewall =
           let
@@ -227,6 +245,13 @@ in {
         "net.ipv4.ip_forward" = 1;
         "net.ipv4.conf.all.rp_filter" = 1;
         "net.ipv4.conf.default.rp_filter" = 1;
+
+        "net.ipv6.conf.default.accept_ra" = 2;
+        "net.ipv6.conf.all.forwarding" = 1;
+        "net.ipv6.conf.default.forwarding" = 1;
+        # critical: when forwarding=1, Linux otherwise ignores RAs.
+        # accept_ra=2 means "accept RA even if forwarding".
+        "net.ipv6.conf.wan.accept_ra" = 2;
       };
 
     systemd.network.links."50-custom-name-wan" = {
@@ -237,12 +262,16 @@ in {
       matchConfig.MACAddress = wanMac;
       networkConfig = {
         DHCP="ipv4";
+        #IPv6AcceptRA="yes";
       };
       dhcpV4Config = {
         UseDNS = true;
         UseRoutes = true;
         UseGateway = true;
       };
+      #dhcpV6Config = {
+      #  UseDNS=true;
+      #};
       linkConfig.RequiredForOnline = "no";
     };
 
@@ -303,6 +332,7 @@ in {
               ct state invalid drop
               ct state established,related accept
               ip protocol icmp icmp type { destination-unreachable, time-exceeded, parameter-problem } accept
+              ip6 nexthdr icmpv6 accept
               iifname "mgmt" ip protocol icmp icmp type echo-request accept
               ${inputRules}
               ${inputRulesExt}
@@ -312,10 +342,27 @@ in {
             }
             chain forward {
               type filter hook forward priority 0; policy drop;
+              # --- IPV6  ---
+              meta nfproto ipv6 ip6 nexthdr icmpv6 accept
+              # Allow LAN -> WAN (Internet Access)
+              iifname { ${lib.strings.concatStringsSep "," (builtins.attrNames (builtins.removeAttrs vlans ["dmz"])) } } oifname wan meta nfproto ipv6 ct state new accept
+              # Egress restrictions for dmz
+              iifname "dmz" oifname "wan" meta nfproto ipv6 tcp dport { 80, 443 } ct state new accept
+              iifname "dmz" oifname "wan" meta nfproto ipv6 udp dport { 53, 123 } ct state new accept
+              iifname "dmz" oifname "wan" meta nfproto ipv6 tcp dport { 53 } ct state new accept
+              ct state established,related meta nfproto ipv6 accept
+              # Explicitly drop all other IPv6 forwarding
+              meta nfproto ipv6 drop
+              # IPV4
               ct state established,related accept
               iifname { ${lib.strings.concatStringsSep "," (builtins.attrNames (builtins.removeAttrs vlans ["dmz"])) } } oifname wan ct state new accept
-              iifname "dmz" oifname "wan" ct state new tcp dport {80,443} accept
-              iifname "dmz" oifname "wan" ct state new udp dport {53,123} accept
+              #HTTP/HTTPS
+              iifname "dmz" oifname "wan" tcp dport {80,443} ct state new accept
+              #DNS
+              iifname "dmz" oifname "wan" udp dport {53,123} ct state new accept
+              iifname "dmz" oifname "wan" tcp dport {53} ct state new accept
+              #WIREGUARD egress/ingress
+              iifname "mgmt" oifname "wan" ip daddr ${topology.hostIp} udp dport 51820 ct state new accept
               iifname "wan" oifname "mgmt" ip daddr ${topology.hostIp} udp dport 51820 ct state new accept
               ${mgmtRules}
               ${fwRules}

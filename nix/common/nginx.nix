@@ -6,6 +6,7 @@ let
   allowedCountries = [ "SE" ];
   geoIpConfig = ''
     set $allow_access 0;
+
     if ($allowed_country = 1) {
       set $allow_access 1;
     }
@@ -31,7 +32,7 @@ let
 
   security.acme.acceptTerms = true;
   security.acme.defaults.email = "daniel.j.collin@gmail.com";
-  users.users.nginx.extraGroups = [ "geoip" ];
+  users.users.nginx.extraGroups = [ "geoip" "acme" ];
   services.nginx = {
     package = pkgs.nginx.override {
       modules = with pkgs.nginxModules; [geoip2];
