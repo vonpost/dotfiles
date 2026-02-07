@@ -22,8 +22,8 @@ in
     };
 
     localSubnet = mkOption {
-      type = types.str;
-      description = "Local subnet on server to allow access to.";
+      type = types.listOf types.str;
+      description = "Local subnets on server to allow access to.";
     };
 
     subnet = mkOption {
@@ -78,9 +78,8 @@ in
       };
       routes = [
         { Destination = "${cfg.serverIp}/32";  }
-        { Destination = "${cfg.localSubnet}/24"; }
         { Destination = "${cfg.subnet}/24";  }
-      ];
+      ] ++ (map (subnet: { Destination = subnet; }) cfg.localSubnet);
 
       # ENSURE ENDPOINT DOESNT GET ROUTE THROUGH MULLVAD
       routingPolicyRules = lib.optionals cfg.bypassMullvad [
@@ -116,9 +115,8 @@ in
           Endpoint            = "${cfg.endpoint}:${cfg.port}";
           AllowedIPs          = [
             "${cfg.serverIp}/32"
-            "${cfg.localSubnet}/24"
             "${cfg.subnet}/24"
-          ];
+          ] ++ cfg.localSubnet;
           PersistentKeepalive = 25;
         }
       ];
