@@ -69,7 +69,6 @@
 
           {
             networking.hostName = "MOTHER";
-            microvm.stateDir = "/aleph/vm-pool/microvm";
             microvm.autostart = ["UCHI" "SOTO" "DARE" "OKAMI" "KAIZOKU" "MAMORU"];
             microvm.vms.UCHI = { flake = UCHI; updateFlake = "git+file:///root/dotfiles/?dir=nix/vm/UCHI"; };
             microvm.vms.SOTO = { flake = SOTO; updateFlake = "git+file:///root/dotfiles/?dir=nix/vm/SOTO"; };

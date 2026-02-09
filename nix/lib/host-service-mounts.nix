@@ -13,8 +13,8 @@ in
     "d ${svc.base} 0755 root root -"
     "d ${svc.base}/${svc.libPath} 0755 root root -"
     "d ${svc.base}/${svc.cachePath} 0755 root root -"
-    "d ${svc.mediaRoot} 0755 root root -"
-    "d ${svc.downloadsRoot} 0755 root root -"
+    "d ${svc.mediaRoot} 0755 root ${toString svc.mediaGID} -"
+    "d ${svc.downloadsRoot} 2770 root ${toString svc.downloadsGID} -"
     # "d ${stageRoot} 0755 root root -"
     ]
     ++ flatten (mapAttrsToList (svcName: service:
@@ -22,7 +22,7 @@ in
         "d ${svc.base}/${svc.libPath}/${svcName} 0755 ${toString service.uid} ${toString service.uid} -"
       ]
       ++ optional (service.hasCacheDir or false) "d ${svc.base}/${svc.cachePath}/${service.name} 0755 ${toString service.uid} ${toString service.uid} -"
-      ++ optional (service.hasDownloadsDir or false) "d ${svc.downloadsRoot}/${service.name} 2755 root ${toString svc.downloadsGID} -"
+      ++ optional (service.hasDownloadsDir or false) "d ${svc.downloadsRoot}/${service.name} 2770 ${toString service.uid} ${toString svc.downloadsGID} -"
       ++ optional (service.hasMediaDir or false) "d ${svc.mediaRoot}/${service.name} 2750 ${toString service.uid} ${toString svc.mediaGID} -"
     ) svcMap);
     systemd.mounts =

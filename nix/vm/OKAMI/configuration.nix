@@ -68,9 +68,11 @@ let
   curlbin   = "${pkgs.curl}/bin/curl";
 
   nvidiaDriverVol = "nvidia-driver-vol";
+  #wolf-native = import ../../common/wolf.nix {inherit pkgs config lib;};
 
 in
 {
+  # systemd.services.wolf-dev.serviceConfig.ExecStart = "${wolf-native}/bin/wolf";
   systemd.services.docker-build-nvidia-driver-image = {
     description = "Build Gow Nvidia driver bundle image (Wolf manual method)";
     wantedBy = [ "multi-user.target" ];
@@ -167,7 +169,7 @@ in
   ## ─────────────────────────────────────────────
 
   microvm.vcpu = 8;
-  microvm.mem  = 32000;
+  microvm.mem  = 16000;
 
   microvm.devices = [
     { bus = "pci"; path = "0000:09:00.0"; } # GPU
@@ -178,7 +180,7 @@ in
   microvm.volumes = [
     {
       mountPoint = "/var/lib/docker";
-      image = "${hostname}-docker.img";
+      image = "/images/microvm/${hostname}-docker_v2.img";
       size = 40 * 1024; # MiB
       fsType = "ext4";
       autoCreate = true;

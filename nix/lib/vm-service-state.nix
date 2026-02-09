@@ -1,8 +1,8 @@
 { lib }:
 let
-  base = "/aleph/state/services";
+  base = "/state/services";
   mediaRoot = "/omega/media";
-  downloadsRoot = "/aleph/state/services/downloads";
+  downloadsRoot = "/omega/downloads";
   libPath = "./lib";
   cachePath = "./cache";
   downloadsPath = "./downloads";
@@ -83,7 +83,7 @@ let
         }
 
         // lib.optionalAttrs downloadsGroup {
-          "/downloads" = {
+          "/data/downloads" = {
             device = "/state/${downloadsPath}";
             fsType = "none";
             options = [ "bind" ];
@@ -91,7 +91,7 @@ let
         }
 
         // lib.optionalAttrs mediaGroup {
-          "/media" = {
+          "/data/media" = {
             device = "/state/${mediaPath}";
             fsType = "none";
             options = [ "bind" ];
