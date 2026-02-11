@@ -1,40 +1,48 @@
-{ lib, stdenvNoCC, fetchFromGitHub, makeWrapper, python3 }:
+{ pkgs, lib, fetchFromGitHub, python3 }:
 
 let
-  py = python3.withPackages (ps: with ps; [
+  pythonEnv = python3.withPackages (ps: with ps; [
     click
     pyyaml
-    # Optional (only if you configure postgres in rffmpeg.yml):
     psycopg2
   ]);
 in
-stdenvNoCC.mkDerivation rec {
+pkgs.python3Packages.buildPythonApplication rec {
   pname = "rffmpeg";
-  version = "unstable-2022-07-19";
+  version = "0.1";
+  pyproject = false;
 
   src = fetchFromGitHub {
     owner = "joshuaboniface";
     repo = "rffmpeg";
-    # Pin this to a commit or tag you prefer
     rev = "master";
-    # Fill this in with: nix-prefetch-url --unpack <url>  OR  nix flake lock updates
-    hash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+    hash = "sha256-UI//X2L6sGWVllfNrRzHrlF4yG+83eldXYVBMrgQqiM=";
   };
 
-  nativeBuildInputs = [ makeWrapper ];
+  # Critical: avoid Nix-generated Python entrypoint wrappers
+  dontWrapPythonPrograms = true;
+
+  # We’re going to run using pythonEnv directly, so no need to propagate deps here.
+  propagatedBuildInputs = [ ];
 
   installPhase = ''
     runHook preInstall
+    mkdir -p $out/bin
 
-    install -D -m 0755 rffmpeg $out/libexec/rffmpeg
+    install -m 755 rffmpeg $out/bin/rffmpeg
 
-    # Run the script with a known Python + deps
-    makeWrapper ${py}/bin/python3 $out/bin/rffmpeg \
-      --add-flags $out/libexec/rffmpeg
+    # Force the interpreter to one that includes click/pyyaml/psycopg2
+    substituteInPlace $out/bin/rffmpeg \
+      --replace "#!/usr/bin/env python3" "#!${pythonEnv}/bin/python3" \
+      --replace "#!/usr/bin/python3" "#!${pythonEnv}/bin/python3" \
+      --replace "#!/usr/bin/env python"  "#!${pythonEnv}/bin/python3" \
+      --replace "#!/usr/bin/python"      "#!${pythonEnv}/bin/python3"
+    substituteInPlace $out/bin/rffmpeg \
+      --replace 'if "rffmpeg" in cmd_name:' 'if os.path.basename(cmd_name) == "rffmpeg":'
 
-    # rffmpeg is intended to be invoked as ffmpeg/ffprobe
-    ln -s $out/bin/rffmpeg $out/bin/ffmpeg
-    ln -s $out/bin/rffmpeg $out/bin/ffprobe
+    # Preserve $0-based emulation via symlinks (no wrapper involved)
+    ln -s rffmpeg $out/bin/ffmpeg
+    ln -s rffmpeg $out/bin/ffprobe
 
     runHook postInstall
   '';

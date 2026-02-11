@@ -11,7 +11,7 @@ in {
   services.jellyseerr.enable = true;
   services.jellyfin =  {
     enable = true;
-    package = bleeding.jellyfin;
+    package = bleeding.jellyfin.override { jellyfin-ffmpeg = pkgs.rffmpeg; };
   };
   users.users.jellyseerr.extraGroups = [ "media" ];
   services.geoipupdate = {
@@ -25,7 +25,7 @@ in {
   };
 
   environment.systemPackages = with pkgs; [
-      bleeding.jellyfin-ffmpeg
+      jellyfin-ffmpeg
   ];
 
   microvm.shares = [

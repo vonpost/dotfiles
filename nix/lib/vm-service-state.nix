@@ -45,7 +45,7 @@ let
       users.users.${user} = {
         uid = lib.mkForce uid;
         group = lib.mkForce group;
-        isSystemUser = lib.mkForce true;
+        isSystemUser = lib.mkDefault true;
         extraGroups = (lib.optional downloadsGroup "downloads") ++ (lib.optional mediaGroup "media") ;
       };
 

@@ -14,10 +14,10 @@ in {
         MULLVAD_SETTINGS_DIR = "/var/lib/mullvad";
         MULLVAD_CACHE_DIR = "/var/cache/mullvad";
       };
-      qbittorrent.serviceConfig.UMask = "002";
+      qbittorrent.serviceConfig.UMask = lib.mkForce "0007";
       sabnzbd.serviceConfig = {
         PermissionsStartOnly=true; # Needed to read the virtiofs mounted secret properly.
-        UMask = "002";
+        UMask = lib.mkForce "0007";
       };
     };
 

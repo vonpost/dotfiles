@@ -17,7 +17,7 @@ let
       exit 0
     fi
 
-    ${cfg.package}/bin/rffmpeg init --no-root
+    ${cfg.package}/bin/rffmpeg init --no-root --yes
 
     ${lib.concatMapStringsSep "\n" (h: ''
       ${cfg.package}/bin/rffmpeg add ${lib.escapeShellArg h}
@@ -48,7 +48,11 @@ in
       type = lib.types.attrs;
       default = {
         rffmpeg = {
-          logging = "/var/log/jellyfin/rffmpeg.log";
+          logging = {
+            log_to_file = true;
+            debug = true;
+            logfile = "/var/lib/rffmpeg/rffmpeg.log";
+          };
           directories = {
             state = "/var/lib/rffmpeg";
             persist = "/run/rffmpeg";
@@ -56,19 +60,21 @@ in
             group = config.services.jellyfin.group;
           };
           remote = {
-            user = "rffmpeg";
-            persist = true;
+            user = "jellyfin";
+            persist = 300;
             args = [
               "-o" "BatchMode=yes"
               "-o" "StrictHostKeyChecking=accept-new"
               "-o" "UserKnownHostsFile=/var/lib/rffmpeg/known_hosts"
-              "-i" "/var/lib/rffmpeg/id_ed25519"
+              "-i" "/run/credentials/jellyfin.service/jellyfin_transcode_ssh_key"
             ];
           };
           commands = {
-            ssh = "/run/current-system/sw/bin/ssh";
-            ffmpeg = "/run/current-system/sw/bin/ffmpeg";
-            ffprobe = "/run/current-system/sw/bin/ffprobe";
+            ssh = "${pkgs.openssh}/bin/ssh";
+            ffmpeg = "ffmpeg";
+            ffprobe = "ffprobe";
+            fallback_ffmpeg = "${pkgs.jellyfin-ffmpeg}/bin/ffmpeg";
+            fallback_ffprobe = "${pkgs.jellyfin-ffmpeg}/bin/ffprobe";
           };
         };
       };
@@ -109,6 +115,5 @@ in
       TMPDIR = toString cfg.tmpdir;
       RFFMPEG_CONFIG = configPath;
     };
-    services.jellyfin.package = config.services.jellyfin.package.override { jellyfin-ffmpeg = cfg.package; };
   };
 }

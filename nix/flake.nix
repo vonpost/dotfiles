@@ -10,6 +10,7 @@
           sops-nix.inputs.nixpkgs.follows = "nixpkgs";
           microvm.url = "github:microvm-nix/microvm.nix";
           microvm.inputs.nixpkgs.follows = "nixpkgs";
+          rffmpeg-nix.url = ./rffmpeg-nix;
           UCHI.url = ./vm/UCHI;
           SOTO.url = ./vm/SOTO;
           KAIZOKU.url = ./vm/KAIZOKU;
@@ -25,6 +26,7 @@
       nixos-hardware,
       sops-nix,
       microvm,
+      rffmpeg-nix,
       UCHI,
       SOTO,
       KAIZOKU,

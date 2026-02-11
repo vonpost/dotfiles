@@ -405,8 +405,12 @@ in
     config.hardware.nvidia.package.bin
     iptables
     tcpdump
+    jellyfin-ffmpeg
   ];
 
+  users.users.jellyfin.openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAzH2Gt2Xs7mNeSpqNCJy2lwT19XC3OiSBNWBHK6zrzF dcol@TERRA" ];
+  users.users.jellyfin.isSystemUser = lib.mkForce false;
+  users.users.jellyfin.isNormalUser = lib.mkForce true;
 
   ## NON WOLF ###
   ##
