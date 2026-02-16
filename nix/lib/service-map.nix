@@ -4,7 +4,7 @@
     radarr = { name="radarr"; uid=2102; downloadsGroup = true; mediaGroup=true; hasMediaDir=true; };
     sonarr = { name="sonarr"; uid=2103; downloadsGroup = true; mediaGroup=true; hasMediaDir=true; };
     jellyfin = { name = "jellyfin"; uid=2104; mediaGroup = true; hasCacheDir= true; };
-    jellyseerr = { name="jellyseerr"; uid=2105; };
+    jellyseerr = { name="jellyseerr"; uid=2105; mediaGroup=true; };
     sabnzbd = { name="sabnzbd"; uid=2106; downloadsGroup = true; hasDownloadsDir=true; };
     qbittorrent = { name="qbittorrent"; uid=2107; downloadsGroup = true; hasDownloadsDir=true; bindTarget="qBittorrent";};
     wolf = { name="wolf"; uid=2108; };

@@ -1,6 +1,5 @@
 { lib, pkgs, ...}:
 with lib;
-with pkgs;
 let
   # Your target Wolf commit
   wolfRev = "ea4a75d59deb9171dde3d21d6beb2785cb69585";
@@ -10,7 +9,45 @@ let
   # These hashes come from that branch’s flake.nix, so they should be correct
   # for those dependency versions. If master changed a dependency/version,
   # CMake will tell you which extra one needs adding.
-  deps = {
+
+  fake-udev = pkgs.stdenv.mkDerivation rec {
+    pname = "fake-udev";
+    version = "1.0";
+
+    src = pkgs.fetchFromGitHub {
+      owner = "games-on-whales";
+      repo = "wolf";
+      rev = wolfRev;
+      hash = wolfHash;
+      fetchSubmodules = true;
+    };
+    sourceRoot = "${src.name}/src/fake-udev";
+
+    nativeBuildInputs = with pkgs; [ cmake pkg-config ninja autoPatchelfHook ];
+
+    buildInputs = with pkgs; [ glibc.static ];
+
+    cmakeFlags = [
+      "-DCMAKE_BUILD_TYPE=Release"
+      "-DCMAKE_CXX_STANDARD=17"
+      "-DCMAKE_CXX_EXTENSIONS=OFF"
+      "-DBUILD_FAKE_UDEV_CLI=ON"
+      "-G Ninja"
+    ];
+
+    postPatch = ''
+    echo "cmake_minimum_required(VERSION 3.13...3.24)" > newCMake
+    cat CMakeLists.txt >> newCMake
+    mv newCMake CMakeLists.txt
+    '';
+    buildPhase = "ninja fake-udev";
+    installPhase = ''
+      mkdir -p $out/bin
+      cp ./fake-udev $out/bin/fake-udev
+    '';
+  };
+  deps = with pkgs; {
+
     boost_json = fetchFromGitHub {
       owner = "boostorg";
       repo = "json";
@@ -49,8 +86,8 @@ let
     fmtlib = fetchFromGitHub {
       owner = "fmtlib";
       repo = "fmt";
-      rev = "11.0.1";
-      hash = "sha256-EPidbZxCvysrL64AzbpJDowiNxqy4ii+qwSWAFwf/Ps=";
+      rev = "11.1.4";
+      hash = "sha256-sUbxlYi/Aupaox3JjWFqXIjcaQa0LFjclQAOleT+FRA=";
     };
 
     range = fetchFromGitHub {
@@ -63,8 +100,8 @@ let
     enet = fetchFromGitHub {
       owner = "cgutman";
       repo = "enet";
-      rev = "47e42dbf422396ce308a03b5a95ec056f0f0180c";
-      hash = "sha256-ZAmkyDpdriEZUt4fs/daQFx5YqPYFTaU2GULWIN1AwI=";
+      rev = "44c85e16279553d9c052e572bcbfcd745fb74abf";
+      hash = "sha256-lXCZhpy1FgFsUOcdd9fS9HpPZGKW/FTKaKfOOn5J/5g=";
     };
 
     nanors = fetchFromGitHub {
@@ -98,8 +135,9 @@ let
     reflect_cpp = fetchFromGitHub {
       owner = "getml";
       repo = "reflect-cpp";
-      rev = "e29d43e8ad80d8f22518c69f495ac690a8174393";
-      hash = "sha256-eHOgPF/aNdnLaZwvoVdW0Sv6NIv3oHrBIBgq5/to/io=";
+      # rev = "e29d43e8ad80d8f22518c69f495ac690a8174393";
+      rev = "v0.21.0";
+      hash = "sha256-9D16AoQlb6xHFEpNEMMYHbcW3AUFF7BxPliSkGE7YJU=";
     };
 
     libdwarf_lite = fetchFromGitHub {
@@ -112,17 +150,17 @@ let
     simplewebserver = fetchFromGitLab {
       owner = "eidheim";
       repo = "Simple-Web-Server";
-      rev = "bdb1057";
-      hash = "sha256-C9i/CyQG9QsDqIx75FbgiKp2b/POigUw71vh+rXAdyg=";
+      rev = "546895a9";
+      hash = "sha256-sIuZUqpK8eiPs1wIlE8hJgtynEoYpLxMaWxQGviifME=";
     };
   };
 
 in
-stdenv.mkDerivation (finalAttrs: {
+pkgs.stdenv.mkDerivation (finalAttrs: rec {
   pname = "wolf";
-  version = wolfRev;
+  version = "1.0-${wolfRev}";
 
-  src = fetchFromGitHub {
+  src = pkgs.fetchFromGitHub {
     owner = "games-on-whales";
     repo = "wolf";
     rev = wolfRev;
@@ -130,25 +168,22 @@ stdenv.mkDerivation (finalAttrs: {
     fetchSubmodules = true;
   };
 
-  nativeBuildInputs = [
+  nativeBuildInputs = with pkgs; [
     cmake
     pkg-config
     makeWrapper
     ninja
     wrapGAppsHook3
-    go
     patchelf
   ];
 
-  buildInputs = [
+  buildInputs = with pkgs; [
     openssl
     boost
     icu
-    fmt
-    range-v3
-    enet
     libevdev
     systemd
+    range-v3
     libpulseaudio
     ffmpeg_6-full
     libva
@@ -156,6 +191,7 @@ stdenv.mkDerivation (finalAttrs: {
     pciutils
     curl
     libunwind
+    fake-udev
 
     gst_all_1.gstreamer
     gst_all_1.gst-plugins-base
@@ -167,6 +203,7 @@ stdenv.mkDerivation (finalAttrs: {
     wayland-protocols
     libxkbcommon
   ];
+  runtimeInputs = [ fake-udev ];
 
   # Don’t patch out FetchContent.
   # Instead, make it “offline” by providing source directories for each dependency.
@@ -205,17 +242,14 @@ stdenv.mkDerivation (finalAttrs: {
     "-DCMAKE_BUILD_TYPE=Release"
     "-DCMAKE_CXX_STANDARD=17"
     "-DCMAKE_CXX_EXTENSIONS=OFF"
-    "-DBUILD_FAKE_UDEV_CLI=ON"
+    "-DBUILD_FAKE_UDEV_CLI=OFF"
     "-DBUILD_TESTING=OFF"
+    "-DBUILD_TESTING_STATIC=OFF"
+    "-DBUILD_TESTING_SHARED=OFF"
     "-G Ninja"
 
   ];
   postPatch = ''
-    # 1) Patch fake-udev: remove explicit -static (dynamic linking in Nix)
-    # Use --replace-warn to avoid deprecated --replace warning.
-    substituteInPlace src/fake-udev/CMakeLists.txt \
-      --replace-warn "-static" ""
-
     # 2) Ensure the wolf executable gets installed
     cmakeFile="src/moonlight-server/CMakeLists.txt"
     if ! grep -q "install(TARGETS wolf" "$cmakeFile"; then
@@ -225,16 +259,18 @@ stdenv.mkDerivation (finalAttrs: {
 
 postInstall = ''
   mkdir -p $out/lib
-  find "$cmakeBuildDir" -maxdepth 5 -type f -name "libwolf_*.so*" -exec cp -v {} $out/lib/ \; || true
+  find "${src.name}" -maxdepth 5 -type f -name "libwolf_*.so*" -exec cp -v {} $out/lib/ \; || true
 '';
 postFixup = ''
   patchelf --set-rpath "$out/lib" "$out/bin/wolf" || true
 '';
 
-
+  # buildPhase = "ninja wolf";
   # installPhase = ''
-  # cmake --install
+  #   mkdir -p $out/bin
+  #   cp ./src/moonlight-server/wolf $out/bin/wolf
   # '';
+
 
   meta = with lib; {
     description = "Wolf streaming server (Games on Whales)";

@@ -68,7 +68,7 @@ let
   curlbin   = "${pkgs.curl}/bin/curl";
 
   nvidiaDriverVol = "nvidia-driver-vol";
-  #wolf-native = import ../../common/wolf.nix {inherit pkgs config lib;};
+  wolf-native = import ../../common/wolf.nix {inherit pkgs config lib;};
 
 in
 {
@@ -406,6 +406,7 @@ in
     iptables
     tcpdump
     jellyfin-ffmpeg
+    wolf-native
   ];
 
   users.users.jellyfin.openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAzH2Gt2Xs7mNeSpqNCJy2lwT19XC3OiSBNWBHK6zrzF dcol@TERRA" ];

@@ -15,7 +15,7 @@ let
       qbit = { port=8080; proto = "tcp"; allowFrom = [ "UCHI" ]; };
       sabnzbd = { port=1337; proto = "tcp"; allowFrom = [ "UCHI" ]; };
       jellyfin = { port=8096; proto = "tcp"; allowFrom = [ "UCHI" ]; };
-      ssh = { port = 22; proto = "tcp"; allowFrom = [ "MAMORU" ]; };
+      ssh = { port = 22; proto = "tcp"; allowFrom = [ ]; };
       sshJellyfin = { port = 22; proto = "tcp"; allowFrom = [ "SOTO" ]; }; # Just temporary for testing
       wolf_https = { port = 47984; proto = "tcp"; allowFrom = [];};
       wolf_http = { port = 47989; proto = "tcp"; allowFrom = [];};

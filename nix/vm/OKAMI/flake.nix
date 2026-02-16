@@ -2,8 +2,8 @@
   description = "OKAMI MicroVM (Unbound)";
 
   inputs = {
-    #nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs.url = "github:NixOS/nixpkgs/90bc71c88c6f507c85913b1f11d3e619f0044e75"; # Until update to llama-server is in master
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # nixpkgs.url = "github:NixOS/nixpkgs/90bc71c88c6f507c85913b1f11d3e619f0044e75"; # Until update to llama-server is in master
 
     bleeding.url = "github:NixOS/nixpkgs/master";
     microvm.url = "github:microvm-nix/microvm.nix";
