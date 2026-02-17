@@ -1,10 +1,11 @@
-{config, ...}:
+{config, lib, pkgs, ...}:
 {
   services.recyclarr = {
     enable = true;
 
     configuration = {
       sonarr.sonarrMain = {
+        sonarr.sonarrMain.api_key = "";
         base_url = "http://localhost:${toString config.services.sonarr.settings.server.port}";
         delete_old_custom_formats = true;
         replace_existing_custom_formats = true;
@@ -39,6 +40,7 @@
       };
 
       radarr.radarrMain = {
+        radarr.radarrMain.api_key = "";
         base_url = "http://localhost:${toString config.services.radarr.settings.server.port}";
         delete_old_custom_formats = true;
         replace_existing_custom_formats = true;
@@ -53,5 +55,26 @@
         ];
       };
     };
+  };
+
+  systemd.services.recyclarr = {
+    preStart = lib.mkForce ''
+      set -euo pipefail
+      tmpfile="$(mktemp)"
+
+      # Start from base JSON, then set fields from environment.
+      printf '%s' ${lib.escapeShellArg (builtins.toJSON config.services.recyclarr.configuration)} \
+        | ${pkgs.jq}/bin/jq --rawfile radarr_k "$CREDENTIALS_DIRECTORY/recyclarr_radarr_api_key" \
+          --rawfile sonarr_k "$CREDENTIALS_DIRECTORY/recyclarr_sonarr_api_key" \
+        '
+        .radarr.radarrMain.api_key = ($radarr_k | rtrimstr("\n"))
+        | .sonarr.sonarrMain.api_key = ($sonarr_k | rtrimstr("\n"))
+        ' \
+        > "$tmpfile"
+      install -m 0600 "$tmpfile" /var/lib/recyclarr/config.json
+      rm -f "$tmpfile"
+
+    '';
+    serviceConfig.LoadCredential = lib.mkBefore [ "" ];
   };
 }

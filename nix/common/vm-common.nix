@@ -12,6 +12,10 @@ let
   svc = import ../lib/vm-service-state.nix {inherit lib;};
   svcMap = import ../lib/service-map.nix;
   vmConfig = import ../lib/vm-config.nix;
+  servicesForVm = map (serviceName: svcMap.${serviceName}) vmConfig.${hostname}.serviceMounts;
+  statefulServices = map
+    (service: builtins.removeAttrs service [ "managedState" "secrets" ])
+    (builtins.filter (service: service.managedState or true) servicesForVm);
 in
 {
   networking.hostName = hostname;
@@ -21,8 +25,10 @@ in
   imports = [
     (netLib.mkGuest hostname)
     (import ./share_journald.nix { isHost = isJournalHost; hostname=hostname; })
-    ../lib/microvm-shares.nix ]
-    ++ (svc.mkMany (map (sname: svcMap.${sname}) vmConfig.${hostname}.serviceMounts));
+    ../lib/microvm-shares.nix
+    (import ../lib/vm-service-secrets.nix { inherit hostname; })
+  ]
+    ++ (svc.mkMany statefulServices);
   microvm.hypervisor = lib.mkDefault "qemu";
   microvm.vsock.cid = netLib.vms.${hostname}.id;
 
@@ -33,7 +39,7 @@ in
       tag = "ro-store";
       proto = "virtiofs";
     }
-  ] ++ lib.optional (vmConfig.${hostname}.serviceMounts != [] ) (
+  ] ++ lib.optional (statefulServices != [ ]) (
     {
       proto = "virtiofs";
       tag = "state";

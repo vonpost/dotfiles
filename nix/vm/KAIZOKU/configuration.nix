@@ -1,12 +1,11 @@
 { self, config, pkgs, lib, microvm, bleeding, ... }:
 let svc = import ../../lib/vm-service-state.nix { inherit lib; };
 hostname = "KAIZOKU";
-sabnzbdSecretMount = "/sabnzbd";
 in {
   imports =
     [
       (import ../../common/vm-common.nix { hostname = hostname; })
-      (import ../../common/sabnzbd_config.nix { secretFilePath = "${sabnzbdSecretMount}/secretConfig"; } )
+      (import ../../common/sabnzbd_config.nix { secretFilePath = "/run/credentials/sabnzbd.service/sabnzbd_secret_config"; } )
     ];
 
     systemd.services = {
@@ -16,7 +15,6 @@ in {
       };
       qbittorrent.serviceConfig.UMask = lib.mkForce "0007";
       sabnzbd.serviceConfig = {
-        PermissionsStartOnly=true; # Needed to read the virtiofs mounted secret properly.
         UMask = lib.mkForce "0007";
       };
     };
@@ -27,15 +25,6 @@ in {
       qbittorrent.enable = true;
       mullvad-vpn.enable = true;
     };
-
-    microvm.shares = [
-      {
-        proto = "virtiofs";
-        tag = "sabnzbdSecret";
-        source = "/run/secrets/sabnzbd";
-        mountPoint = sabnzbdSecretMount;
-      }
-    ];
 
     microvm.vcpu = 2;
     microvm.mem = 4000;

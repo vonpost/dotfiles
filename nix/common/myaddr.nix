@@ -1,13 +1,12 @@
 { config, pkgs, lib, ... }:
 
 let
-  myaddrEnvFile = "/myaddr/env";
-
   myaddrUpdateScript = pkgs.writeShellScript "myaddr-update" ''
     set -euo pipefail
 
+    echo "reading api and fetching current ip"
     ip="''$(${pkgs.curl}/bin/curl -fsS https://api.ipify.org)"
-    url="https://myaddr.tools/update?key=''${MYADDR_KEY}&ip=''${ip}"
+    url="https://myaddr.tools/update?key=''$(${pkgs.coreutils}/bin/cat $CREDENTIALS_DIRECTORY/myaddr_api_key)&ip=''${ip}"
 
     ${pkgs.curl}/bin/curl -fsS --retry 3 --retry-delay 1 "''$url"
 
@@ -24,8 +23,6 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = myaddrUpdateScript;
-
-      EnvironmentFile = "/run/secrets/myaddr/env";
       DynamicUser = true;
       NoNewPrivileges = true;
       PrivateTmp = true;

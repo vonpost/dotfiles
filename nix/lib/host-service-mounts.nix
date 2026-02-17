@@ -5,6 +5,7 @@ let
   vmConfig = import ./vm-config.nix;
   svc = import ./vm-service-state.nix {inherit lib;};
   svcMap = import ./service-map.nix;
+  statefulServices = lib.filterAttrs (_svcName: service: service.managedState or true) svcMap;
   stageRoot = "/run/microvm-staging";
 in
 {
@@ -24,11 +25,13 @@ in
       ++ optional (service.hasCacheDir or false) "d ${svc.base}/${svc.cachePath}/${service.name} 0755 ${toString service.uid} ${toString service.uid} -"
       ++ optional (service.hasDownloadsDir or false) "d ${svc.downloadsRoot}/${service.name} 2770 ${toString service.uid} ${toString svc.downloadsGID} -"
       ++ optional (service.hasMediaDir or false) "d ${svc.mediaRoot}/${service.name} 2750 ${toString service.uid} ${toString svc.mediaGID} -"
-    ) svcMap);
+    ) statefulServices);
     systemd.mounts =
       flatten (mapAttrsToList (vm: vmCfg:
         let
           unit = "microvm@${vm}.service";
+          vmStateServices =
+            builtins.filter (service: service.managedState or true) (map (sn: svcMap.${sn}) vmCfg.serviceMounts);
 
           mkBindMount = mp: dev: {
             what = dev;
@@ -54,7 +57,7 @@ in
                 [ "${svc.libPath}/${service.name}" ]
                 ++ (lib.optional (service.hasCacheDir or false) "${svc.cachePath}/${service.name}")
               )
-            ) (map (sn: svcMap.${sn}) vmCfg.serviceMounts));
+            ) vmStateServices);
 
           sharedMounts =
             map (pth:
@@ -65,7 +68,7 @@ in
                 dev = "${svc.${pRoot}}";
               in mkBindMount mp dev
             ) (builtins.filter
-                (p: builtins.any (sm: (svcMap.${sm}."${p}Group" or false)) vmCfg.serviceMounts)
+                (p: builtins.any (service: (service."${p}Group" or false)) vmStateServices)
                 [ "downloads" "media" ]);
 
         in perServiceMounts ++ sharedMounts

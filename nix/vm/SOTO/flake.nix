@@ -31,8 +31,6 @@
               nixpkgs.overlays = [
                 rffmpeg-nix.overlays.default
               ];
-              microvm.credentialFiles = { jellyfin_transcode_ssh_key = "/run/secrets/ssh/jellyfin"; };
-              systemd.services.jellyfin.serviceConfig.LoadCredential="jellyfin_transcode_ssh_key";
               services.rffmpeg.enable = true;
               services.rffmpeg.hosts = [ "okami.lan" ];
 

@@ -19,28 +19,13 @@ in {
     settings = {
       AccountID = 1286842;
       EditionIDs = [ "GeoLite2-Country" ];
-      LicenseKey = { _secret = "/run/secrets/maxmind/license_key"; };
+      LicenseKey = { _secret = "/run/credentials/geoipupdate.service/maxmind_license_key"; };
       DatabaseDirectory = "/var/lib/geoipupdate";
     };
   };
 
   environment.systemPackages = with pkgs; [
       jellyfin-ffmpeg
-  ];
-
-  microvm.shares = [
-    {
-      proto = "virtiofs";
-      tag = "maxmind-license";
-      source = "/run/secrets/maxmind";
-      mountPoint = "/run/secrets/maxmind";
-    }
-    {
-      proto = "virtiofs";
-      tag = "myaddr";
-      source = "/run/secrets/myaddr";
-      mountPoint = "/run/secrets/myaddr";
-    }
   ];
 
   microvm.vcpu = 8;
