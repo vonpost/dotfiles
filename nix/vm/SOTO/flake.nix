@@ -6,10 +6,9 @@
     microvm.url = "github:microvm-nix/microvm.nix";
     microvm.inputs.nixpkgs.follows = "nixpkgs";
     bleeding.url = "github:NixOS/nixpkgs/master";
-    rffmpeg-nix.url = ../../rffmpeg-nix;
   };
 
-  outputs = { self, nixpkgs, microvm, bleeding, rffmpeg-nix, ... }:
+  outputs = { self, nixpkgs, microvm, bleeding, ... }:
     let
       system = "x86_64-linux";
       bleedingPkgs = import bleeding {
@@ -26,16 +25,7 @@
         };
         modules = [
           microvm.nixosModules.microvm
-          rffmpeg-nix.nixosModules.rffmpeg
-          {
-              nixpkgs.overlays = [
-                rffmpeg-nix.overlays.default
-              ];
-              services.rffmpeg.enable = true;
-              services.rffmpeg.hosts = [ "okami.lan" ];
-
-          }
-          ./configuration.nix
+          ../../config/infra/vms/SOTO.nix
         ];
       };
     };

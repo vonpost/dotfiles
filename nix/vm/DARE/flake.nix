@@ -16,7 +16,7 @@
         inherit system;
         modules = [
           microvm.nixosModules.microvm
-          ./configuration.nix
+          ../../config/infra/vms/DARE.nix
         ];
       };
     };

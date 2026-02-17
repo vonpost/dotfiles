@@ -35,7 +35,7 @@
         };
         modules = [
           microvm.nixosModules.microvm
-          ./configuration.nix
+          ../../config/infra/vms/OKAMI.nix
         ];
       };
     };

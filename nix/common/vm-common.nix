@@ -8,14 +8,16 @@
 }:
 { lib, config, ... }:
 let
-  netLib = import ../lib/network-topology.nix { inherit lib; };
-  svc = import ../lib/vm-service-state.nix {inherit lib;};
-  svcMap = import ../lib/service-map.nix;
-  vmConfig = import ../lib/vm-config.nix;
-  servicesForVm = map (serviceName: svcMap.${serviceName}) vmConfig.${hostname}.serviceMounts;
+  infra = config.my.infra;
+  svc = import ../lib/vm-service-state.nix { inherit lib; };
+  svcMap = import ../config/infra/service-map.nix;
+  vmConfig = import ../config/infra/vm-config.nix;
+  servicesForVm =
+    map (serviceName: svcMap.${serviceName}) vmConfig.${hostname}.serviceMounts;
   statefulServices = map
     (service: builtins.removeAttrs service [ "managedState" "secrets" ])
     (builtins.filter (service: service.managedState or true) servicesForVm);
+  hasStatefulServices = statefulServices != [ ];
 in
 {
   networking.hostName = hostname;
@@ -23,14 +25,32 @@ in
   time.timeZone = "Europe/Stockholm";
 
   imports = [
-    (netLib.mkGuest hostname)
+    ../lib/modules/infra
+    ../rffmpeg-nix/nixos-modules/rffmpeg.nix
+    ../config/infra/services
     (import ./share_journald.nix { isHost = isJournalHost; hostname=hostname; })
-    ../lib/microvm-shares.nix
-    (import ../lib/vm-service-secrets.nix { inherit hostname; })
-  ]
+  ] ++ lib.optional (builtins.elem "sabnzbd" vmConfig.${hostname}.serviceMounts) ./sabnzbd_config.nix
     ++ (svc.mkMany statefulServices);
+
+  nixpkgs.overlays = lib.mkBefore [
+    (final: prev: {
+      rffmpeg = prev.callPackage ../rffmpeg-nix/pkgs/rffmpeg.nix { };
+    })
+  ];
+
+  my.infra = {
+    networkGuest = {
+      enable = true;
+      name = hostname;
+    };
+    serviceSecrets = {
+      enable = true;
+      hostname = hostname;
+    };
+  };
+
   microvm.hypervisor = lib.mkDefault "qemu";
-  microvm.vsock.cid = netLib.vms.${hostname}.id;
+  microvm.vsock.cid = infra.topology.vms.${hostname}.id;
 
   microvm.shares = [
     {
@@ -39,7 +59,7 @@ in
       tag = "ro-store";
       proto = "virtiofs";
     }
-  ] ++ lib.optional (statefulServices != [ ]) (
+  ] ++ lib.optional hasStatefulServices (
     {
       proto = "virtiofs";
       tag = "state";

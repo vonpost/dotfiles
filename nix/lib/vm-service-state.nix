@@ -7,23 +7,10 @@ let
   cachePath = "./cache";
   downloadsPath = "./downloads";
   mediaPath = "./media";
-  # uids = {
-  #   prowlarr    = 2101;
-  #   radarr      = 2102;
-  #   sonarr      = 2103;
-  #   jellyfin    = 2104;
-  #   jellyseerr  = 2105;
-  #   sabnzbd     = 2106;
-  #   qbittorrent = 2107;
-  #   wolf = 2108;
-  #   llama-cpp = 2109;
-  #   dailyLlmJournal = 2110;
-  #   acme = 2111;
-  #   geoipupdate = 2112;
-  # };
 
-  downloadsGID= 3000;
-  mediaGID= 3001;
+  downloadsGID = 3000;
+  mediaGID = 3001;
+
   mkOne =
     { name
     , unit ? name
@@ -31,7 +18,7 @@ let
     , group ? user
     , uid ? uid
     , gid ? uid
-    , bindTarget ? name                   # explicit override
+    , bindTarget ? name
     , disableDynamicUser ? true
     , downloadsGroup ? false
     , mediaGroup ? false
@@ -46,7 +33,7 @@ let
         uid = lib.mkForce uid;
         group = lib.mkForce group;
         isSystemUser = lib.mkDefault true;
-        extraGroups = (lib.optional downloadsGroup "downloads") ++ (lib.optional mediaGroup "media") ;
+        extraGroups = (lib.optional downloadsGroup "downloads") ++ (lib.optional mediaGroup "media");
       };
 
       users.groups.downloads = lib.mkIf downloadsGroup {
@@ -100,8 +87,8 @@ let
     };
 
   mkMany = svcs: map (s: mkOne s) svcs;
-
-in {
+in
+{
   inherit
     mkOne
     mkMany
@@ -112,13 +99,6 @@ in {
     mediaPath
     downloadsRoot
     mediaRoot
-    # uids
-    # base
-    # cacheBase
-    # mediaRoot
-    # hasDownloadsDir
-    # hasMediaDir
     downloadsGID
-    mediaGID
-    ;
+    mediaGID;
 }

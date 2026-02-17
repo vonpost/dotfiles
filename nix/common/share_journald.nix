@@ -1,7 +1,7 @@
-{ isHost ? false, hostname}:
+{ isHost ? false, hostname }:
+{ config, ... }:
 let
-  addr = import ../lib/lan-address.nix;
-  mid=addr.${hostname}.machineId;
+  mid = config.my.infra.vmServiceMounts.${hostname}.machineId;
   mountPath = if isHost then "" else "/${mid}";
 in
 {

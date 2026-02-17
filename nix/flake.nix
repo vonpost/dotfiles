@@ -67,7 +67,6 @@
           microvm.nixosModules.host
 
           ./MOTHER/configuration.nix
-          ./lib/host-state-map.nix
 
           {
             networking.hostName = "MOTHER";

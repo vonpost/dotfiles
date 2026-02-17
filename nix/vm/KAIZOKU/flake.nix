@@ -23,7 +23,7 @@
         };
         modules = [
           microvm.nixosModules.microvm
-          ./configuration.nix
+          ../../config/infra/vms/KAIZOKU.nix
         ];
       };
     };

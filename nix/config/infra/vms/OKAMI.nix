@@ -1,7 +1,5 @@
 { self, config, pkgs, lib, microvm, bleeding, ... }:
 let
-  svc = import ../../lib/vm-service-state.nix { inherit lib; };
-
   hostname = "OKAMI";
 
   docker = "${pkgs.docker}/bin/docker";
@@ -68,7 +66,7 @@ let
   curlbin   = "${pkgs.curl}/bin/curl";
 
   nvidiaDriverVol = "nvidia-driver-vol";
-  wolf-native = import ../../common/wolf.nix {inherit pkgs config lib;};
+  wolf-native = import ../../../common/wolf.nix {inherit pkgs config lib;};
 
 in
 {
@@ -160,8 +158,8 @@ in
   };
 
   imports = [
-    ../../lib/daily-llm-journal.nix
-    (import ../../common/vm-common.nix { hostname = hostname; isJournalHost = true; })
+    ../../../lib/daily-llm-journal.nix
+    (import ../../../common/vm-common.nix { hostname = hostname; isJournalHost = true; })
   ];
 
   ## ─────────────────────────────────────────────
