@@ -38,17 +38,5 @@ in
       services.jellyseerr.enable = true;
       users.users.jellyseerr.extraGroups = [ "media" ];
     })
-
-    (lib.mkIf (svc.hasService "geoipupdate") {
-      services.geoipupdate = {
-        enable = true;
-        settings = {
-          AccountID = 1286842;
-          EditionIDs = [ "GeoLite2-Country" ];
-          LicenseKey = { _secret = "/run/credentials/geoipupdate.service/maxmind_license_key"; };
-          DatabaseDirectory = "/var/lib/geoipupdate";
-        };
-      };
-    })
   ];
 }

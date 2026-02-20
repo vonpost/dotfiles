@@ -61,6 +61,7 @@
     "llama-cpp" = { name = "llama-cpp"; uid = 2109; };
     dailyLlmJournal = { name = "dailyLlmJournal"; uid = 2110; };
     acme = { name = "acme"; uid = 2111; unit = "acme-setup"; };
+    nginx = { name = "nginx";  managedState = false; };
     geoipupdate = {
       name = "geoipupdate";
       uid = 2112;

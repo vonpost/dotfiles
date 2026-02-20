@@ -4,9 +4,10 @@
     ./jelly-media.nix
     ./arr.nix
     ./downloads.nix
-
-    ../../../common/nginx.nix
-    ../../../common/myaddr.nix
-    ../../../common/recyclarr.nix
+    ./nginx.nix
+    ./myaddr.nix
+    ./recyclarr.nix
+    ./acme.nix
+    ./geoip.nix
   ];
 }

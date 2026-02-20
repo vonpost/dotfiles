@@ -1,7 +1,7 @@
 {
   SOTO = {
     machineId = "056de0236c6346f795b053689ca0468f";
-    serviceMounts = [ "jellyfin" "jellyseerr" "acme" "geoipupdate" "myaddr" ];
+    serviceMounts = [ "jellyfin" "jellyseerr" "acme" "geoipupdate" "nginx" "myaddr" ];
   };
   OKAMI = {
     machineId = "72a6254779a04b32976185f178e50ea0";
