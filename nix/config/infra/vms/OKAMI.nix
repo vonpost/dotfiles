@@ -1,6 +1,10 @@
 { self, config, pkgs, lib, microvm, bleeding, ... }:
 let
   hostname = "OKAMI";
+  topology = config.my.infra.topology;
+  sotoVm = topology.vms.SOTO;
+  sotoPrimaryVlan = lib.head sotoVm.assignedVlans;
+  sotoIp = "10.10.${toString topology.vlans.${sotoPrimaryVlan}.id}.${toString sotoVm.id}";
 
   docker = "${pkgs.docker}/bin/docker";
   wolfImage = "ghcr.io/games-on-whales/wolf:stable";
@@ -64,6 +68,127 @@ let
     };
   };
   curlbin   = "${pkgs.curl}/bin/curl";
+  limitedWrapper = pkgs.writeTextFile {
+    name = "limited-wrapper.py";
+    executable = true;
+    destination = "/bin/limited-wrapper.py";
+    text = ''
+      #!${pkgs.python3}/bin/python3
+      """Nix adaptation of rffmpeg hardening/limited-wrapper.py."""
+
+      import logging
+      import logging.handlers
+      import os
+      import shlex
+      import shutil
+      import sys
+      from typing import List, Optional
+
+
+      ALLOWED_BY_NAME = {
+          "ffmpeg": "${pkgs.jellyfin-ffmpeg}/bin/ffmpeg",
+          "ffprobe": "${pkgs.jellyfin-ffmpeg}/bin/ffprobe",
+      }
+      ALLOWED: List[str] = list(ALLOWED_BY_NAME.values())
+      LOG_ALLOWED = os.environ.get("RFFMPEG_WRAPPER_LOG_ALLOWED", "0") == "1"
+      LOG_DEBUG = os.environ.get("RFFMPEG_WRAPPER_DEBUG", "0") == "1"
+
+
+      def setup_logger() -> logging.Logger:
+          logger = logging.getLogger("limited-wrapper")
+          logger.setLevel(logging.DEBUG)
+          logger.handlers.clear()
+
+          if sys.stdout.isatty():
+              console = logging.StreamHandler(sys.stdout)
+              console.setLevel(logging.WARNING)
+              console.setFormatter(logging.Formatter("%(message)s"))
+              logger.addHandler(console)
+          else:
+              try:
+                  syslog = logging.handlers.SysLogHandler(address="/dev/log")
+              except OSError:
+                  syslog = logging.handlers.SysLogHandler(address=("localhost", 514))
+              syslog.setLevel(logging.DEBUG)
+              syslog.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+              logger.addHandler(syslog)
+          return logger
+
+
+      log = setup_logger()
+
+
+      def log_msg(level: str, *msg: str) -> None:
+          text = " ".join(msg)
+          level = level.upper()
+          full = f"{level} {text}"
+          if level == "DEBUG":
+              log.debug(full)
+          elif level == "INFO":
+              log.info(full)
+          elif level in ("WARN", "WARNING"):
+              log.warning(full)
+          else:
+              log.error(full)
+
+
+      def resolve_binary(cmd: str) -> Optional[str]:
+          # For plain command names, bypass PATH lookup and pin directly.
+          if "/" not in cmd and cmd in ALLOWED_BY_NAME:
+              return ALLOWED_BY_NAME[cmd]
+          if "/" in cmd:
+              path = cmd
+          else:
+              path = shutil.which(cmd)
+          if not path:
+              return None
+          return os.path.realpath(path)
+
+
+      def main() -> None:
+          req_cmd = os.environ.get("SSH_ORIGINAL_COMMAND", "").strip()
+          if not req_cmd:
+              # SSH control sockets can open commandless sessions.
+              sys.exit(0)
+
+          try:
+              args = shlex.split(req_cmd, posix=True)
+          except ValueError as exc:
+              log_msg("ERROR", f"Parse failed: {exc}")
+              print("ERROR: could not parse command.")
+              sys.exit(126)
+
+          if not args:
+              log_msg("ERROR", "Empty command after parsing.")
+              print("ERROR: empty command.")
+              sys.exit(126)
+
+          bin_path = resolve_binary(args[0])
+          if not bin_path:
+              log_msg("WARN", f"Command not found: {args[0]}")
+              print("ERROR: command not allowed.")
+              sys.exit(126)
+
+          if LOG_DEBUG:
+              log_msg("DEBUG", f"Resolved command {args[0]} -> {bin_path}")
+
+          if bin_path in ALLOWED:
+              if LOG_ALLOWED:
+                  log_msg("INFO", f"Allow {req_cmd}")
+              args[0] = bin_path
+              os.execv(bin_path, args)
+              log_msg("ERROR", f"Exec failed: {req_cmd}")
+              sys.exit(126)
+
+          log_msg("WARN", f"Deny {req_cmd}")
+          print("ERROR: command not allowed.")
+          sys.exit(126)
+
+
+      if __name__ == "__main__":
+          main()
+    '';
+  };
 
   nvidiaDriverVol = "nvidia-driver-vol";
   wolf-native = import ../../../common/wolf.nix {inherit pkgs config lib;};
@@ -407,7 +532,20 @@ in
     #wolf-native
   ];
 
-  users.users.jellyfin.openssh.authorizedKeys.keys = [ "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAzH2Gt2Xs7mNeSpqNCJy2lwT19XC3OiSBNWBHK6zrzF dcol@TERRA" ];
+  services.openssh.extraConfig = lib.mkAfter ''
+    Match User jellyfin
+      ForceCommand ${limitedWrapper}/bin/limited-wrapper.py
+      PermitTTY yes
+      X11Forwarding no
+      AllowAgentForwarding no
+      AllowTcpForwarding no
+      AllowStreamLocalForwarding no
+      PermitTunnel no
+      PermitUserRC no
+      GatewayPorts no
+  '';
+
+  users.users.jellyfin.openssh.authorizedKeys.keys = [ "from=\"${sotoIp}\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAzH2Gt2Xs7mNeSpqNCJy2lwT19XC3OiSBNWBHK6zrzF dcol@TERRA" ];
   users.users.jellyfin.isSystemUser = lib.mkForce false;
   users.users.jellyfin.isNormalUser = lib.mkForce true;
 
