@@ -1,4 +1,4 @@
-{ self, config, pkgs, lib, microvm, bleeding, ... }:
+{ self, config, pkgs, lib, microvm, bleeding, wolf, ... }:
 let
   hostname = "OKAMI";
   topology = config.my.infra.topology;
@@ -191,11 +191,12 @@ let
   };
 
   nvidiaDriverVol = "nvidia-driver-vol";
-  wolf-native = import ../../../common/wolf.nix {inherit pkgs config lib;};
+  # wolf-native = import ../../../common/wolf.nix {inherit pkgs config lib;};
 
 in
 {
   # systemd.services.wolf-dev.serviceConfig.ExecStart = "${wolf-native}/bin/wolf";
+  services.wolf.enable = true;
   systemd.services.docker-build-nvidia-driver-image = {
     description = "Build Gow Nvidia driver bundle image (Wolf manual method)";
     wantedBy = [ "multi-user.target" ];
@@ -417,72 +418,72 @@ in
     };
   };
 
-  systemd.services.wolf = {
-    description = "Games on Whales – Wolf";
-    wantedBy = [ "multi-user.target" ];
-    after = [
-      "network-online.target"
-      "docker.service"
-      "docker-populate-nvidia-driver-volume.service"
-      "docker-load-wolf-desktop.service"
-      "nvidia-smi.service"
-    ];
-    requires = [
-      "docker.service"
-      "docker-populate-nvidia-driver-volume.service"
-      "docker-load-wolf-desktop.service"
-    ];
-    wants = [ "network-online.target" "nvidia-smi.service" ];
+  # systemd.services.wolf = {
+  #   description = "Games on Whales – Wolf";
+  #   wantedBy = [ "multi-user.target" ];
+  #   after = [
+  #     "network-online.target"
+  #     "docker.service"
+  #     "docker-populate-nvidia-driver-volume.service"
+  #     "docker-load-wolf-desktop.service"
+  #     "nvidia-smi.service"
+  #   ];
+  #   requires = [
+  #     "docker.service"
+  #     "docker-populate-nvidia-driver-volume.service"
+  #     "docker-load-wolf-desktop.service"
+  #   ];
+  #   wants = [ "network-online.target" "nvidia-smi.service" ];
 
-    serviceConfig = {
-      Restart = "always";
-      RestartSec = 5;
+  #   serviceConfig = {
+  #     Restart = "always";
+  #     RestartSec = 5;
 
-      ExecStartPre = [
-        "${docker} pull ${wolfImage}"
-        "-${docker} rm -f wolf"
-        # This is needed to ensure nvidia-caps is loaded when mounting
-      ];
+  #     ExecStartPre = [
+  #       "${docker} pull ${wolfImage}"
+  #       "-${docker} rm -f wolf"
+  #       # This is needed to ensure nvidia-caps is loaded when mounting
+  #     ];
 
-      ExecStart = lib.concatStringsSep " " [
-        docker "run"
-        "--name" "wolf"
-        "--rm"
-        "--network=host"
-        # Wolf manual method: driver bundle volume
-        "-e" "NVIDIA_DRIVER_VOLUME_NAME=${nvidiaDriverVol}"
-        "-e" "WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock"
-        "-v" "/var/run/wolf:/var/run/wolf"
-
-
-        "-v" "${nvidiaDriverVol}:/usr/nvidia:rw"
-
-        "-v" "/var/lib/wolf:/etc/wolf:rw"
-
-        "-v" "/var/run/docker.sock:/var/run/docker.sock:rw"
+  #     ExecStart = lib.concatStringsSep " " [
+  #       docker "run"
+  #       "--name" "wolf"
+  #       "--rm"
+  #       "--network=host"
+  #       # Wolf manual method: driver bundle volume
+  #       "-e" "NVIDIA_DRIVER_VOLUME_NAME=${nvidiaDriverVol}"
+  #       "-e" "WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock"
+  #       "-v" "/var/run/wolf:/var/run/wolf"
 
 
-        # Devices (per Wolf docs)
-        "--device" "/dev/nvidia-uvm"
-        "--device" "/dev/nvidia-uvm-tools"
-        "--device" "/dev/nvidia-caps/nvidia-cap1"
-        "--device" "/dev/nvidia-caps/nvidia-cap2"
-        "--device" "/dev/nvidiactl"
-        "--device" "/dev/nvidia0"
-        "--device" "/dev/nvidia-modeset"
-        "--device" "/dev/dri/"
-        "--device" "/dev/uinput"
-        "--device" "/dev/uhid"
-        "--device-cgroup-rule" ''"c 13:* rmw"''
-        "-v" "/dev:/dev:rw"
-        "-v" "/run/udev:/run/udev:rw"
+  #       "-v" "${nvidiaDriverVol}:/usr/nvidia:rw"
 
-        wolfImage
-      ];
+  #       "-v" "/var/lib/wolf:/etc/wolf:rw"
 
-      ExecStop = "-${docker} rm -f wolf";
-    };
-  };
+  #       "-v" "/var/run/docker.sock:/var/run/docker.sock:rw"
+
+
+  #       # Devices (per Wolf docs)
+  #       "--device" "/dev/nvidia-uvm"
+  #       "--device" "/dev/nvidia-uvm-tools"
+  #       "--device" "/dev/nvidia-caps/nvidia-cap1"
+  #       "--device" "/dev/nvidia-caps/nvidia-cap2"
+  #       "--device" "/dev/nvidiactl"
+  #       "--device" "/dev/nvidia0"
+  #       "--device" "/dev/nvidia-modeset"
+  #       "--device" "/dev/dri/"
+  #       "--device" "/dev/uinput"
+  #       "--device" "/dev/uhid"
+  #       "--device-cgroup-rule" ''"c 13:* rmw"''
+  #       "-v" "/dev:/dev:rw"
+  #       "-v" "/run/udev:/run/udev:rw"
+
+  #       wolfImage
+  #     ];
+
+  #     ExecStop = "-${docker} rm -f wolf";
+  #   };
+  # };
 
   systemd.services.wolf-den = {
     description = "Games on Whales – Wolf Den";
