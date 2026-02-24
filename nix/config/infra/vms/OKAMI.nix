@@ -303,7 +303,7 @@ in
   microvm.volumes = [
     {
       mountPoint = "/var/lib/docker";
-      image = "/images/microvm/${hostname}-docker_v2.img";
+      image = "/images/microvm/${hostname}-docker.img";
       size = 40 * 1024; # MiB
       fsType = "ext4";
       autoCreate = true;
