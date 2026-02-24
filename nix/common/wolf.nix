@@ -159,6 +159,7 @@ in
 pkgs.stdenv.mkDerivation (finalAttrs: rec {
   pname = "wolf";
   version = "1.0-${wolfRev}";
+  runtimeLibraryPath = lib.makeLibraryPath ([ pkgs.stdenv.cc.cc ] ++ buildInputs);
 
   src = pkgs.fetchFromGitHub {
     owner = "games-on-whales";
@@ -181,10 +182,14 @@ pkgs.stdenv.mkDerivation (finalAttrs: rec {
     openssl
     boost
     icu
+    glib
     libevdev
     systemd
     range-v3
     libpulseaudio
+    zlib
+    zstd
+    libglvnd
     ffmpeg_6-full
     libva
     libdrm
@@ -203,6 +208,7 @@ pkgs.stdenv.mkDerivation (finalAttrs: rec {
     wayland-protocols
     libxkbcommon
   ];
+  enableParallelBuilding = true;
   runtimeInputs = [ fake-udev ];
 
   # Don’t patch out FetchContent.
@@ -232,7 +238,7 @@ pkgs.stdenv.mkDerivation (finalAttrs: rec {
     "-DFETCHCONTENT_SOURCE_DIR_NANORS=${deps.nanors}"
     "-DFETCHCONTENT_SOURCE_DIR_PEGLIB=${deps.peglib}"
     "-DFETCHCONTENT_SOURCE_DIR_CPPTRACE=${deps.cpptrace}"
-   "-DFETCHCONTENT_SOURCE_DIR_LIBDWARF=${deps.libdwarf_lite}"
+    "-DFETCHCONTENT_SOURCE_DIR_LIBDWARF=${deps.libdwarf_lite}"
     "-DFETCHCONTENT_SOURCE_DIR_SIMPLEWEBSERVER=${deps.simplewebserver}"
     "-DFETCHCONTENT_SOURCE_DIR_REFLECT-CPP=${deps.reflect_cpp}"
     "-DFETCHCONTENT_SOURCE_DIR_TOMLPLUSPLUS=${deps.tomlplusplus}"
@@ -257,13 +263,40 @@ pkgs.stdenv.mkDerivation (finalAttrs: rec {
     fi
   '';
 
-postInstall = ''
-  mkdir -p $out/lib
-  find "${src.name}" -maxdepth 5 -type f -name "libwolf_*.so*" -exec cp -v {} $out/lib/ \; || true
-'';
-postFixup = ''
-  patchelf --set-rpath "$out/lib" "$out/bin/wolf" || true
-'';
+  postInstall = ''
+    mkdir -p $out/lib
+    # Wolf's CMake files don't install all runtime .so files; copy build-produced ones.
+    find . \( -type f -o -type l \) -name '*.so*' | while IFS= read -r so; do
+      cp -av "$so" "$out/lib/"
+    done
+  '';
+  preFixup = ''
+    fix_rpath() {
+      local elf="$1"
+      if patchelf --print-rpath "$elf" >/dev/null 2>&1; then
+        patchelf --set-rpath "$out/lib:${runtimeLibraryPath}" "$elf"
+      fi
+    }
+
+    [ -d "$out/bin" ] && find "$out/bin" -type f | while IFS= read -r f; do
+      fix_rpath "$f"
+    done
+    [ -d "$out/lib" ] && find "$out/lib" -type f | while IFS= read -r f; do
+      fix_rpath "$f"
+    done
+  '';
+  postFixup = ''
+    fix_rpath_post() {
+      local elf="$1"
+      if patchelf --print-rpath "$elf" >/dev/null 2>&1; then
+        patchelf --set-rpath "$out/lib:${runtimeLibraryPath}" "$elf"
+      fi
+    }
+
+    [ -d "$out/bin" ] && find "$out/bin" -type f | while IFS= read -r f; do
+      fix_rpath_post "$f"
+    done
+  '';
 
   # buildPhase = "ninja wolf";
   # installPhase = ''
