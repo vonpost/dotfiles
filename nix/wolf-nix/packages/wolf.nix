@@ -1,9 +1,15 @@
-{ lib, pkgs, ...}:
+{ lib, pkgs, maxBuildJobs ? 6, ...}:
 with lib;
 let
+  buildJobs = max 1 maxBuildJobs;
+
   # Your target Wolf commit
   wolfRev = "ea4a75d59deb9171dde3d21d6beb2785cb69585";
   wolfHash = "sha256-KgBkxL7mIs8TBL3hbkq8tMFRgfo1dDcequ1AE6I2UKQ=";
+  interpipeRev = "953db14b1fb97ac1865b95222a2688717a88867d";
+  interpipeHash = "sha256-R6M2hH9kzMxPyaEqaWLYfLqlS00aRNhGM8mFj5oBZpI=";
+  waylandDisplayRev = "328fbf66c23cdafe5053f0803267e75aef9f7841";
+  waylandDisplayHash = "sha256-59gObVHuCsoUlRjVh56je9O5vIgyMVuOuA8YYIUMUW8=";
 
   # Copying the “deps as sources” idea from the dev-nix flake.
   # These hashes come from that branch’s flake.nix, so they should be correct
@@ -40,10 +46,108 @@ let
     cat CMakeLists.txt >> newCMake
     mv newCMake CMakeLists.txt
     '';
-    buildPhase = "ninja fake-udev";
+    buildPhase = "ninja -j${toString buildJobs} fake-udev";
     installPhase = ''
       mkdir -p $out/bin
       cp ./fake-udev $out/bin/fake-udev
+    '';
+  };
+
+  gst-interpipe = pkgs.stdenv.mkDerivation rec {
+    pname = "gst-interpipe";
+    version = "1.1.10-gow-${builtins.substring 0 7 interpipeRev}";
+
+    src = pkgs.fetchFromGitHub {
+      owner = "games-on-whales";
+      repo = "gst-interpipe";
+      rev = interpipeRev;
+      hash = interpipeHash;
+    };
+
+    nativeBuildInputs = with pkgs; [
+      meson
+      ninja
+      pkg-config
+    ];
+
+    buildInputs = with pkgs; [
+      glib
+      gst_all_1.gstreamer
+      gst_all_1.gst-plugins-base
+    ];
+
+    mesonFlags = [
+      "-Dtests=disabled"
+      "-Denable-gtk-doc=false"
+    ];
+  };
+
+  gst-wayland-display = pkgs.rustPlatform.buildRustPackage rec {
+    pname = "gst-wayland-display";
+    version = "0.4.0-${builtins.substring 0 7 waylandDisplayRev}";
+
+    src = pkgs.fetchFromGitHub {
+      owner = "games-on-whales";
+      repo = "gst-wayland-display";
+      rev = waylandDisplayRev;
+      hash = waylandDisplayHash;
+    };
+
+    cargoLock = {
+      lockFile = "${src}/Cargo.lock";
+      allowBuiltinFetchGit = true;
+    };
+
+    postPatch = ''
+      # Upstream's `cuda` feature currently does not enable the matching core feature.
+      substituteInPlace gst-plugin-wayland-display/Cargo.toml \
+        --replace-fail 'cuda = []' 'cuda = ["wayland-display-core/cuda"]'
+    '';
+
+    nativeBuildInputs = with pkgs; [
+      pkg-config
+      wayland-scanner
+      rustPlatform.bindgenHook
+    ];
+
+    buildInputs = with pkgs; [
+      glib
+      gst_all_1.gstreamer
+      gst_all_1.gst-plugins-base
+      gst_all_1.gst-plugins-bad
+      wayland
+      wayland-protocols
+      libdrm
+      libgbm
+      libinput
+      libxkbcommon
+      libglvnd
+      udev
+    ];
+
+    cargoBuildFlags = [
+      "-p"
+      "gst-plugin-wayland-display"
+      "--features"
+      "cuda"
+    ];
+
+    CARGO_BUILD_JOBS = toString buildJobs;
+    doCheck = false;
+
+    installPhase = ''
+      runHook preInstall
+      mkdir -p $out/lib/gstreamer-1.0
+      plugin_so="$(find target -type f -name 'libgstwaylanddisplaysrc.so' | head -n1)"
+      if [ -z "$plugin_so" ]; then
+        echo "ERROR: libgstwaylanddisplaysrc.so not found in target/"
+        find target -maxdepth 4 -type f -name '*.so*' -print || true
+        exit 1
+      fi
+      cp -v "$plugin_so" $out/lib/gstreamer-1.0/
+      # Keep compatibility in case extra wayland-display shared libs are emitted.
+      find target -type f -name 'lib*waylanddisplay*.so*' -exec cp -v {} $out/lib/ \; || true
+      runHook postInstall
     '';
   };
   deps = with pkgs; {
@@ -203,12 +307,24 @@ pkgs.stdenv.mkDerivation (finalAttrs: rec {
     gst_all_1.gst-plugins-good
     gst_all_1.gst-plugins-bad
     gst_all_1.gst-plugins-ugly
+    gst-interpipe
+    gst-wayland-display
 
     wayland
     wayland-protocols
     libxkbcommon
   ];
-  enableParallelBuilding = true;
+  buildPhase = ''
+    runHook preBuild
+    TERM=dumb ninja -j${toString buildJobs}
+    runHook postBuild
+  '';
+
+  installPhase = ''
+    runHook preInstall
+    TERM=dumb ninja -j${toString buildJobs} install
+    runHook postInstall
+  '';
   runtimeInputs = [ fake-udev ];
 
   # Don’t patch out FetchContent.
@@ -256,6 +372,19 @@ pkgs.stdenv.mkDerivation (finalAttrs: rec {
 
   ];
   postPatch = ''
+    serialCfg="src/moonlight-server/state/serialised_config.hpp"
+    if ! grep -q '#include <unistd.h>' "$serialCfg"; then
+      sed -i '/#include <rfl.hpp>/a #include <unistd.h>' "$serialCfg"
+    fi
+    substituteInPlace "$serialCfg" \
+      --replace-fail 'uint run_uid = 1000;' 'uint run_uid = static_cast<uint>(::getuid());' \
+      --replace-fail 'uint run_gid = 1000;' 'uint run_gid = static_cast<uint>(::getgid());'
+
+    # Upstream typo: UpdateClientSettings uses run_gid for both run_uid and run_gid.
+    # This breaks explicit UID settings via API/UI.
+    substituteInPlace src/moonlight-server/api/endpoints.cpp \
+      --replace-fail '.run_uid = new_settings.run_gid.value_or(current_settings.run_uid),' '.run_uid = new_settings.run_uid.value_or(current_settings.run_uid),'
+
     # 2) Ensure the wolf executable gets installed
     cmakeFile="src/moonlight-server/CMakeLists.txt"
     if ! grep -q "install(TARGETS wolf" "$cmakeFile"; then
@@ -264,7 +393,17 @@ pkgs.stdenv.mkDerivation (finalAttrs: rec {
   '';
 
   postInstall = ''
+    cp -v ${fake-udev}/bin/fake-udev $out/bin/fake-udev
     mkdir -p $out/lib
+    mkdir -p $out/lib/gstreamer-1.0
+    # Do not preserve source directory permissions from /nix/store (often 0555), or
+    # $out/lib/gstreamer-1.0 can become read-only before later copy steps.
+    find ${gst-interpipe}/lib/gstreamer-1.0 -mindepth 1 -maxdepth 1 \
+      -exec cp -dv --no-preserve=mode,ownership {} $out/lib/gstreamer-1.0/ \;
+    find ${gst-wayland-display}/lib/gstreamer-1.0 -mindepth 1 -maxdepth 1 \
+      -exec cp -dv --no-preserve=mode,ownership {} $out/lib/gstreamer-1.0/ \;
+    find ${gst-wayland-display}/lib -maxdepth 1 -type f -name '*.so*' \
+      -exec cp -v --no-preserve=mode,ownership {} $out/lib/ \; || true
     # Wolf's CMake files don't install all runtime .so files; copy build-produced ones.
     find . \( -type f -o -type l \) -name '*.so*' | while IFS= read -r so; do
       cp -av "$so" "$out/lib/"

@@ -7,66 +7,6 @@ let
   sotoIp = "10.10.${toString topology.vlans.${sotoPrimaryVlan}.id}.${toString sotoVm.id}";
 
   docker = "${pkgs.docker}/bin/docker";
-  wolfImage = "ghcr.io/games-on-whales/wolf:stable";
-
-  sessionUser = "steam";
-  sessionUID  = 1000;
-  sessionGID  = 1000;
-  sessionHome = "/home/${sessionUser}";
-  wolfStateRoot = "/var/lib/wolf";
-  wolfHomesRoot = "${wolfStateRoot}/home";
-  wolfGamesRoot = "${wolfStateRoot}/games";
-
-  desktopEntrypoint = pkgs.writeShellScript "wolf-desktop-entrypoint" ''
-    set -euo pipefail
-
-    export HOME="${sessionHome}"
-    export USER="${sessionUser}"
-    export LOGNAME="${sessionUser}"
-    export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -u)}"
-    mkdir -p "$XDG_RUNTIME_DIR"
-    chmod 700 "$XDG_RUNTIME_DIR"
-
-    mkdir -p "$HOME/.local/share" "$HOME/.config"
-
-    # Redirect Steam game storage to /games (persisted, excluded from backups)
-    if [ -d /games ]; then
-    mkdir -p "$HOME/.local/share/Steam"
-    if [ ! -e "$HOME/.local/share/Steam/steamapps" ]; then
-    ln -s /games "$HOME/.local/share/Steam/steamapps"
-    fi
-    fi
-
-    exec ${pkgs.dbus}/bin/dbus-run-session -- ${pkgs.fvwm}/bin/fvwm
-  '';
-
-  wolfDesktopImage = pkgs.dockerTools.buildImage {
-    name = "local/wolf-desktop";
-    tag  = "nix";
-
-    copyToRoot = pkgs.buildEnv {
-      name = "wolf-desktop-root";
-      paths = [
-        pkgs.bashInteractive
-        pkgs.coreutils
-        pkgs.dbus
-        pkgs.fvwm
-        pkgs.emacs
-        pkgs.xterm
-        pkgs.git
-        pkgs.which
-        pkgs.fontconfig
-        pkgs.dejavu_fonts
-      ];
-      pathsToLink = [ "/bin" "/etc" "/lib" "/lib64" "/share" ];
-    };
-
-    config = {
-      Entrypoint = [ "${desktopEntrypoint}" ];
-      Env = [ "LANG=C.UTF-8" "LC_ALL=C.UTF-8" ];
-      WorkingDir = "/tmp";
-    };
-  };
   curlbin   = "${pkgs.curl}/bin/curl";
   limitedWrapper = pkgs.writeTextFile {
     name = "limited-wrapper.py";
@@ -197,6 +137,9 @@ in
 {
   # systemd.services.wolf-dev.serviceConfig.ExecStart = "${wolf-native}/bin/wolf";
   services.wolf.enable = true;
+  services.wolf.extraEnvironment = {
+    NVIDIA_DRIVER_VOLUME_NAME = nvidiaDriverVol;
+  };
   systemd.services.docker-build-nvidia-driver-image = {
     description = "Build Gow Nvidia driver bundle image (Wolf manual method)";
     wantedBy = [ "multi-user.target" ];
@@ -312,39 +255,6 @@ in
   ];
 
   ## ─────────────────────────────────────────────
-  ## Users & persistent layout
-  ## ─────────────────────────────────────────────
-
-  users.users.${sessionUser} = {
-    uid = sessionUID;
-    isNormalUser = true;
-    home = sessionHome;
-    createHome = false;
-    group = sessionUser;
-  };
-  users.groups.${sessionUser}.gid = sessionGID;
-
-  systemd.tmpfiles.rules = [
-    "d ${wolfStateRoot} 0755 wolf wolf -"
-    "d ${wolfHomesRoot} 0755 root root -"
-    "d ${wolfGamesRoot} 0755 root root -"
-    "d ${wolfHomesRoot}/${sessionUser} 0700 ${sessionUser} ${sessionUser} -"
-    "d ${wolfGamesRoot}/${sessionUser} 0750 ${sessionUser} ${sessionUser} -"
-  ];
-
-  fileSystems."${sessionHome}" = {
-    device = "${wolfHomesRoot}/${sessionUser}";
-    fsType = "none";
-    options = [ "bind" ];
-  };
-
-  fileSystems."/games" = {
-    device = "${wolfGamesRoot}/${sessionUser}";
-    fsType = "none";
-    options = [ "bind" ];
-  };
-
-  ## ─────────────────────────────────────────────
   ## NVIDIA (guest owns GPU via VFIO)
   ## ─────────────────────────────────────────────
 
@@ -382,6 +292,16 @@ in
   # svc.mkOne forces wolf.service to run as user 'wolf', so grant docker socket access
   users.users.wolf.extraGroups = [ "docker" ];
   systemd.services.wolf.serviceConfig.SupplementaryGroups = [ "docker" ];
+  systemd.services.wolf = {
+    after = [
+      "docker-populate-nvidia-driver-volume.service"
+      "nvidia-smi.service"
+    ];
+    requires = [
+      "docker-populate-nvidia-driver-volume.service"
+    ];
+    wants = [ "nvidia-smi.service" ];
+  };
 
   # Optional: useful for debugging only (gives you nvidia-container-cli), not required by Wolf method
   # environment.systemPackages = [ pkgs.nvidia-container-toolkit ];
@@ -390,22 +310,7 @@ in
   ## Wolf config
   ## ─────────────────────────────────────────────
 
-  environment.etc."wolf/config.toml".text = ''
-    # Add your [[apps]] here.
-    # Image tag for your desktop:
-    #   local/wolf-desktop:nix
-  '';
-
-  systemd.services.docker-load-wolf-desktop = {
-    description = "Load Nix-built Wolf desktop image";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "docker.service" ];
-    requires = [ "docker.service" ];
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${docker} load -i ${wolfDesktopImage}";
-    };
-  };
+  environment.etc."wolf/config.toml".text = "";
 
   # Added to run nvidia-smi before running wolf to populate the required caps etc.
   systemd.services.nvidia-smi = {
@@ -417,73 +322,6 @@ in
       ExecStart = "${config.hardware.nvidia.package.bin}/bin/nvidia-smi";
     };
   };
-
-  # systemd.services.wolf = {
-  #   description = "Games on Whales – Wolf";
-  #   wantedBy = [ "multi-user.target" ];
-  #   after = [
-  #     "network-online.target"
-  #     "docker.service"
-  #     "docker-populate-nvidia-driver-volume.service"
-  #     "docker-load-wolf-desktop.service"
-  #     "nvidia-smi.service"
-  #   ];
-  #   requires = [
-  #     "docker.service"
-  #     "docker-populate-nvidia-driver-volume.service"
-  #     "docker-load-wolf-desktop.service"
-  #   ];
-  #   wants = [ "network-online.target" "nvidia-smi.service" ];
-
-  #   serviceConfig = {
-  #     Restart = "always";
-  #     RestartSec = 5;
-
-  #     ExecStartPre = [
-  #       "${docker} pull ${wolfImage}"
-  #       "-${docker} rm -f wolf"
-  #       # This is needed to ensure nvidia-caps is loaded when mounting
-  #     ];
-
-  #     ExecStart = lib.concatStringsSep " " [
-  #       docker "run"
-  #       "--name" "wolf"
-  #       "--rm"
-  #       "--network=host"
-  #       # Wolf manual method: driver bundle volume
-  #       "-e" "NVIDIA_DRIVER_VOLUME_NAME=${nvidiaDriverVol}"
-  #       "-e" "WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock"
-  #       "-v" "/var/run/wolf:/var/run/wolf"
-
-
-  #       "-v" "${nvidiaDriverVol}:/usr/nvidia:rw"
-
-  #       "-v" "/var/lib/wolf:/etc/wolf:rw"
-
-  #       "-v" "/var/run/docker.sock:/var/run/docker.sock:rw"
-
-
-  #       # Devices (per Wolf docs)
-  #       "--device" "/dev/nvidia-uvm"
-  #       "--device" "/dev/nvidia-uvm-tools"
-  #       "--device" "/dev/nvidia-caps/nvidia-cap1"
-  #       "--device" "/dev/nvidia-caps/nvidia-cap2"
-  #       "--device" "/dev/nvidiactl"
-  #       "--device" "/dev/nvidia0"
-  #       "--device" "/dev/nvidia-modeset"
-  #       "--device" "/dev/dri/"
-  #       "--device" "/dev/uinput"
-  #       "--device" "/dev/uhid"
-  #       "--device-cgroup-rule" ''"c 13:* rmw"''
-  #       "-v" "/dev:/dev:rw"
-  #       "-v" "/run/udev:/run/udev:rw"
-
-  #       wolfImage
-  #     ];
-
-  #     ExecStop = "-${docker} rm -f wolf";
-  #   };
-  # };
 
   systemd.services.wolf-den = {
     description = "Games on Whales – Wolf Den";

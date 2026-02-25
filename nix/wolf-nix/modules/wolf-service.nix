@@ -7,6 +7,27 @@ let
   defaultPackage = pkgs.callPackage ../packages/wolf.nix { pkgs = pkgs; };
   configPath = "/etc/wolf/config.toml";
   usingManagedConfig = cfg.configFile != null || cfg.settings != { };
+  xdgRuntimeDir = "/run/wolf";
+  gstPluginSystemPath = lib.concatStringsSep ":" [
+    "${cfg.package}/lib/gstreamer-1.0"
+    "${pkgs.gst_all_1.gst-plugins-base}/lib/gstreamer-1.0"
+    "${pkgs.gst_all_1.gst-plugins-good}/lib/gstreamer-1.0"
+    "${pkgs.gst_all_1.gst-plugins-bad}/lib/gstreamer-1.0"
+    "${pkgs.gst_all_1.gst-plugins-ugly}/lib/gstreamer-1.0"
+  ];
+  defaultEnvironment = {
+    HOME = cfg.stateDir;
+    XDG_RUNTIME_DIR = xdgRuntimeDir;
+    GST_PLUGIN_SYSTEM_PATH_1_0 = gstPluginSystemPath;
+    HOST_APPS_STATE_FOLDER = cfg.stateDir;
+    WOLF_CFG_FOLDER = cfg.stateDir;
+    WOLF_PRIVATE_KEY_FILE = "${cfg.stateDir}/key.pem";
+    WOLF_PRIVATE_CERT_FILE = "${cfg.stateDir}/cert.pem";
+    WOLF_RENDER_NODE = "/dev/dri/renderD128";
+    WOLF_ENCODER_NODE = "/dev/dri/renderD128";
+    WOLF_STOP_CONTAINER_ON_EXIT = "TRUE";
+    WOLF_LOG_LEVEL = "INFO";
+  };
 in
 {
   options.services.wolf = {
@@ -136,9 +157,10 @@ in
           pkgs.util-linux
         ] ++ lib.optional cfg.enableDocker pkgs.docker;
 
-        environment = {
-          HOME = cfg.stateDir;
-          XDG_RUNTIME_DIR = "/run/wolf";
+        environment = defaultEnvironment
+        // lib.optionalAttrs cfg.enableDocker {
+          WOLF_DOCKER_SOCKET = "/var/run/docker.sock";
+          WOLF_DOCKER_FAKE_UDEV_PATH = "${cfg.package}/bin/fake-udev";
         }
         // lib.optionalAttrs usingManagedConfig {
           WOLF_CFG_FILE = configPath;
@@ -147,11 +169,19 @@ in
 
         serviceConfig = {
           Type = "simple";
+          PermissionsStartOnly = true;
+          ExecStartPre = [
+            "${pkgs.coreutils}/bin/mkdir -p ${xdgRuntimeDir}"
+            "${pkgs.coreutils}/bin/chown ${cfg.user}:${cfg.group} ${xdgRuntimeDir}"
+            "${pkgs.coreutils}/bin/chmod 0700 ${xdgRuntimeDir}"
+            "-${pkgs.coreutils}/bin/rm -f ${xdgRuntimeDir}/wayland-* ${xdgRuntimeDir}/.wayland-*"
+          ];
           User = cfg.user;
           Group = cfg.group;
           WorkingDirectory = cfg.stateDir;
           RuntimeDirectory = "wolf";
-          RuntimeDirectoryMode = "0750";
+          RuntimeDirectoryMode = "0700";
+          UMask = "0077";
           SupplementaryGroups = lib.optional cfg.enableDocker "docker";
           ExecStart =
             lib.concatStringsSep " "

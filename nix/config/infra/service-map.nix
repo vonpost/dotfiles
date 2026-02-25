@@ -57,7 +57,7 @@
       };
     };
     qbittorrent = { name = "qbittorrent"; uid = 2107; downloadsGroup = true; hasDownloadsDir = true; bindTarget = "qBittorrent"; };
-    wolf = { name = "wolf"; uid = 2108; };
+    wolf = { name = "wolf"; uid = 1000; };
     "llama-cpp" = { name = "llama-cpp"; uid = 2109; };
     dailyLlmJournal = { name = "dailyLlmJournal"; uid = 2110; };
     acme = { name = "acme"; uid = 2111; unit = "acme-setup"; };

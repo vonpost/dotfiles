@@ -35,6 +35,7 @@
         };
         modules = [
           microvm.nixosModules.microvm
+          ../../wolf-nix/modules/wolf-service.nix
           ../../config/infra/vms/OKAMI.nix
         ];
       };
