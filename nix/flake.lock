@@ -376,6 +376,22 @@
         "type": "github"
       }
     },
+    "nixpkgs_10": {
+      "locked": {
+        "lastModified": 1771848320,
+        "narHash": "sha256-0MAd+0mun3K/Ns8JATeHT1sX28faLII5hVLq0L3BdZU=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "2fc6539b481e1d2569f25f8799236694180c0993",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nixpkgs_2": {
       "locked": {
         "lastModified": 1768564909,
@@ -504,6 +520,21 @@
         "type": "github"
       }
     },
+    "quadlet-nix": {
+      "locked": {
+        "lastModified": 1770606362,
+        "narHash": "sha256-6pOOPOQr4rtgShBtkLkSDTql5rRqcUgTRz8O+axK2eM=",
+        "owner": "SEIAROTg",
+        "repo": "quadlet-nix",
+        "rev": "f4ae60350ea6015b6560cbd0e1f11f7e195c993d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "SEIAROTg",
+        "repo": "quadlet-nix",
+        "type": "github"
+      }
+    },
     "rffmpeg-nix": {
       "inputs": {
         "nixpkgs": "nixpkgs_6"
@@ -547,7 +578,8 @@
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs_8",
         "rffmpeg-nix": "rffmpeg-nix_2",
-        "sops-nix": "sops-nix"
+        "sops-nix": "sops-nix",
+        "wolf": "wolf"
       }
     },
     "sops-nix": {
@@ -681,6 +713,21 @@
         "type": "git",
         "url": "https://spectrum-os.org/git/spectrum"
       }
+    },
+    "wolf": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_10",
+        "quadlet-nix": "quadlet-nix"
+      },
+      "locked": {
+        "path": "wolf-nix",
+        "type": "path"
+      },
+      "original": {
+        "path": "wolf-nix",
+        "type": "path"
+      },
+      "parent": []
     }
   },
   "root": "root",

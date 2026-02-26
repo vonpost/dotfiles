@@ -8,6 +8,7 @@
     bleeding.url = "github:NixOS/nixpkgs/master";
     microvm.url = "github:microvm-nix/microvm.nix";
     microvm.inputs.nixpkgs.follows = "nixpkgs";
+    quadlet-nix.url = "github:SEIAROTg/quadlet-nix";
   };
 
   nixConfig = {
@@ -19,7 +20,7 @@
     ];
   };
 
-  outputs = { self, nixpkgs, microvm, bleeding, ... }:
+  outputs = { self, nixpkgs, microvm, bleeding, quadlet-nix, ... }:
     let
       system = "x86_64-linux";
       bleedingPkgs = import bleeding {
@@ -35,6 +36,7 @@
         };
         modules = [
           microvm.nixosModules.microvm
+          quadlet-nix.nixosModules.quadlet
           ../../wolf-nix/modules/wolf-service.nix
           ../../config/infra/vms/OKAMI.nix
         ];

@@ -5,9 +5,8 @@ let
   sotoVm = topology.vms.SOTO;
   sotoPrimaryVlan = lib.head sotoVm.assignedVlans;
   sotoIp = "10.10.${toString topology.vlans.${sotoPrimaryVlan}.id}.${toString sotoVm.id}";
+  wolfImagePackages = pkgs.callPackage ../../../wolf-nix/packages/images.nix { };
 
-  docker = "${pkgs.docker}/bin/docker";
-  curlbin   = "${pkgs.curl}/bin/curl";
   limitedWrapper = pkgs.writeTextFile {
     name = "limited-wrapper.py";
     executable = true;
@@ -129,101 +128,27 @@ let
           main()
     '';
   };
-
-  nvidiaDriverVol = "nvidia-driver-vol";
   # wolf-native = import ../../../common/wolf.nix {inherit pkgs config lib;};
 
 in
 {
   # systemd.services.wolf-dev.serviceConfig.ExecStart = "${wolf-native}/bin/wolf";
-  services.wolf.enable = true;
-  services.wolf.extraEnvironment = {
-    NVIDIA_DRIVER_VOLUME_NAME = nvidiaDriverVol;
-  };
-  systemd.services.docker-build-nvidia-driver-image = {
-    description = "Build Gow Nvidia driver bundle image (Wolf manual method)";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "docker.service" "network-online.target" ];
-    wants = [ "network-online.target" ];
-    requires = [ "docker.service" ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      WorkingDirectory = "/tmp";
-      # Allows reading /sys/module/nvidia/version
-      ExecStart = pkgs.writeShellScript "build-nvidia-driver-image" ''
-        set -euo pipefail
-
-        if [ ! -r /sys/module/nvidia/version ]; then
-        echo "ERROR: /sys/module/nvidia/version not readable; nvidia module not loaded?"
-        exit 1
-        fi
-
-        NV_VERSION="$(cat /sys/module/nvidia/version)"
-        echo "Detected NV_VERSION=$NV_VERSION"
-
-        # Build versioned tag; also tag :latest for convenience
-        ${curlbin} -fsSL https://raw.githubusercontent.com/games-on-whales/gow/master/images/nvidia-driver/Dockerfile \
-        | ${docker} build \
-        -t gow/nvidia-driver:"$NV_VERSION" \
-        -t gow/nvidia-driver:latest \
-        -f - \
-        --build-arg NV_VERSION="$NV_VERSION" \
-        .
-
-        # Record the version in the local image label (optional)
-        echo "Built gow/nvidia-driver:$NV_VERSION"
-      '';
+  services.wolf = {
+    enable = true;
+    podmanLoadImages = true;
+    podmanImages = [
+      wolfImagePackages.wolfFirefoxImage
+    ];
+    extraApps = [
+      wolfImagePackages.wolfFirefoxApp
+    ];
+    nvidiaBundle = {
+      enable = true;
+      mode = "host-bind";
+      volumeName = "nvidia-driver-vol";
+      sourcePath = "/run/opengl-driver";
     };
-  };
-
-  systemd.services.docker-populate-nvidia-driver-volume = {
-    description = "Populate Docker volume with Nvidia driver bundle (Wolf manual method)";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "docker.service" "docker-build-nvidia-driver-image.service" ];
-    requires = [ "docker.service" "docker-build-nvidia-driver-image.service" ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-
-      ExecStart = pkgs.writeShellScript "populate-nvidia-driver-vol" ''
-        set -euo pipefail
-
-        NV_VERSION="$(cat /sys/module/nvidia/version)"
-        echo "Target NV_VERSION=$NV_VERSION"
-        VOL="${nvidiaDriverVol}"
-
-        # Ensure volume exists
-        if ! ${docker} volume inspect "$VOL" >/dev/null 2>&1; then
-        echo "Creating volume $VOL"
-        ${docker} volume create "$VOL" >/dev/null
-        fi
-
-        # Read existing version marker (if any)
-        existing="$(${docker} run --rm -v "$VOL":/usr/nvidia:rw alpine:3.20 sh -lc 'cat /usr/nvidia/.nv_version 2>/dev/null || true' || true)"
-        if [ "$existing" = "$NV_VERSION" ]; then
-        echo "Volume already matches NV_VERSION=$NV_VERSION; nothing to do."
-        exit 0
-        fi
-
-        echo "Volume version mismatch (existing='$existing', want='$NV_VERSION'); repopulating"
-
-        # Nuke and recreate the volume to avoid stale files across driver upgrades
-        ${docker} volume rm -f "$VOL" >/dev/null || true
-        ${docker} volume create "$VOL" >/dev/null
-
-        # Populate volume using the driver bundle image:
-        # Equivalent to Wolf's: docker create --rm --mount source=VOL,destination=/usr/nvidia gow/nvidia-driver sh
-        ${docker} create --rm --mount source="$VOL",destination=/usr/nvidia gow/nvidia-driver:"$NV_VERSION" sh >/dev/null
-
-        # Write version marker inside the volume
-        ${docker} run --rm -v "$VOL":/usr/nvidia:rw alpine:3.20 sh -lc 'echo "$0" > /usr/nvidia/.nv_version' "$NV_VERSION"
-
-        echo "Populated $VOL with NV_VERSION=$NV_VERSION"
-      '';
-    };
+    wolfDen.enable = true;
   };
 
   imports = [
@@ -243,11 +168,11 @@ in
     { bus = "pci"; path = "0000:09:00.1"; } # HDMI audio
   ];
 
-  # Mount the block volume directly where Docker expects it
+  # Mount the block volume where Podman stores container state.
   microvm.volumes = [
     {
-      mountPoint = "/var/lib/docker";
-      image = "/images/microvm/${hostname}-docker.img";
+      mountPoint = "/var/lib/containers";
+      image = "/images/microvm/${hostname}-containers.img";
       size = 40 * 1024; # MiB
       fsType = "ext4";
       autoCreate = true;
@@ -272,16 +197,11 @@ in
   hardware.graphics.enable = true;
 
   ## ─────────────────────────────────────────────
-  ## Docker (no CDI, no toolkit integration required for Wolf method)
+  ## Podman
   ## ─────────────────────────────────────────────
 
-  virtualisation.docker.enable = true;
-
-  virtualisation.docker.daemon.settings = {
-    data-root = "/var/lib/docker";
-    iptables = true;
-    ip-forward = true;
-  };
+  virtualisation.podman.enable = true;
+  virtualisation.podman.dockerSocket.enable = true;
 
   boot.kernel.sysctl = {
     "net.ipv4.ip_forward" = 1;
@@ -289,16 +209,9 @@ in
   };
   services.xserver.videoDrivers = ["nvidia"];
 
-  # svc.mkOne forces wolf.service to run as user 'wolf', so grant docker socket access
-  users.users.wolf.extraGroups = [ "docker" ];
-  systemd.services.wolf.serviceConfig.SupplementaryGroups = [ "docker" ];
   systemd.services.wolf = {
     after = [
-      "docker-populate-nvidia-driver-volume.service"
       "nvidia-smi.service"
-    ];
-    requires = [
-      "docker-populate-nvidia-driver-volume.service"
     ];
     wants = [ "nvidia-smi.service" ];
   };
@@ -310,8 +223,6 @@ in
   ## Wolf config
   ## ─────────────────────────────────────────────
 
-  environment.etc."wolf/config.toml".text = "";
-
   # Added to run nvidia-smi before running wolf to populate the required caps etc.
   systemd.services.nvidia-smi = {
     description = "Run nvidia-smi on boot to populate /dev/nvidia-caps. (BAND AID)";
@@ -320,39 +231,6 @@ in
       User = "root";
       Type = "oneshot";
       ExecStart = "${config.hardware.nvidia.package.bin}/bin/nvidia-smi";
-    };
-  };
-
-  systemd.services.wolf-den = {
-    description = "Games on Whales – Wolf Den";
-    wantedBy = [ "multi-user.target" ];
-    after = [
-      "wolf.service"
-    ];
-    requires = [
-      "wolf.service"
-    ];
-
-    serviceConfig = {
-      Restart = "no";
-
-      ExecStartPre = [
-        "${docker} pull ghcr.io/games-on-whales/wolf-den:stable"
-        "-${docker} rm -f wolf-den"
-      ];
-
-      ExecStart = lib.concatStringsSep " " [
-        docker "run"
-        "--name" "wolf-den"
-        "--rm"
-        "-p" "8080:8080"
-        "-v" "/var/lib/wolf/wolf-den:/app/wolf-den:rw"
-        "-v" "/var/run/wolf:/var/run/wolf"
-        "-e" "WOLF_SOCKET_PATH=/var/run/wolf/wolf.sock"
-        "ghcr.io/games-on-whales/wolf-den:stable"
-      ];
-
-      ExecStop = "-${docker} rm -f wolf-den";
     };
   };
 
