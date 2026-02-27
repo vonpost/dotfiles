@@ -18,31 +18,35 @@
 
       packages = forAllSystems (system:
         let
+          lib = nixpkgs.lib;
           pkgs = import nixpkgs {
             inherit system;
             overlays = [ self.overlays.default ];
           };
           imagePackages = pkgs.callPackage ./packages/images.nix { };
         in
-        {
+        ({
           inherit (pkgs) wolf;
           inherit (imagePackages)
             wolfBaseImage
             wolfBaseAppImage
             wolfFirefoxImage
             wolfFirefoxNixosImage
-            wolfFirefoxScratchImage
-            wolfNvidiaBundleImage
             wolfFirefoxWolfConfig;
           "wolf-base-image" = imagePackages.wolfBaseImage;
           "wolf-base-app-image" = imagePackages.wolfBaseAppImage;
           "wolf-firefox-image" = imagePackages.wolfFirefoxImage;
           "wolf-firefox-nixos-image" = imagePackages.wolfFirefoxNixosImage;
-          "wolf-firefox-scratch-image" = imagePackages.wolfFirefoxScratchImage;
-          "wolf-nvidia-bundle-image" = imagePackages.wolfNvidiaBundleImage;
           "wolf-firefox-config" = imagePackages.wolfFirefoxWolfConfig;
           default = pkgs.wolf;
         }
+        // lib.optionalAttrs (imagePackages ? wolfSteamImage) {
+          inherit (imagePackages)
+            wolfSteamImage
+            wolfSteamWolfConfig;
+          "wolf-steam-image" = imagePackages.wolfSteamImage;
+          "wolf-steam-config" = imagePackages.wolfSteamWolfConfig;
+        })
       );
 
       nixosModules.wolf = {

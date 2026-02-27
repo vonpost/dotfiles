@@ -138,17 +138,16 @@ in
     podmanLoadImages = true;
     podmanImages = [
       wolfImagePackages.wolfFirefoxImage
+    ] ++ lib.optionals (wolfImagePackages ? wolfSteamImage) [
+      wolfImagePackages.wolfSteamImage
     ];
     extraApps = [
       wolfImagePackages.wolfFirefoxApp
+    ] ++ lib.optionals (wolfImagePackages ? wolfSteamApp) [
+      wolfImagePackages.wolfSteamApp
     ];
-    nvidiaBundle = {
-      enable = true;
-      mode = "host-bind";
-      volumeName = "nvidia-driver-vol";
-      sourcePath = "/run/opengl-driver";
-    };
     wolfDen.enable = true;
+    hostPulseAudio.anonymousSocket.enable = true;
   };
 
   imports = [
@@ -160,7 +159,7 @@ in
   ## microvm basics
   ## ─────────────────────────────────────────────
 
-  microvm.vcpu = 8;
+  microvm.vcpu = 12;
   microvm.mem  = 16000;
 
   microvm.devices = [
@@ -187,7 +186,7 @@ in
 
   # Wolf docs requirement: ensure KMS is enabled and modeset=1
   boot.kernelParams = [ "nvidia_drm.modeset=1" ];
-  boot.kernelModules = [ "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm" ];
+  boot.kernelModules = [ "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm" "fuse" ];
 
   hardware.nvidia = {
     open = false; # required to be explicit on >= 560
@@ -195,6 +194,7 @@ in
     modesetting.enable = true;
   };
   hardware.graphics.enable = true;
+  hardware.graphics.enable32Bit = true;
 
   ## ─────────────────────────────────────────────
   ## Podman
@@ -208,31 +208,6 @@ in
     "net.ipv4.conf.all.forwarding" = 1;
   };
   services.xserver.videoDrivers = ["nvidia"];
-
-  systemd.services.wolf = {
-    after = [
-      "nvidia-smi.service"
-    ];
-    wants = [ "nvidia-smi.service" ];
-  };
-
-  # Optional: useful for debugging only (gives you nvidia-container-cli), not required by Wolf method
-  # environment.systemPackages = [ pkgs.nvidia-container-toolkit ];
-
-  ## ─────────────────────────────────────────────
-  ## Wolf config
-  ## ─────────────────────────────────────────────
-
-  # Added to run nvidia-smi before running wolf to populate the required caps etc.
-  systemd.services.nvidia-smi = {
-    description = "Run nvidia-smi on boot to populate /dev/nvidia-caps. (BAND AID)";
-    wantedBy = [ "multi-user.target" ];
-    serviceConfig = {
-      User = "root";
-      Type = "oneshot";
-      ExecStart = "${config.hardware.nvidia.package.bin}/bin/nvidia-smi";
-    };
-  };
 
   ## ─────────────────────────────────────────────
   ## Admin & debugging

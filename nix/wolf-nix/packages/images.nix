@@ -21,12 +21,6 @@ let
     gow_log() {
       echo "$(date +"[%Y-%m-%d %H:%M:%S]") $*"
     }
-
-    join_by() {
-      local IFS="$1"
-      shift
-      echo "$*"
-    }
   '';
 
   entrypointScript = writeExecutable "gow-entrypoint.sh" ''
@@ -49,7 +43,7 @@ let
       exec "$@"
     fi
 
-    gow_log "Launching startup script '$startup_script' as user '''${UNAME:-root}'"
+    gow_log "Launching startup script '$startup_script' as user ''${UNAME:-root}"
     if [ "$(id -u)" = "0" ] && [ "''${UNAME:-root}" != "root" ]; then
       if ! id -u "''${UNAME}" >/dev/null 2>&1; then
         gow_log "User ''${UNAME} not available in container NSS; falling back to root"
@@ -197,6 +191,23 @@ let
 
     gow_log "NVIDIA runtime detected at $nvidia_prefix"
 
+    # Steam's FHS wrapper expects host-style runtime paths.
+    mkdir -p /run
+    if [ -L /run/opengl-driver ] && [ ! -e /run/opengl-driver ]; then
+      rm -f /run/opengl-driver
+    fi
+    if [ ! -e /run/opengl-driver ]; then
+      ln -s "$nvidia_prefix" /run/opengl-driver || true
+    fi
+    if [ -d "$nvidia_prefix/lib32" ] || [ -d "$nvidia_prefix/lib" ]; then
+      if [ -L /run/opengl-driver-32 ] && [ ! -e /run/opengl-driver-32 ]; then
+        rm -f /run/opengl-driver-32
+      fi
+      if [ ! -e /run/opengl-driver-32 ]; then
+        ln -s "$nvidia_prefix" /run/opengl-driver-32 || true
+      fi
+    fi
+
     runtime_root="''${GOW_GRAPHICS_RUNTIME_DIR:-/tmp/gow-graphics}"
     vulkan_icd_dir="$runtime_root/vulkan/icd.d"
     egl_external_dir="$runtime_root/egl/egl_external_platform.d"
@@ -320,6 +331,14 @@ let
       if [ -n "''${RUN_SWAY:-}" ]; then
         gow_log "[Sway] Starting: ''${cmd[*]}"
 
+        runtime_dir="''${XDG_RUNTIME_DIR:-/tmp}"
+        if [ ! -w "$runtime_dir" ]; then
+          runtime_dir="/tmp"
+        fi
+        mkdir -p "$runtime_dir"
+        chmod 700 "$runtime_dir" || true
+        export XDG_RUNTIME_DIR="$runtime_dir"
+
         export SWAYSOCK="$XDG_RUNTIME_DIR/sway.socket"
         export SWAY_STOP_ON_APP_EXIT="''${SWAY_STOP_ON_APP_EXIT:-yes}"
         export XDG_CURRENT_DESKTOP=sway
@@ -332,9 +351,14 @@ let
         mkdir -p "$config_base/waybar" "$config_base/sway"
         export XDG_CONFIG_HOME="$config_base"
 
-        cp -u /cfg/waybar/* "$config_base/waybar/"
+        if [ "''${GOW_DISABLE_WAYBAR:-0}" != "1" ]; then
+          cp -u /cfg/waybar/* "$config_base/waybar/"
+        fi
 
         install -m 0644 /cfg/sway/config "$config_base/sway/config"
+        if [ "''${GOW_DISABLE_WAYBAR:-0}" = "1" ]; then
+          ${pkgs.gnused}/bin/sed -i '/swaybar_command waybar/d' "$config_base/sway/config"
+        fi
         echo "output * resolution ''${GAMESCOPE_WIDTH}x''${GAMESCOPE_HEIGHT} position 0,0" >> "$config_base/sway/config"
 
         app_cmd="$(printf '%q ' "''${cmd[@]}")"
@@ -398,6 +422,36 @@ let
 user_pref("security.enterprise_roots.enabled", true);
 EOF
     launcher firefox --profile "$profile_dir"
+  '';
+
+  steamStartupAppScript = writeExecutable "gow-steam-startup-app.sh" ''
+    set -euo pipefail
+
+    source /opt/gow/launch-comp.sh
+
+    home_dir="''${HOME:-/home/retro}"
+    if [ ! -w "$home_dir" ] || { [ -e "$home_dir/.steam" ] && [ ! -w "$home_dir/.steam" ]; }; then
+      home_dir="$(mktemp -d /tmp/gow-steam-home.XXXXXX)"
+      export HOME="$home_dir"
+    fi
+
+    mkdir -p "$home_dir/.steam" "$home_dir/.local/share/Steam"
+    export SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS=0
+
+    startup_flags="''${STEAM_STARTUP_FLAGS:--bigpicture}"
+    if [ -n "''${STEAM_STARTUP_URI:-}" ]; then
+      startup_flags="$startup_flags ''${STEAM_STARTUP_URI}"
+    fi
+
+    if [ -n "$startup_flags" ]; then
+      # shellcheck disable=SC2206
+      steam_args=($startup_flags)
+      steam_cmd=(steam "''${steam_args[@]}")
+    else
+      steam_cmd=(steam)
+    fi
+
+    launcher "''${steam_cmd[@]}"
   '';
 
   swayConfig = pkgs.writeText "gow-sway-config" ''
@@ -477,6 +531,11 @@ EOF
     install -Dm755 ${firefoxStartupAppScript} "$out/opt/gow/startup-app.sh"
   '';
 
+  steamAssets = pkgs.runCommand "gow-steam-assets" { } ''
+    mkdir -p "$out"
+    install -Dm755 ${steamStartupAppScript} "$out/opt/gow/startup-app.sh"
+  '';
+
   basePackages = with pkgs; [
     bash
     coreutils
@@ -518,9 +577,17 @@ EOF
 
   basePath = mkPath basePackages;
   baseAppPath = mkPath (basePackages ++ baseAppPackages);
-  firefoxPath = mkPath (basePackages ++ baseAppPackages ++ [ pkgs.firefox ]);
-  nvidiaBundlePath = mkPath [ pkgs.bash pkgs.coreutils pkgs.findutils ];
   nixosFirefoxPath = "/run/current-system/sw/bin:/run/current-system/sw/sbin";
+  steamSupported = pkgs.stdenv.hostPlatform.isx86_64 && (pkgs.config.allowUnfree or false);
+  steamPackage =
+    if steamSupported then
+      pkgs.steam.override {
+        # Needed by steamui.so (32-bit path) in this containerized setup.
+        extraLibraries = p: with p; [ libxtst ];
+      }
+    else
+      null;
+  steamPath = if steamSupported then "${steamPackage}/bin:${nixosFirefoxPath}" else nixosFirefoxPath;
 
   nixosFirefoxSystem = import "${pkgs.path}/nixos" {
     system = pkgs.system;
@@ -703,7 +770,7 @@ EOF
   '';
 
 in
-rec {
+(rec {
   wolfBaseImage = pkgs.dockerTools.buildLayeredImage {
     name = "localhost/gow/base-nix";
     tag = imageTag;
@@ -729,28 +796,6 @@ rec {
         "GAMESCOPE_WIDTH=1920"
         "GAMESCOPE_HEIGHT=1080"
         "GAMESCOPE_REFRESH=60"
-      ];
-    };
-    extraCommands = mkExtraDirs;
-  };
-
-  wolfFirefoxScratchImage = pkgs.dockerTools.buildLayeredImage {
-    name = "localhost/gow/firefox-scratch-nix";
-    tag = imageTag;
-    maxLayers = 128;
-    contents = basePackages ++ baseAppPackages ++ [
-      pkgs.firefox
-      baseAssets
-      baseAppAssets
-      firefoxAssets
-    ];
-    config = commonConfig // {
-      Env = commonBaseEnv ++ [
-        "PATH=${firefoxPath}"
-        "GOW_STARTUP_SCRIPT=/opt/gow/base-app-startup.sh"
-        "UNAME=retro"
-        "RUN_SWAY=1"
-        "MOZ_ENABLE_WAYLAND=1"
       ];
     };
     extraCommands = mkExtraDirs;
@@ -782,23 +827,6 @@ rec {
   };
 
   wolfFirefoxImage = wolfFirefoxNixosImage;
-
-  wolfNvidiaBundleImage = pkgs.dockerTools.buildLayeredImage {
-    name = "localhost/gow/nvidia-driver-bundle-nix";
-    tag = imageTag;
-    maxLayers = 16;
-    contents = [ pkgs.bash pkgs.coreutils pkgs.findutils ];
-    config = {
-      Env = [
-        "PATH=${nvidiaBundlePath}"
-      ];
-      Cmd = [ "${pkgs.bash}/bin/sh" ];
-      WorkingDir = "/";
-      Labels = {
-        "org.opencontainers.image.source" = imageSource;
-      };
-    };
-  };
 
   wolfFirefoxApp = {
     title = "Firefox (Nix)";
@@ -850,6 +878,94 @@ rec {
         "Privileged": false,
         "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN"],
         "DeviceCgroupRules": ["c 13:* rmw", "c 244:* rmw"]
+      }
+    }
+    """
+  '';
+})
+// lib.optionalAttrs steamSupported {
+  wolfSteamImage = pkgs.dockerTools.buildLayeredImage {
+    name = "localhost/gow/steam-nix";
+    tag = imageTag;
+    maxLayers = 128;
+    contents = [
+      nixosFirefoxRootfs
+      steamPackage
+      baseAssets
+      baseAppAssets
+      steamAssets
+    ];
+    config = commonConfig // {
+      Env = commonBaseEnv ++ [
+        "PATH=${steamPath}"
+        "GOW_STARTUP_SCRIPT=/opt/gow/base-app-startup.sh"
+        "UNAME=retro"
+        "RUN_SWAY=1"
+        "STEAM_STARTUP_FLAGS=-bigpicture"
+      ];
+    };
+    extraCommands = ''
+      mkdir -p tmp/.X11-unix
+      chmod 1777 tmp tmp/.X11-unix
+    '';
+  };
+
+  wolfSteamApp = {
+    title = "Steam (Nix)";
+    icon_png_path = "https://games-on-whales.github.io/wildlife/apps/steam/assets/icon.png";
+    runner = {
+      type = "docker";
+      name = "WolfSteamNix";
+      image = "localhost/gow/steam-nix:${imageTag}";
+      mounts = [ ];
+      env = [
+        "UNAME=retro"
+        "RUN_SWAY=1"
+        "STEAM_STARTUP_FLAGS=-bigpicture"
+        "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
+        "GOW_NVIDIA_PREFIX=/usr/nvidia"
+      ];
+      devices = [ ];
+      ports = [ ];
+      base_create_json = ''
+        {
+          "HostConfig": {
+            "IpcMode": "host",
+            "Privileged": false,
+            "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE", "SYS_PTRACE"],
+            "SecurityOpt": ["label=disable", "apparmor=unconfined", "seccomp=unconfined"],
+            "Devices": [{"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"}],
+            "Ulimits": [{"Name": "nofile", "Soft": 10240, "Hard": 524288}],
+            "DeviceCgroupRules": ["c 10:229 rmw", "c 13:* rmw", "c 244:* rmw"]
+          }
+        }
+      '';
+    };
+  };
+
+  wolfSteamWolfConfig = pkgs.writeText "wolf-steam.config.toml" ''
+    [[apps]]
+    title = "Steam (Nix)"
+    icon_png_path = "https://games-on-whales.github.io/wildlife/apps/steam/assets/icon.png"
+
+    [apps.runner]
+    type = "docker"
+    name = "WolfSteamNix"
+    image = "localhost/gow/steam-nix:${imageTag}"
+    mounts = []
+    env = ["UNAME=retro", "RUN_SWAY=1", "STEAM_STARTUP_FLAGS=-bigpicture", "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*", "GOW_NVIDIA_PREFIX=/usr/nvidia"]
+    devices = []
+    ports = []
+    base_create_json = """
+    {
+      "HostConfig": {
+        "IpcMode": "host",
+        "Privileged": false,
+        "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE", "SYS_PTRACE"],
+        "SecurityOpt": ["label=disable", "apparmor=unconfined", "seccomp=unconfined"],
+        "Devices": [{"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"}],
+        "Ulimits": [{"Name": "nofile", "Soft": 10240, "Hard": 524288}],
+        "DeviceCgroupRules": ["c 10:229 rmw", "c 13:* rmw", "c 244:* rmw"]
       }
     }
     """
