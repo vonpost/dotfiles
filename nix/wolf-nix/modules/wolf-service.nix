@@ -8,6 +8,8 @@ let
     options = { };
   };
   defaultPackage = pkgs.callPackage ../packages/wolf.nix { pkgs = pkgs; };
+  imagePackages = pkgs.callPackage ../packages/images.nix { };
+  defaultPodmanImages = lib.optionals (imagePackages ? wolfGnomeImage) [ imagePackages.wolfGnomeImage ];
   packageWithDefaultConfigSource =
     if lib.hasAttrByPath [ "src" ] cfg.package then cfg.package else defaultPackage;
   defaultConfigIncludePath =
@@ -175,18 +177,55 @@ PY
 
   podmanImageLoaderScript = ''
     set -euo pipefail
-    stamp_dir=${lib.escapeShellArg "${cfg.stateDir}/.podman-image-stamps"}
-    ${pkgs.coreutils}/bin/mkdir -p "$stamp_dir"
-  '' + lib.concatMapStringsSep "\n" (image: ''
-    archive=${lib.escapeShellArg (toString image)}
-    stamp="$stamp_dir/${baseNameOf (toString image)}.loaded"
-    if [ -f "$stamp" ]; then
-      echo "Podman image archive already loaded, skipping: $archive"
+
+    podman_socket=${lib.escapeShellArg cfg.podmanSocketPath}
+    if [ -S "$podman_socket" ]; then
+      echo "Using Podman socket for image loading: $podman_socket"
+      podman_cmd=( ${pkgs.podman}/bin/podman --url "unix://$podman_socket" )
     else
-      echo "Loading Podman image archive: $archive"
-      ${pkgs.podman}/bin/podman load -i "$archive"
-      ${pkgs.coreutils}/bin/touch "$stamp"
+      echo "Podman socket '$podman_socket' not found, using default Podman connection"
+      podman_cmd=( ${pkgs.podman}/bin/podman )
     fi
+
+    load_archive() {
+      local archive="$1"
+      local repo_tags
+      local tag
+      local stale_containers
+
+      echo "Loading Podman image archive: $archive"
+
+      repo_tags="$(${pkgs.gnutar}/bin/tar -xOf "$archive" manifest.json 2>/dev/null \
+        | ${pkgs.jq}/bin/jq -r '.[] | (.RepoTags // [])[]' || true)"
+
+      if [ -n "$repo_tags" ]; then
+        while IFS= read -r tag; do
+          [ -n "$tag" ] || continue
+
+          stale_containers="$("''${podman_cmd[@]}" ps -aq --filter "ancestor=$tag" || true)"
+          if [ -n "$stale_containers" ]; then
+            echo "Removing containers for image tag '$tag'"
+            # shellcheck disable=SC2086
+            "''${podman_cmd[@]}" rm -f $stale_containers >/dev/null 2>&1 || true
+          fi
+
+          echo "Removing existing image tag '$tag' before reload"
+          "''${podman_cmd[@]}" image rm -f "$tag" >/dev/null 2>&1 || true
+        done <<< "$repo_tags"
+      fi
+
+      "''${podman_cmd[@]}" load -i "$archive"
+
+      if [ -n "$repo_tags" ]; then
+        while IFS= read -r tag; do
+          [ -n "$tag" ] || continue
+          "''${podman_cmd[@]}" image inspect "$tag" >/dev/null
+          echo "Verified image tag '$tag'"
+        done <<< "$repo_tags"
+      fi
+    }
+  '' + lib.concatMapStringsSep "\n" (image: ''
+    load_archive ${lib.escapeShellArg (toString image)}
   '') podmanImageArchives;
 
   nvidiaBundleHostSyncServiceName = "wolf-nvidia-driver-sync.service";
@@ -297,13 +336,13 @@ in
 
     podmanLoadImages = lib.mkOption {
       type = lib.types.bool;
-      default = false;
+      default = true;
       description = "Load image archives from services.wolf.podmanImages before starting Wolf.";
     };
 
     podmanImages = lib.mkOption {
       type = lib.types.listOf lib.types.package;
-      default = [ ];
+      default = defaultPodmanImages;
       example = lib.literalExpression "[ inputs.wolf-nix.packages.${pkgs.system}.wolfFirefoxImage ]";
       description = "OCI archive derivations loaded into Podman with `podman load -i`.";
     };
@@ -519,7 +558,8 @@ in
           ++ lib.optional podmanImageLoadingEnabled "wolf-podman-images.service";
         requires =
           lib.optional hostPulseAudioSystemServiceEnabled "pulseaudio.service"
-          ++ nvidiaBundleRequiredServices;
+          ++ nvidiaBundleRequiredServices
+          ++ lib.optional podmanImageLoadingEnabled "wolf-podman-images.service";
         restartTriggers = [ managedConfigSource ];
 
         path = [
@@ -596,7 +636,9 @@ in
         restartTriggers = podmanImageArchives;
         serviceConfig = {
           Type = "oneshot";
-          RemainAfterExit = true;
+          # Keep this inactive after completion so each Wolf start re-runs
+          # `podman load -i` and refreshes tags even after manual pruning.
+          RemainAfterExit = false;
         };
         script = podmanImageLoaderScript;
       };
@@ -912,6 +954,13 @@ in
       hardware.uinput.enable = lib.mkDefault true;
       virtualisation.podman.enable = lib.mkDefault true;
       virtualisation.podman.dockerSocket.enable = lib.mkDefault true;
+      virtualisation.podman.autoPrune.enable = lib.mkDefault true;
+      virtualisation.podman.autoPrune.dates = lib.mkDefault "daily";
+      virtualisation.podman.autoPrune.flags = lib.mkDefault [
+        "--all"
+        "--volumes"
+        "--filter=until=168h"
+      ];
     }
     (lib.mkIf hostPulseAudioManaged {
       services.pulseaudio.enable = lib.mkDefault true;

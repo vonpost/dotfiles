@@ -32,12 +32,46 @@
             wolfBaseAppImage
             wolfFirefoxImage
             wolfFirefoxNixosImage
-            wolfFirefoxWolfConfig;
+            wolfFirefoxWolfConfig
+            wolfGnomeImage
+            wolfGnomeNixosImage
+            wolfGnomeSystem
+            wolfGnomeWolfConfig
+            wolfLabwcImage
+            wolfLabwcSystem
+            wolfLabwcWolfConfig
+            wolfNoctaliaImage
+            wolfNoctaliaSystem
+            wolfNoctaliaWolfConfig
+            wolfXfceImage
+            wolfXfceSystem
+            wolfXfceWolfConfig
+            wolfKdeImage
+            wolfKdeNixosImage
+            wolfKdeSystem
+            wolfKdeWolfConfig;
           "wolf-base-image" = imagePackages.wolfBaseImage;
           "wolf-base-app-image" = imagePackages.wolfBaseAppImage;
           "wolf-firefox-image" = imagePackages.wolfFirefoxImage;
           "wolf-firefox-nixos-image" = imagePackages.wolfFirefoxNixosImage;
           "wolf-firefox-config" = imagePackages.wolfFirefoxWolfConfig;
+          "wolf-gnome-image" = imagePackages.wolfGnomeImage;
+          "wolf-gnome-nixos-image" = imagePackages.wolfGnomeNixosImage;
+          "wolf-gnome-system" = imagePackages.wolfGnomeSystem;
+          "wolf-gnome-config" = imagePackages.wolfGnomeWolfConfig;
+          "wolf-labwc-image" = imagePackages.wolfLabwcImage;
+          "wolf-labwc-system" = imagePackages.wolfLabwcSystem;
+          "wolf-labwc-config" = imagePackages.wolfLabwcWolfConfig;
+          "wolf-noctalia-image" = imagePackages.wolfNoctaliaImage;
+          "wolf-noctalia-system" = imagePackages.wolfNoctaliaSystem;
+          "wolf-noctalia-config" = imagePackages.wolfNoctaliaWolfConfig;
+          "wolf-xfce-image" = imagePackages.wolfXfceImage;
+          "wolf-xfce-system" = imagePackages.wolfXfceSystem;
+          "wolf-xfce-config" = imagePackages.wolfXfceWolfConfig;
+          "wolf-kde-image" = imagePackages.wolfKdeImage;
+          "wolf-kde-nixos-image" = imagePackages.wolfKdeNixosImage;
+          "wolf-kde-system" = imagePackages.wolfKdeSystem;
+          "wolf-kde-config" = imagePackages.wolfKdeWolfConfig;
           default = pkgs.wolf;
         }
         // lib.optionalAttrs (imagePackages ? wolfSteamImage) {

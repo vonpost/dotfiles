@@ -137,14 +137,10 @@ in
     enable = true;
     podmanLoadImages = true;
     podmanImages = [
-      wolfImagePackages.wolfFirefoxImage
-    ] ++ lib.optionals (wolfImagePackages ? wolfSteamImage) [
-      wolfImagePackages.wolfSteamImage
+      wolfImagePackages.wolfKdeImage
     ];
     extraApps = [
-      wolfImagePackages.wolfFirefoxApp
-    ] ++ lib.optionals (wolfImagePackages ? wolfSteamApp) [
-      wolfImagePackages.wolfSteamApp
+      wolfImagePackages.wolfKdeApp
     ];
     wolfDen.enable = true;
     hostPulseAudio.anonymousSocket.enable = true;
