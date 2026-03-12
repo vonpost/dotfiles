@@ -1,7 +1,7 @@
 { config, pkgs, lib, ... }:
 
 let
-  svc = import ./lib.nix { inherit config; };
+  svc = import ./lib.nix { inherit config lib; };
   myaddrUpdateScript = pkgs.writeShellScript "myaddr-update" ''
     set -euo pipefail
 

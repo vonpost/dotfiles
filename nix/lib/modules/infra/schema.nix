@@ -19,8 +19,61 @@ let
     };
   });
 
-  serviceType = types.submodule ({ name, config, ... }: {
+  logFileType = types.submodule ({ name, ... }: {
     options = {
+      name = mkOption {
+        type = types.str;
+        default = name;
+      };
+      path = mkOption {
+        type = types.str;
+        description = "Absolute log file path consumed by Vector.";
+      };
+      labels = mkOption {
+        type = types.attrsOf types.str;
+        default = { };
+        description = "Static labels applied to this file source.";
+      };
+    };
+  });
+
+  loggingTargetType = types.submodule ({ ... }: {
+    options = {
+      enable = mkOption {
+        type = types.bool;
+        default = false;
+      };
+      journalUnits = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+      };
+      journalMatches = mkOption {
+        type = types.attrsOf (types.listOf types.str);
+        default = { };
+        description = "Native journald match groups such as { _TRANSPORT = [ \"kernel\" ]; }.";
+      };
+      condition = mkOption {
+        type = types.nullOr types.lines;
+        default = null;
+        description = "Optional Vector VRL filter condition.";
+      };
+      files = mkOption {
+        type = types.listOf logFileType;
+        default = [ ];
+      };
+      labels = mkOption {
+        type = types.attrsOf types.str;
+        default = { };
+      };
+    };
+  });
+
+  serviceType = types.submodule ({ name, config, ... }:
+    let
+      serviceCfg = config;
+    in
+    {
+      options = {
       name = mkOption {
         type = types.str;
         default = name;
@@ -76,8 +129,51 @@ let
         type = types.bool;
         default = true;
       };
+      perVmState = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Stage a separate backing state directory per VM for this service.";
+      };
       secrets = mkOption {
         type = types.attrsOf secretType;
+        default = { };
+      };
+      logging = mkOption {
+        type = loggingTargetType;
+        default = {
+          journalUnits = [ "${serviceCfg.unit}.service" ];
+        };
+        description = "Observability metadata used to derive Vector collection rules.";
+      };
+      };
+    });
+
+  logProfileType = types.submodule ({ name, ... }: {
+    options = {
+      name = mkOption {
+        type = types.str;
+        default = name;
+      };
+      description = mkOption {
+        type = types.str;
+        default = "";
+      };
+      condition = mkOption {
+        type = types.nullOr types.lines;
+        default = null;
+        description = "Vector VRL filter condition for journal-derived logs.";
+      };
+      journalMatches = mkOption {
+        type = types.attrsOf (types.listOf types.str);
+        default = { };
+        description = "Native journald match groups such as { _TRANSPORT = [ \"kernel\" ]; }.";
+      };
+      files = mkOption {
+        type = types.listOf logFileType;
+        default = [ ];
+      };
+      labels = mkOption {
+        type = types.attrsOf types.str;
         default = { };
       };
     };
@@ -90,6 +186,10 @@ let
         description = "Machine ID for the VM.";
       };
       serviceMounts = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+      };
+      logProfiles = mkOption {
         type = types.listOf types.str;
         default = [ ];
       };
@@ -167,6 +267,7 @@ let
   topologyVmNames = builtins.attrNames infraTopology.vms;
   firewallRuleNames = builtins.attrNames infraTopology.firewallRules;
   natRuleNames = builtins.attrNames infraTopology.natRules;
+  logProfileNames = builtins.attrNames config.my.infra.observability.logProfiles;
 
   missingVmConfigInTopology =
     builtins.filter (vm: !(builtins.elem vm topologyVmNames)) vmConfigNames;
@@ -178,6 +279,13 @@ let
     builtins.concatLists (
       lib.mapAttrsToList (_vm: vmCfg:
         builtins.filter (serviceName: !(builtins.elem serviceName serviceNames)) vmCfg.serviceMounts
+      ) infraVmServiceMounts
+    );
+
+  missingLogProfiles =
+    builtins.concatLists (
+      lib.mapAttrsToList (_vm: vmCfg:
+        builtins.filter (profileName: !(builtins.elem profileName logProfileNames)) (vmCfg.logProfiles or [ ])
       ) infraVmServiceMounts
     );
 
@@ -241,6 +349,19 @@ in
         vlans = { };
       };
     };
+
+    observability = {
+      lokiVM = mkOption {
+        type = types.str;
+        default = "";
+        description = "VM name that hosts Loki.";
+      };
+      logProfiles = mkOption {
+        type = types.attrsOf logProfileType;
+        default = { };
+        description = "Catalog of reusable Vector collection profiles not tied to a single service.";
+      };
+    };
   };
 
   config = {
@@ -248,6 +369,10 @@ in
       {
         assertion = missingMountedServices == [ ];
         message = "Unknown service names in my.infra.vmServiceMounts: ${toString (lib.unique missingMountedServices)}";
+      }
+      {
+        assertion = missingLogProfiles == [ ];
+        message = "Unknown log profile names in my.infra.vmServiceMounts: ${toString (lib.unique missingLogProfiles)}";
       }
       {
         assertion = infraTopology.gatewayVM == "" || builtins.elem infraTopology.gatewayVM topologyVmNames;
@@ -280,6 +405,10 @@ in
       {
         assertion = missingAssignedVlanRefs == [ ];
         message = "Unknown VLAN names referenced by VM assignedVlans: ${toString (lib.unique missingAssignedVlanRefs)}";
+      }
+      {
+        assertion = config.my.infra.observability.lokiVM == "" || builtins.elem config.my.infra.observability.lokiVM topologyVmNames;
+        message = "my.infra.observability.lokiVM must reference a VM in my.infra.topology.vms";
       }
     ];
   };

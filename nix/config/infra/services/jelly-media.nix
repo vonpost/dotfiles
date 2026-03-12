@@ -1,6 +1,6 @@
 { config, lib, pkgs, bleeding ? pkgs, ... }:
 let
-  svc = import ./lib.nix { inherit config; };
+  svc = import ./lib.nix { inherit config lib; };
   topology = config.my.infra.topology;
   hostProvides = topology.vms.${svc.hostname}.provides or [ ];
   enableJellyfinService = svc.hasService "jellyfin" && builtins.elem "jellyfin" hostProvides;

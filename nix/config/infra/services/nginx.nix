@@ -22,7 +22,7 @@ let
         return 403;
       }
     '';
-  svc = import ./lib.nix { inherit config; };
+  svc = import ./lib.nix { inherit config lib; };
   url = "daddyz.myaddr.io";
   jellyfin_host = "localhost";
   extraCfg = lib.concatStringsSep "\n" ([ ''proxy_buffering off;'' ] ++ (lib.optional (svc.hasService "geoipupdate")  geoIpConfig));
@@ -35,6 +35,10 @@ in
       clientMaxBodySize = "40M";
       mapHashMaxSize = 4096;
       resolver.ipv6 = false;
+      logError = "syslog:server=unix:/dev/log,facility=local7,tag=nginx_error warn";
+      appendHttpConfig = ''
+        access_log syslog:server=unix:/dev/log,facility=local7,tag=nginx_access combined;
+      '';
 
       recommendedProxySettings = true;
       recommendedTlsSettings = true;

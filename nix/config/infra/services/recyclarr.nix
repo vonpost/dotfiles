@@ -1,7 +1,7 @@
 {config, lib, pkgs, ...}:
 {
   config = let
-    svc = import ./lib.nix { inherit config; };
+    svc = import ./lib.nix { inherit config lib; };
   in lib.mkIf (svc.hasService "recyclarr") {
     services.recyclarr = {
       enable = true;

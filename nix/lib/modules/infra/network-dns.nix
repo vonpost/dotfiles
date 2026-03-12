@@ -3,10 +3,7 @@ let
   inherit (lib) mkEnableOption mkIf;
   cfg = config.my.infra.networkDns;
   topology = config.my.infra.topology;
-  vlans = topology.vlans;
-
-  getSubnet = vlan: "10.10.${toString vlans.${vlan}.id}";
-  getIp = name: vlan: "${getSubnet vlan}.${toString topology.vms.${name}.id}";
+  topo = import ../../infra-topology.nix { inherit topology; };
 in
 {
   options.my.infra.networkDns.enable = mkEnableOption "unbound DNS config from my.infra.topology";
@@ -15,12 +12,12 @@ in
     services.unbound = {
       enable = true;
       settings.server = {
-        interface = [ (getIp topology.dnsVM "srv") "127.0.0.1" ];
+        interface = [ topo.getDns "127.0.0.1" ];
         access-control = [ "10.0.0.0/8 allow" ];
         local-zone = ''"${topology.domain}." static'';
         local-data =
           lib.mapAttrsToList
-            (name: vmCfg: ''"${name}.${topology.domain}. IN A ${getIp name (lib.head vmCfg.assignedVlans)}"'')
+            (name: vmCfg: ''"${name}.${topology.domain}. IN A ${topo.getIp name (lib.head vmCfg.assignedVlans)}"'')
             topology.vms;
         hide-identity = "yes";
         hide-version = "yes";

@@ -9,7 +9,7 @@
   };
   KAIZOKU = {
     machineId = "d7c79cedf4a24584ad28503505507e04";
-    serviceMounts = [ "sabnzbd" "qbittorrent" ];
+    serviceMounts = [ "sabnzbd" "qbittorrent" "mullvad" ];
   };
   UCHI = {
     machineId = "3692d4ba23994c3a818e8d577625d60c";
@@ -18,9 +18,14 @@
   MAMORU = {
     machineId = "d13cdd34121748a997cfa8d4e2355da3";
     serviceMounts = [ ];
+    logProfiles = [ "firewall" ];
   };
   DARE = {
     machineId = "332120c0300145b2b762d1db81546caf";
-    serviceMounts = [ ];
+    serviceMounts = [ "unbound" ];
+  };
+  NIKKI = {
+    machineId = "5035f0c3bf5a4afc9e3ce44c4c96e2b4";
+    serviceMounts = [ "loki" "grafana" "prometheus" ];
   };
 }

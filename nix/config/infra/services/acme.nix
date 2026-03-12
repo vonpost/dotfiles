@@ -1,6 +1,6 @@
 { config, lib, pkgs, ... }:
 let
-  svc = import ./lib.nix { inherit config; };
+  svc = import ./lib.nix { inherit config lib; };
 in
 {
   config = lib.mkIf (svc.hasService "acme") {

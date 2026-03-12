@@ -10,6 +10,10 @@ let
 
   downloadsGID = 3000;
   mediaGID = 3001;
+  normalizedLibPath = lib.removePrefix "./" libPath;
+  normalizedCachePath = lib.removePrefix "./" cachePath;
+  normalizedDownloadsPath = lib.removePrefix "./" downloadsPath;
+  normalizedMediaPath = lib.removePrefix "./" mediaPath;
 
   mkOne =
     { name
@@ -25,6 +29,7 @@ let
     , hasCacheDir ? false
     , hasDownloadsDir ? false
     , hasMediaDir ? false
+    , ...
     }:
     { ... }:
     {
@@ -56,14 +61,14 @@ let
       fileSystems =
         {
           "/var/lib/${bindTarget}" = {
-            device = "/state/${libPath}/${name}";
+            device = "/state/${normalizedLibPath}/${name}";
             fsType = "none";
             options = [ "bind" ];
           };
         }
         // lib.optionalAttrs hasCacheDir {
           "/var/cache/${bindTarget}" = {
-            device = "/state/${cachePath}/${name}";
+            device = "/state/${normalizedCachePath}/${name}";
             fsType = "none";
             options = [ "bind" ];
           };
@@ -71,7 +76,7 @@ let
 
         // lib.optionalAttrs downloadsGroup {
           "/data/downloads" = {
-            device = "/state/${downloadsPath}";
+            device = "/state/${normalizedDownloadsPath}";
             fsType = "none";
             options = [ "bind" ];
           };
@@ -79,7 +84,7 @@ let
 
         // lib.optionalAttrs mediaGroup {
           "/data/media" = {
-            device = "/state/${mediaPath}";
+            device = "/state/${normalizedMediaPath}";
             fsType = "none";
             options = [ "bind" ];
           };

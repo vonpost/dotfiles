@@ -4,9 +4,8 @@
   TERRA = {publicKey="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINaBarHkA8npoU1VmJPcRIdAAIdvQN7E1D+a+LXp7hmg"; };
   MOTHER = { publicKey="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEQ5oRZYos1W+reVTkkXq8ETxF4RFc90ydcw5jo/dHaG"; };
 }
-, isJournalHost ? false
 }:
-{ lib, config, ... }:
+{ lib, config, pkgs, ... }:
 let
   infra = config.my.infra;
   svc = import ../lib/vm-service-state.nix { inherit lib; };
@@ -28,7 +27,6 @@ in
     ../lib/modules/infra
     ../rffmpeg-nix/nixos-modules/rffmpeg.nix
     ../config/infra/services
-    (import ./share_journald.nix { isHost = isJournalHost; hostname=hostname; })
   ] ++ lib.optional (builtins.elem "sabnzbd" vmConfig.${hostname}.serviceMounts) ./sabnzbd_config.nix
     ++ (svc.mkMany statefulServices);
 
@@ -47,7 +45,24 @@ in
       enable = true;
       hostname = hostname;
     };
+    loggingAgent = {
+      enable = true;
+      hostname = hostname;
+    };
   };
+
+  services.prometheus.exporters.node = {
+    enable = true;
+    listenAddress = "0.0.0.0";
+    enabledCollectors = [ "systemd" ];
+  };
+
+  environment.systemPackages = with pkgs; [
+    tcpdump
+    curl
+    bind
+    conntrack-tools
+  ];
 
   microvm.hypervisor = lib.mkDefault "qemu";
   microvm.vsock.cid = infra.topology.vms.${hostname}.id;

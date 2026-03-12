@@ -2,39 +2,66 @@
 
 let
   cfg = config.services.dailyLlmJournal;
+  topology = config.my.infra.topology;
+  defaultLokiHost =
+    let
+      lokiVm = config.my.infra.observability.lokiVM;
+    in
+    if lokiVm != "" && topology.domain != ""
+    then "http://${lib.toLower lokiVm}.${topology.domain}:3100"
+    else "http://nikki.lan:3100";
 
-  journalFragments =
+  lokiFragments =
     lib.concatStringsSep "\n" (
-      map (slice: ''
-        echo "=== ${slice.title} ==="
-        ${pkgs.systemd}/bin/journalctl -m --since "24 hours ago" ${slice.filter} \
-          -o json |
-          ${pkgs.jq}/bin/jq -nRr '
+      map (query: ''
+        echo "=== ${query.title} ==="
+        ${pkgs.curl}/bin/curl -sSfG \
+          --data-urlencode 'query=${query.expr}' \
+          --data-urlencode "start=$START_NS" \
+          --data-urlencode "end=$END_NS" \
+          --data-urlencode "limit=${toString cfg.maxLinesPer}" \
+          --data-urlencode "direction=backward" \
+          "${cfg.lokiUrl}/loki/api/v1/query_range" |
+          ${pkgs.jq}/bin/jq -r --argjson priorityMax ${if query.priorityMax == null then "null" else toString query.priorityMax} '
             def norm: tostring | gsub("[\t\r\n]+"; " ");
 
             def msg($o):
-              ($o.MESSAGE? // "")
+              ($o.MESSAGE? // $o.message? // "")
               | if type == "array" then implode
                 else tostring
                 end;
 
-            inputs
-            | fromjson?                         # each line -> JSON (or null)
-            | select(type == "object") as $o    # only objects
-            | [ ($o._SYSTEMD_UNIT // $o.SYSLOG_IDENTIFIER // "-") | norm,
-                ($o.PRIORITY // "-") | norm,
-                (msg($o)) | norm ]
+            [ .data.result[]? as $stream
+              | $stream.values[]?
+              | .[0] as $ts
+              | (.[1] | fromjson?) as $o
+              | select($o != null and ($o | type) == "object")
+              | select(
+                  $priorityMax == null
+                  or (
+                    ($o.PRIORITY? | tonumber?) != null
+                    and (($o.PRIORITY | tonumber) <= $priorityMax)
+                  )
+                )
+              | [
+                  ($ts | tonumber),
+                  (($o.vm // $stream.stream.vm // "-") | norm),
+                  (($o.unit // $o.service // $o.SYSLOG_IDENTIFIER // "-") | norm),
+                  (($o.PRIORITY // "-") | norm),
+                  (msg($o) | norm)
+                ]
+            ]
+            | sort_by(.[0]) | reverse[]
             | @tsv
-          ' | tail -n ${toString cfg.maxLinesPer}
+          ' | cut -f2-
         echo
-      '') cfg.logSlices
+      '') cfg.logQueries
     );
 
   program = pkgs.writeShellApplication {
     name = "daily-llm-journal";
 
     runtimeInputs = [
-      pkgs.systemd
       pkgs.coreutils
       pkgs.jq
       pkgs.curl
@@ -44,6 +71,8 @@ let
       set -euo pipefail
 
       DATE="$(date -u +%Y%m%d)"
+      END_NS="$(date -u +%s)000000000"
+      START_NS="$(date -u -d "${cfg.lookback}" +%s)000000000"
       OUTDIR="${cfg.outputDir}"
       INPUT="$OUTDIR/input-$DATE.txt"
       OUTPUT="$OUTDIR/summary-$DATE.txt"
@@ -53,10 +82,10 @@ let
 
       {
         echo "Daily system log summary"
-        echo "Window: last 24 hours"
+        echo "Window: last ${cfg.lookback}"
         echo "Generated (UTC): $(date -u --iso-8601=seconds)"
         echo
-        ${journalFragments}
+        ${lokiFragments}
       } > "$TMP"
 
       tail -n ${toString cfg.maxLinesTotal} "$TMP" > "$INPUT"
@@ -102,12 +131,24 @@ let
 in
 {
   options.services.dailyLlmJournal = {
-    enable = lib.mkEnableOption "daily journal summarization via llama-server";
+    enable = lib.mkEnableOption "daily Loki-backed log summarization via llama-server";
 
     outputDir = lib.mkOption {
       type = lib.types.str;
       default = "/var/lib/dailyLlmJournal";
       description = "Directory for daily log inputs and summaries.";
+    };
+
+    lokiUrl = lib.mkOption {
+      type = lib.types.str;
+      default = defaultLokiHost;
+      description = "Base Loki URL used for LogQL query_range requests.";
+    };
+
+    lookback = lib.mkOption {
+      type = lib.types.str;
+      default = "24 hours ago";
+      description = "Relative date string passed to `date -d` for the Loki query window start.";
     };
 
     url = lib.mkOption {
@@ -156,40 +197,41 @@ in
       description = "Hard cap on log lines per entry.";
     };
 
-    logSlices = lib.mkOption {
+    logQueries = lib.mkOption {
       type = lib.types.listOf (lib.types.submodule {
         options = {
           title = lib.mkOption {
             type = lib.types.str;
           };
-          filter = lib.mkOption {
+          expr = lib.mkOption {
             type = lib.types.str;
-            description = "journalctl filter arguments.";
+            description = "LogQL expression queried from Loki.";
+          };
+          priorityMax = lib.mkOption {
+            type = lib.types.nullOr lib.types.int;
+            default = null;
+            description = "Optional maximum journald PRIORITY to retain after parsing the Loki log payload.";
           };
         };
       });
       default = [
         {
           title = "PRIORITY: warning..emerg";
-          filter = "-p warning..emerg";
+          expr = "{vm=~\".+\"}";
+          priorityMax = 4;
         }
         {
-          title = "UNIT: sshd.service (info+)";
-          filter = "_SYSTEMD_UNIT=sshd.service";
+          title = "SERVICE: vector";
+          expr = "{service=\"vector\"}";
         }
       ];
-      description = "Ordered list of journalctl slices to include.";
+      description = "Ordered list of Loki queries to include in the daily summary.";
     };
   };
 
   config = lib.mkIf cfg.enable {
-
-    users.users.dailyLlmJournal = {
-      extraGroups = ["systemd-journal"];
-    };
-
     systemd.services.dailyLlmJournal = {
-      description = "Daily journal summary via llama-server";
+      description = "Daily Loki log summary via llama-server";
       serviceConfig = {
         Type = "oneshot";
         User = "dailyLlmJournal";

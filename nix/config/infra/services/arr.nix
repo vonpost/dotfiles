@@ -1,6 +1,6 @@
 { config, lib, pkgs, bleeding ? pkgs, ... }:
 let
-  svc = import ./lib.nix { inherit config; };
+  svc = import ./lib.nix { inherit config lib; };
 in
 {
   config = lib.mkMerge [

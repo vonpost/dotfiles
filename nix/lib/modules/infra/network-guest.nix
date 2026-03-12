@@ -3,16 +3,11 @@ let
   inherit (lib) mkEnableOption mkIf mkOption types;
   cfg = config.my.infra.networkGuest;
   topology = config.my.infra.topology;
+  topo = import ../../infra-topology.nix { inherit topology; };
   vm = topology.vms.${cfg.name};
-  vlans = topology.vlans;
+  vlans = topo.vlans;
   firewallRules = topology.firewallRules;
   natRules = topology.natRules;
-
-  getSubnet = vlan: "10.10.${toString vlans.${vlan}.id}";
-  getIp = name: vlan: "${getSubnet vlan}.${toString topology.vms.${name}.id}";
-  getMac = name: vlan: "02:00:00:00:${toString vlans.${vlan}.id}:${toString topology.vms.${name}.id}";
-  getGateway = vlan: "${getSubnet vlan}.${toString topology.vms.${topology.gatewayVM}.id}";
-  getDns = getIp topology.dnsVM "srv";
 in
 {
   options.my.infra.networkGuest = {
@@ -34,11 +29,11 @@ in
 
     microvm.interfaces =
       map
-        (vlan: {
-          type = "tap";
-          id = "tap-${vlan}-${cfg.name}";
-          mac = getMac cfg.name vlan;
-        })
+          (vlan: {
+            type = "tap";
+            id = "tap-${vlan}-${cfg.name}";
+            mac = topo.getMac cfg.name vlan;
+          })
         vm.assignedVlans;
 
     systemd.network = {
@@ -49,12 +44,12 @@ in
           (vlan: {
             name = "20-${vlan}";
             value = {
-              matchConfig.MACAddress = getMac cfg.name vlan;
+              matchConfig.MACAddress = topo.getMac cfg.name vlan;
               networkConfig =
                 {
-                  Address = "${getIp cfg.name vlan}/24";
-                  Gateway = if cfg.name != topology.gatewayVM then getGateway vlan else null;
-                  DNS = getDns;
+                  Address = "${topo.getIp cfg.name vlan}/24";
+                  Gateway = if cfg.name != topology.gatewayVM then topo.getGateway vlan else null;
+                  DNS = topo.getDns;
                   IPv6AcceptRA = (cfg.name != topology.gatewayVM);
                 }
                 // (
@@ -76,7 +71,7 @@ in
           (vlan: {
             name = "50-custom-name-${vlan}";
             value = {
-              matchConfig.PermanentMACAddress = getMac cfg.name vlan;
+              matchConfig.PermanentMACAddress = topo.getMac cfg.name vlan;
               linkConfig.Name = vlan;
             };
           })

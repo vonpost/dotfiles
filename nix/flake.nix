@@ -18,6 +18,7 @@
           DARE.url = ./vm/DARE;
           OKAMI.url = ./vm/OKAMI;
           MAMORU.url = ./vm/MAMORU;
+          NIKKI.url = ./vm/NIKKI;
         };
 
   outputs =
@@ -35,6 +36,7 @@
       DARE,
       OKAMI,
       MAMORU,
+      NIKKI,
       ... }:
     let
       system = "x86_64-linux";
@@ -72,15 +74,23 @@
 
           {
             networking.hostName = "MOTHER";
-            microvm.autostart = ["UCHI" "SOTO" "DARE" "OKAMI" "KAIZOKU" "MAMORU"];
+            microvm.autostart = ["UCHI" "SOTO" "DARE" "OKAMI" "KAIZOKU" "MAMORU" "NIKKI"];
             microvm.vms.UCHI = { flake = UCHI; updateFlake = "git+file:///root/dotfiles/?dir=nix/vm/UCHI"; };
             microvm.vms.SOTO = { flake = SOTO; updateFlake = "git+file:///root/dotfiles/?dir=nix/vm/SOTO"; };
             microvm.vms.DARE = { flake = DARE; updateFlake = "git+file:///root/dotfiles/?dir=nix/vm/DARE"; };
             microvm.vms.KAIZOKU = { flake = KAIZOKU; updateFlake = "git+file:///root/dotfiles/?dir=nix/vm/KAIZOKU"; };
             microvm.vms.OKAMI = { flake = OKAMI; updateFlake = "git+file:///root/dotfiles/?dir=nix/vm/OKAMI"; };
             microvm.vms.MAMORU = { flake = MAMORU; updateFlake = "git+file:///root/dotfiles/?dir=nix/vm/MAMORU"; };
+            microvm.vms.NIKKI = { flake = NIKKI; updateFlake = "git+file:///root/dotfiles/?dir=nix/vm/NIKKI"; };
           }
         ];
       };
+      nixosConfigurations.UCHI = UCHI.nixosConfigurations.UCHI;
+      nixosConfigurations.SOTO = SOTO.nixosConfigurations.SOTO;
+      nixosConfigurations.DARE = DARE.nixosConfigurations.DARE;
+      nixosConfigurations.KAIZOKU = KAIZOKU.nixosConfigurations.KAIZOKU;
+      nixosConfigurations.OKAMI = OKAMI.nixosConfigurations.OKAMI;
+      nixosConfigurations.MAMORU = MAMORU.nixosConfigurations.MAMORU;
+      nixosConfigurations.NIKKI = NIKKI.nixosConfigurations.NIKKI;
     };
 }

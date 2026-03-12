@@ -11,7 +11,6 @@ in
   imports = [
     (import ../../../common/vm-common.nix {
       inherit hostname;
-      isJournalHost = spec.isJournalHost or false;
     })
   ];
 

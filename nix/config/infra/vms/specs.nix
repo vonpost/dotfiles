@@ -23,4 +23,9 @@
     mem = 2148;
     networkGateway = true;
   };
+
+  NIKKI = {
+    vcpu = 2;
+    mem = 6000;
+  };
 }

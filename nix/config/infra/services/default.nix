@@ -9,5 +9,6 @@
     ./recyclarr.nix
     ./acme.nix
     ./geoip.nix
+    ./observability.nix
   ];
 }

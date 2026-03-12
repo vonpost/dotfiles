@@ -3,12 +3,8 @@ let
   inherit (lib) mkEnableOption mkIf mkOption types;
   cfg = config.my.infra.networkHost;
   topology = config.my.infra.topology;
-  vlans = topology.vlans;
-
-  getSubnet = vlan: "10.10.${toString vlans.${vlan}.id}";
-  getIp = name: vlan: "${getSubnet vlan}.${toString topology.vms.${name}.id}";
-  getGateway = vlan: "${getSubnet vlan}.${toString topology.vms.${topology.gatewayVM}.id}";
-  getDns = getIp topology.dnsVM "srv";
+  topo = import ../../infra-topology.nix { inherit topology; };
+  vlans = topo.vlans;
 in
 {
   options.my.infra.networkHost = {
@@ -56,14 +52,14 @@ in
             value = {
               matchConfig.Name = "br-mgmt";
               address = [ "${topology.hostIp}/24" ];
-              dns = [ getDns ];
+              dns = [ topo.getDns ];
               networkConfig.BindCarrier = "enp8s0";
               routes =
-                [ { Gateway = getGateway "mgmt"; Metric = 100; } ]
+                [ { Gateway = topo.getGateway "mgmt"; Metric = 100; } ]
                 ++ map
                   (vlan: {
-                    Destination = "${getSubnet vlan}.0/24";
-                    Gateway = getGateway "mgmt";
+                    Destination = "${topo.getSubnet vlan}.0/24";
+                    Gateway = topo.getGateway "mgmt";
                   })
                   (builtins.attrNames (builtins.removeAttrs vlans [ "mgmt" ]));
               linkConfig.RequiredForOnline = "no";

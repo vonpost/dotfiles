@@ -1,3 +1,6 @@
+let
+  withNodeExporter = vm: vm // { provides = (vm.provides or [ ]) ++ [ "node_exporter" ]; };
+in
 {
   domain = "lan";
   gatewayVM = "MAMORU";
@@ -24,6 +27,9 @@
     wolf_audio_ping = { port = 48200; proto = "udp"; allowFrom = [ ]; };
     wolf_den = { port = 8080; proto = "tcp"; allowFrom = [ ]; };
     llama_server = { port = 8888; proto = "tcp"; allowFrom = [ ]; };
+    loki_http = { port = 3100; proto = "tcp"; allowFrom = [ "SOTO" "MAMORU" "OKAMI" "UCHI" "KAIZOKU" "DARE" ]; };
+    grafana_http = { port = 3000; proto = "tcp"; allowFrom = [ ]; };
+    node_exporter = { port = 9100; proto = "tcp"; allowFrom = [ "NIKKI" ]; };
   };
   natRules = {
     http = { port = 80; proto = "tcp"; externalPort = 80; };
@@ -32,47 +38,54 @@
     battle_net = { port = 1119; proto = "tcp"; externalPort = 1119; };
   };
   vms = {
-    MAMORU = {
+    MAMORU = withNodeExporter {
       id = 10;
       assignedVlans = [ "mgmt" "srv" "dmz" ];
       ipv6 = true;
       provides = [ ];
       portForward = [ ];
     };
-    KAIZOKU = {
+    KAIZOKU = withNodeExporter {
       id = 15;
       assignedVlans = [ "srv" ];
       ipv6 = true;
       provides = [ "ssh" "qbit" "sabnzbd" ];
       portForward = [ ];
     };
-    UCHI = {
+    UCHI = withNodeExporter {
       id = 20;
       assignedVlans = [ "srv" ];
       ipv6 = false;
       provides = [ "ssh" "sonarr" "radarr" "prowlarr" ];
       portForward = [ ];
     };
-    DARE = {
+    DARE = withNodeExporter {
       id = 53;
       assignedVlans = [ "srv" ];
       ipv6 = false;
       provides = [ "dns_tcp" "dns_udp" "ssh" ];
       portForward = [ ];
     };
-    SOTO = {
+    SOTO = withNodeExporter {
       id = 25;
       assignedVlans = [ "dmz" ];
       ipv6 = false;
       provides = [ "ssh" "jellyfin" ];
       portForward = [ "http" "https" ];
     };
-    OKAMI = {
+    OKAMI = withNodeExporter {
       id = 30;
       assignedVlans = [ "srv" ];
       ipv6 = true;
       provides = [ "ssh" "sshJellyfin" "wolf_http" "wolf_https" "wolf_control" "wolf_rtsp_setup" "wolf_video_ping" "wolf_audio_ping" "llama_server" "wolf_den" ];
       portForward = [ "battle_net" ];
+    };
+    NIKKI = withNodeExporter {
+      id = 35;
+      assignedVlans = [ "srv" ];
+      ipv6 = false;
+      provides = [ "ssh" "loki_http" "grafana_http" ];
+      portForward = [ ];
     };
   };
   vlans = {

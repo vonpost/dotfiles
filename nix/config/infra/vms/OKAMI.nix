@@ -148,7 +148,7 @@ in
 
   imports = [
     ../../../lib/daily-llm-journal.nix
-    (import ../../../common/vm-common.nix { hostname = hostname; isJournalHost = true; })
+    (import ../../../common/vm-common.nix { hostname = hostname; })
   ];
 
   ## ─────────────────────────────────────────────
@@ -260,19 +260,20 @@ in
     url = "http://localhost";
     model = "gpt-oss-20b-MXFP4";
     port = 8888;
-    logSlices = [
+    logQueries = [
       {
         title = "PRIORITY: warning..emerg";
-        filter = "-p warning..emerg";
+        expr = "{vm=~\".+\"}";
+        priorityMax = 4;
       }
     ]
-    ++ (map (service : { title = "UNIT: ${service} (info+)"; filter = "_SYSTEMD_UNIT=${service}.service"; })
+    ++ (map (service : { title = "SERVICE: ${service}"; expr = "{service=\"${service}\"}"; })
       [
-      "sshd"
       "nginx"
       "radarr"
       "sonarr"
       "jellyfin"
+      "wolf"
       ]
     );
   };

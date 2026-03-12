@@ -5,7 +5,6 @@ let
   services = config.my.infra.services;
   vmServiceMounts = config.my.infra.vmServiceMounts;
   state = config.my.infra.state;
-
   statefulServices = lib.filterAttrs (_svcName: service: service.managedState) services;
 
   mkBindMount = unit: mp: dev: {
@@ -105,6 +104,7 @@ in
                       (p: builtins.any (service: service."${p}Group") vmStateServices)
                       [ "downloads" "media" ]
                   );
+
             in
             perServiceMounts ++ sharedMounts
           )

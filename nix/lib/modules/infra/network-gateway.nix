@@ -3,12 +3,10 @@ let
   inherit (lib) mkEnableOption mkIf;
   cfg = config.my.infra.networkGateway;
   topology = config.my.infra.topology;
-  vlans = topology.vlans;
+  topo = import ../../infra-topology.nix { inherit topology; };
+  vlans = topo.vlans;
   firewallRules = topology.firewallRules;
   natRules = topology.natRules;
-
-  getSubnet = vlan: "10.10.${toString vlans.${vlan}.id}";
-  getIp = name: vlan: "${getSubnet vlan}.${toString topology.vms.${name}.id}";
 in
 {
   options.my.infra.networkGateway.enable = mkEnableOption "gateway nftables/NAT/WAN setup from my.infra.topology";
@@ -67,7 +65,7 @@ in
                         let
                           vlanSrc = lib.head topology.vms.${src}.assignedVlans;
                         in
-                        "iifname ${vlanSrc} ip saddr ${getIp src vlanSrc} ip daddr ${getIp topology.gatewayVM vlanSrc} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} ct state new accept"
+                        "iifname ${vlanSrc} ip saddr ${topo.getIp src vlanSrc} ip daddr ${topo.getIp topology.gatewayVM vlanSrc} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} ct state new accept"
                       )
                       firewallRules.${rule}.allowFrom
                   )
@@ -109,7 +107,7 @@ in
                                   vlanDest = if intersectedVlan == [ ] then lib.head vmCfg.assignedVlans else lib.head intersectedVlan;
                                 in
                                 if intersectedVlan == [ ] then
-                                  "iifname ${vlanSrc} oifname ${vlanDest} ip saddr ${getIp src vlanSrc} ip daddr ${getIp name vlanDest} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} ct state new accept"
+                                  "iifname ${vlanSrc} oifname ${vlanDest} ip saddr ${topo.getIp src vlanSrc} ip daddr ${topo.getIp name vlanDest} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} ct state new accept"
                                 else
                                   ""
                               )
@@ -136,7 +134,7 @@ in
                   (name: vmCfg:
                     map
                       (rule:
-                        "iifname wan oifname ${lib.head vmCfg.assignedVlans} ip daddr ${getIp name (lib.head vmCfg.assignedVlans)} ${natRules.${rule}.proto} dport ${toString natRules.${rule}.port} ct state new accept"
+                        "iifname wan oifname ${lib.head vmCfg.assignedVlans} ip daddr ${topo.getIp name (lib.head vmCfg.assignedVlans)} ${natRules.${rule}.proto} dport ${toString natRules.${rule}.port} ct state new accept"
                       )
                       vmCfg.portForward
                   )
@@ -151,7 +149,7 @@ in
                   (name: vmCfg:
                     map
                       (rule:
-                        "iifname wan ${natRules.${rule}.proto} dport ${toString natRules.${rule}.externalPort} dnat to ${getIp name (lib.head vmCfg.assignedVlans)}:${toString natRules.${rule}.port}"
+                        "iifname wan ${natRules.${rule}.proto} dport ${toString natRules.${rule}.externalPort} dnat to ${topo.getIp name (lib.head vmCfg.assignedVlans)}:${toString natRules.${rule}.port}"
                       )
                       vmCfg.portForward
                   )

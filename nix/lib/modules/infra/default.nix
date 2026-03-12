@@ -6,6 +6,7 @@
     ./service-state.nix
     ./service-secrets.nix
     ./host-service-mounts.nix
+    ./logging-agent.nix
     ./network-host.nix
     ./network-guest.nix
     ./network-gateway.nix

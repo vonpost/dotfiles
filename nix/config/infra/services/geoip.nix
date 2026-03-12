@@ -1,6 +1,6 @@
 { config, lib, pkgs, ... }:
 let
-  svc = import ./lib.nix { inherit config; };
+  svc = import ./lib.nix { inherit config lib; };
   geoDbCountryPath = "/var/lib/geoipupdate/GeoLite2-Country.mmdb";
   allowedCountries = [ "SE" ];
 in
