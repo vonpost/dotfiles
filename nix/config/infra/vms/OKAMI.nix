@@ -147,7 +147,6 @@ in
   };
 
   imports = [
-    ../../../lib/daily-llm-journal.nix
     (import ../../../common/vm-common.nix { hostname = hostname; })
   ];
 
@@ -253,28 +252,5 @@ in
       "--sleep-idle-seconds" "30"
       "--models-max" "1"
     ];
-  };
-
-  services.dailyLlmJournal = {
-    enable = true;
-    url = "http://localhost";
-    model = "gpt-oss-20b-MXFP4";
-    port = 8888;
-    logQueries = [
-      {
-        title = "PRIORITY: warning..emerg";
-        expr = "{vm=~\".+\"}";
-        priorityMax = 4;
-      }
-    ]
-    ++ (map (service : { title = "SERVICE: ${service}"; expr = "{service=\"${service}\"}"; })
-      [
-      "nginx"
-      "radarr"
-      "sonarr"
-      "jellyfin"
-      "wolf"
-      ]
-    );
   };
 }

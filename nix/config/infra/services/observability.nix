@@ -321,6 +321,178 @@ let
     version = 1;
   });
 
+  digestDashboard = pkgs.writeText "homelab-digest-dashboard.json" (builtins.toJSON {
+    annotations.list = [ ];
+    editable = true;
+    panels = [
+      {
+        datasource = {
+          type = "loki";
+          uid = "loki";
+        };
+        gridPos = {
+          h = 10;
+          w = 24;
+          x = 0;
+          y = 0;
+        };
+        id = 1;
+        options = {
+          dedupStrategy = "none";
+          enableLogDetails = true;
+          showLabels = true;
+          sortOrder = "Descending";
+        };
+        targets = [
+          {
+            expr = "{vm=\"NIKKI\", service=\"logDigest\", kind=\"summary\"}";
+            queryType = "range";
+            refId = "A";
+          }
+        ];
+        title = "Daily Summaries";
+        type = "logs";
+      }
+      {
+        datasource = {
+          type = "loki";
+          uid = "loki";
+        };
+        gridPos = {
+          h = 10;
+          w = 24;
+          x = 0;
+          y = 10;
+        };
+        id = 2;
+        options = {
+          dedupStrategy = "none";
+          enableLogDetails = true;
+          showLabels = true;
+          sortOrder = "Descending";
+        };
+        targets = [
+          {
+            expr = "{vm=\"NIKKI\", service=\"logDigest\", kind=\"memory\"}";
+            queryType = "range";
+            refId = "A";
+          }
+        ];
+        title = "Rolling Memory";
+        type = "logs";
+      }
+      {
+        datasource = {
+          type = "loki";
+          uid = "loki";
+        };
+        fieldConfig = {
+          defaults = {
+            color.mode = "thresholds";
+            thresholds = {
+              mode = "absolute";
+              steps = [
+                {
+                  color = "green";
+                  value = null;
+                }
+              ];
+            };
+          };
+          overrides = [ ];
+        };
+        gridPos = {
+          h = 5;
+          w = 8;
+          x = 0;
+          y = 20;
+        };
+        id = 3;
+        options = {
+          colorMode = "value";
+          graphMode = "none";
+          justifyMode = "auto";
+          orientation = "auto";
+          reduceOptions = {
+            calcs = [ "lastNotNull" ];
+            fields = "";
+            values = false;
+          };
+          textMode = "auto";
+        };
+        targets = [
+          {
+            expr = "sum(count_over_time({vm=\"NIKKI\", service=\"logDigest\", kind=\"summary\"}[7d]))";
+            queryType = "instant";
+            refId = "A";
+          }
+        ];
+        title = "Summaries Last 7d";
+        type = "stat";
+      }
+      {
+        datasource = {
+          type = "loki";
+          uid = "loki";
+        };
+        fieldConfig = {
+          defaults = {
+            color.mode = "thresholds";
+            thresholds = {
+              mode = "absolute";
+              steps = [
+                {
+                  color = "green";
+                  value = null;
+                }
+              ];
+            };
+          };
+          overrides = [ ];
+        };
+        gridPos = {
+          h = 5;
+          w = 8;
+          x = 8;
+          y = 20;
+        };
+        id = 4;
+        options = {
+          colorMode = "value";
+          graphMode = "none";
+          justifyMode = "auto";
+          orientation = "auto";
+          reduceOptions = {
+            calcs = [ "lastNotNull" ];
+            fields = "";
+            values = false;
+          };
+          textMode = "auto";
+        };
+        targets = [
+          {
+            expr = "sum(count_over_time({vm=\"NIKKI\", service=\"logDigest\", kind=\"memory\"}[7d]))";
+            queryType = "instant";
+            refId = "A";
+          }
+        ];
+        title = "Memory Updates Last 7d";
+        type = "stat";
+      }
+    ];
+    schemaVersion = 39;
+    tags = [ "homelab" "loki" "digest" ];
+    templating.list = [ ];
+    time = {
+      from = "now-30d";
+      to = "now";
+    };
+    timezone = "browser";
+    title = "Homelab Digest";
+    uid = "homelab-digest";
+    version = 1;
+  });
+
   dashboardsPath = pkgs.linkFarm "grafana-dashboards" [
     {
       name = "homelab-logs.json";
@@ -329,6 +501,10 @@ let
     {
       name = "homelab-metrics.json";
       path = metricsDashboard;
+    }
+    {
+      name = "homelab-digest.json";
+      path = digestDashboard;
     }
   ];
 in

@@ -26,7 +26,7 @@ in
     wolf_video_ping = { port = 48100; proto = "udp"; allowFrom = [ ]; };
     wolf_audio_ping = { port = 48200; proto = "udp"; allowFrom = [ ]; };
     wolf_den = { port = 8080; proto = "tcp"; allowFrom = [ ]; };
-    llama_server = { port = 8888; proto = "tcp"; allowFrom = [ ]; };
+    llama_server = { port = 8888; proto = "tcp"; allowFrom = [ "NIKKI" ]; };
     loki_http = { port = 3100; proto = "tcp"; allowFrom = [ "SOTO" "MAMORU" "OKAMI" "UCHI" "KAIZOKU" "DARE" ]; };
     grafana_http = { port = 3000; proto = "tcp"; allowFrom = [ ]; };
     node_exporter = { port = 9100; proto = "tcp"; allowFrom = [ "NIKKI" ]; };
@@ -82,7 +82,7 @@ in
     };
     NIKKI = withNodeExporter {
       id = 35;
-      assignedVlans = [ "srv" ];
+      assignedVlans = [ "mgmt" ];
       ipv6 = false;
       provides = [ "ssh" "loki_http" "grafana_http" ];
       portForward = [ ];

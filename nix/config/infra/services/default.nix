@@ -10,5 +10,6 @@
     ./acme.nix
     ./geoip.nix
     ./observability.nix
+    ./log-digest.nix
   ];
 }

@@ -5,7 +5,7 @@
   };
   OKAMI = {
     machineId = "72a6254779a04b32976185f178e50ea0";
-    serviceMounts = [ "wolf" "llama-cpp" "dailyLlmJournal" "jellyfin" ];
+    serviceMounts = [ "wolf" "llama-cpp" "jellyfin" ];
   };
   KAIZOKU = {
     machineId = "d7c79cedf4a24584ad28503505507e04";
@@ -26,6 +26,6 @@
   };
   NIKKI = {
     machineId = "5035f0c3bf5a4afc9e3ce44c4c96e2b4";
-    serviceMounts = [ "loki" "grafana" "prometheus" ];
+    serviceMounts = [ "loki" "grafana" "prometheus" "logDigest" ];
   };
 }
