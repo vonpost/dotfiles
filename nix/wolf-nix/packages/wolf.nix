@@ -284,7 +284,7 @@ pkgs.stdenv.mkDerivation (finalAttrs: rec {
 
   buildInputs = with pkgs; [
     openssl
-    boost
+    boost187	
     icu
     glib
     libevdev

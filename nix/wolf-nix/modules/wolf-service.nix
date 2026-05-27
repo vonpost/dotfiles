@@ -83,6 +83,7 @@ import pathlib
 import sys
 import tomllib
 import toml
+import uuid
 
 source_path = pathlib.Path(sys.argv[1])
 target_path = pathlib.Path(sys.argv[2])
@@ -91,6 +92,7 @@ output_path = pathlib.Path(sys.argv[3])
 with source_path.open("rb") as source_file:
   merged_cfg = tomllib.load(source_file)
 
+current_cfg = {}
 if target_path.exists():
   try:
     with target_path.open("rb") as target_file:
@@ -101,8 +103,19 @@ if target_path.exists():
   if isinstance(current_cfg, dict):
     if "paired_clients" in current_cfg:
       merged_cfg["paired_clients"] = current_cfg["paired_clients"]
-    if not merged_cfg.get("uuid") and current_cfg.get("uuid"):
-      merged_cfg["uuid"] = current_cfg["uuid"]
+
+if not isinstance(current_cfg, dict):
+  current_cfg = {}
+
+# The Nix module materializes Wolf config from static defaults, which bypasses
+# Wolf's upstream first-run path that would normally generate and persist a UUID.
+merged_uuid = merged_cfg.get("uuid")
+current_uuid = current_cfg.get("uuid")
+if not merged_uuid:
+  if current_uuid:
+    merged_cfg["uuid"] = current_uuid
+  else:
+    merged_cfg["uuid"] = str(uuid.uuid4())
 
 output_path.write_text(toml.dumps(merged_cfg), encoding="utf-8")
 PY

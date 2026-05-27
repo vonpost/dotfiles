@@ -155,7 +155,7 @@ in
   ## ─────────────────────────────────────────────
 
   microvm.vcpu = 12;
-  microvm.mem  = 16000;
+  microvm.mem  = 22000;
 
   microvm.devices = [
     { bus = "pci"; path = "0000:09:00.0"; } # GPU
@@ -238,19 +238,4 @@ in
 
   ## NON WOLF ###
   ##
-
-
-  services.llama-cpp = {
-    enable = true;
-    package = bleeding.llama-cpp-vulkan;
-    port = 8888;
-    host = "0.0.0.0";
-    model = null;
-    modelsDir = "/var/lib/llama-cpp/models/";
-    extraFlags = [
-      "--jinja"
-      "--sleep-idle-seconds" "30"
-      "--models-max" "1"
-    ];
-  };
 }

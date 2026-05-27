@@ -1,6 +1,7 @@
 { config, lib, ... }:
 let
   svc = import ./lib.nix { inherit config lib; };
+  llamaCppCfg = import ./llama-cpp-config.nix;
   topology = config.my.infra.topology;
   vmServiceMounts = config.my.infra.vmServiceMounts;
   llmVms =
@@ -30,8 +31,16 @@ in
     services.logDigest = {
       enable = true;
       url = llmUrl;
-      model = "gpt-oss-20b-MXFP4";
+      model = "Qwen3.6-35B-A3B-UD-Q4_K_XL";
       port = 8888;
+      contextWindow = llamaCppCfg.contextSize;
+      investigationEnable = true;
+      investigationMaxRounds = 10;
+      investigationMaxQueriesPerRound = 8;
+      investigationMaxTotalQueries = 40;
+      investigationPlannerMaxPromptChars = 28000;
+      investigationPlannerMaxTokens = 1800;
+      summaryMaxTokens = 3000;
       logQueries = [
         {
           title = "PRIORITY: warning..emerg";

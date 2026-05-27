@@ -6,12 +6,12 @@
 
   UCHI = {
     vcpu = 2;
-    mem = 4000;
+    mem = 3000;
   };
 
   KAIZOKU = {
     vcpu = 2;
-    mem = 4000;
+    mem = 3000;
   };
 
   DARE = {
@@ -26,6 +26,6 @@
 
   NIKKI = {
     vcpu = 2;
-    mem = 6000;
+    mem = 3000;
   };
 }
