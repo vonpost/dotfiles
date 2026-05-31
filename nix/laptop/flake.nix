@@ -24,11 +24,15 @@
         inherit system;
         config.allowUnfree = true;
       };
-      bleedingPackageNames = [
-        "vector"
-      ];
-      bleedingOverlay = final: prev:
-        nixpkgs.lib.genAttrs bleedingPackageNames (name: bleedingPkgs.${name});
+      bleedingOverlay = final: prev: {
+        vector = bleedingPkgs.vector;
+        openrazer-daemon = bleedingPkgs.openrazer-daemon;
+        linuxPackages_latest = prev.linuxPackages_latest.extend (linuxFinal: linuxPrev: {
+          openrazer = linuxPrev.openrazer.overrideAttrs (_old: {
+            inherit (bleedingPkgs.linuxPackages_latest.openrazer) src version;
+          });
+        });
+      };
       localOverlay = final: prev: {
         infra-flake-update = final.callPackage ../pkgs/infra-flake-update.nix { };
       };

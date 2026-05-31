@@ -15,11 +15,9 @@
         inherit system;
         config.allowUnfree = true;
       };
-      bleedingPackageNames = [
-        "vector"
-      ];
-      bleedingOverlay = final: prev:
-        nixpkgs.lib.genAttrs bleedingPackageNames (name: bleedingPkgs.${name});
+      bleedingOverlay = final: prev: {
+        vector = bleedingPkgs.vector;
+      };
     in {
       nixosConfigurations.SOTO = nixpkgs.lib.nixosSystem {
         inherit system;
