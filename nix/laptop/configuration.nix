@@ -292,7 +292,7 @@ in
     systemd.network.wait-online.anyInterface = true;
     nix.buildMachines = [
       {
-        hostName = "mother.lan";
+        hostName = "100.92.25.95";
         sshUser = "root";
         protocol = "ssh-ng";
         sshKey = "/run/secrets/ssh/TERRA";
