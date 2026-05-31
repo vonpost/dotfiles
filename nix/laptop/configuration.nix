@@ -96,6 +96,7 @@ in
       ghc
       gcc
       git
+      infra-flake-update
       #idris
       nix-direnv
 

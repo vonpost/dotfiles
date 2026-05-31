@@ -5,7 +5,6 @@
           self.submodules = true;
           nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
           bleeding.url = "github:NixOS/nixpkgs/master";
-          nixos-hardware.url = "github:NixOS/nixos-hardware";
           sops-nix.url = "github:Mic92/sops-nix";
           sops-nix.inputs.nixpkgs.follows = "nixpkgs";
           microvm.url = "github:microvm-nix/microvm.nix";
@@ -25,7 +24,6 @@
     { self,
       nixpkgs,
       bleeding,
-      nixos-hardware,
       sops-nix,
       microvm,
       rffmpeg-nix,
@@ -44,19 +42,19 @@
         inherit system;
         config.allowUnfree = true;
       };
+      bleedingPackageNames = [
+        "vector"
+      ];
+      bleedingOverlay = final: prev:
+        nixpkgs.lib.genAttrs bleedingPackageNames (name: bleedingPkgs.${name});
+      localOverlay = final: prev: {
+        infra-flake-update = final.callPackage ./pkgs/infra-flake-update.nix { };
+      };
     in
     {
-      nixosConfigurations.TERRA = nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = {
-          bleeding = bleedingPkgs;
-        };
-        modules = [
-          nixos-hardware.nixosModules.lenovo-thinkpad-t14-amd-gen1
-          sops-nix.nixosModules.sops
-          ./laptop/configuration.nix
-        ];
-      };
+      packages.${system}.infra-flake-update =
+        nixpkgs.legacyPackages.${system}.callPackage ./pkgs/infra-flake-update.nix { };
+
       nixosConfigurations.MOTHER = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
@@ -67,6 +65,7 @@
             ];
         };
         modules = [
+          { nixpkgs.overlays = [ bleedingOverlay localOverlay ]; }
           sops-nix.nixosModules.sops
           microvm.nixosModules.host
 

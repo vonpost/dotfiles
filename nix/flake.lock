@@ -2,6 +2,7 @@
   "nodes": {
     "DARE": {
       "inputs": {
+        "bleeding": "bleeding",
         "microvm": "microvm",
         "nixpkgs": "nixpkgs"
       },
@@ -17,7 +18,7 @@
     },
     "KAIZOKU": {
       "inputs": {
-        "bleeding": "bleeding",
+        "bleeding": "bleeding_2",
         "microvm": "microvm_2",
         "nixpkgs": "nixpkgs_2"
       },
@@ -33,7 +34,7 @@
     },
     "MAMORU": {
       "inputs": {
-        "bleeding": "bleeding_2",
+        "bleeding": "bleeding_3",
         "microvm": "microvm_3",
         "nixpkgs": "nixpkgs_3"
       },
@@ -49,7 +50,7 @@
     },
     "NIKKI": {
       "inputs": {
-        "bleeding": "bleeding_3",
+        "bleeding": "bleeding_4",
         "microvm": "microvm_4",
         "nixpkgs": "nixpkgs_4"
       },
@@ -65,7 +66,7 @@
     },
     "OKAMI": {
       "inputs": {
-        "bleeding": "bleeding_4",
+        "bleeding": "bleeding_5",
         "microvm": "microvm_5",
         "nixpkgs": "nixpkgs_5",
         "quadlet-nix": "quadlet-nix"
@@ -82,7 +83,7 @@
     },
     "SOTO": {
       "inputs": {
-        "bleeding": "bleeding_5",
+        "bleeding": "bleeding_6",
         "microvm": "microvm_6",
         "nixpkgs": "nixpkgs_6"
       },
@@ -98,7 +99,7 @@
     },
     "UCHI": {
       "inputs": {
-        "bleeding": "bleeding_6",
+        "bleeding": "bleeding_7",
         "microvm": "microvm_7",
         "nixpkgs": "nixpkgs_7"
       },
@@ -114,11 +115,11 @@
     },
     "bleeding": {
       "locked": {
-        "lastModified": 1770853988,
-        "narHash": "sha256-FcOHI008a6+OIMIDqC4yR5mgdaeBM1RX9qrvcRc+2lI=",
+        "lastModified": 1780262094,
+        "narHash": "sha256-37sTRuanVO0G0Y15+MrgcbmqE9cIIIa+Yd1JObUOXAk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "59fa7dd4925fc590c261d84ff090dd53cc35c085",
+        "rev": "71eaeded152872b4d290394755aa7b5b793bfce5",
         "type": "github"
       },
       "original": {
@@ -130,11 +131,11 @@
     },
     "bleeding_2": {
       "locked": {
-        "lastModified": 1770853988,
-        "narHash": "sha256-FcOHI008a6+OIMIDqC4yR5mgdaeBM1RX9qrvcRc+2lI=",
+        "lastModified": 1780262094,
+        "narHash": "sha256-37sTRuanVO0G0Y15+MrgcbmqE9cIIIa+Yd1JObUOXAk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "59fa7dd4925fc590c261d84ff090dd53cc35c085",
+        "rev": "71eaeded152872b4d290394755aa7b5b793bfce5",
         "type": "github"
       },
       "original": {
@@ -146,11 +147,11 @@
     },
     "bleeding_3": {
       "locked": {
-        "lastModified": 1773211471,
-        "narHash": "sha256-FiDZ3yI72NMCbUK4UxV8QQDqGJocSROYOomhYMTBdms=",
+        "lastModified": 1780262094,
+        "narHash": "sha256-37sTRuanVO0G0Y15+MrgcbmqE9cIIIa+Yd1JObUOXAk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "a74c2366fbdcba50a86fcda9356e79a35cc29e50",
+        "rev": "71eaeded152872b4d290394755aa7b5b793bfce5",
         "type": "github"
       },
       "original": {
@@ -162,11 +163,11 @@
     },
     "bleeding_4": {
       "locked": {
-        "lastModified": 1776801070,
-        "narHash": "sha256-ookiDejNbdTs8HAvp5lqt+AXq/RACOGFExJ0YU2MeKQ=",
+        "lastModified": 1780262094,
+        "narHash": "sha256-37sTRuanVO0G0Y15+MrgcbmqE9cIIIa+Yd1JObUOXAk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "4441772269b5624dff113e59d4d6305efe1d4c20",
+        "rev": "71eaeded152872b4d290394755aa7b5b793bfce5",
         "type": "github"
       },
       "original": {
@@ -178,11 +179,11 @@
     },
     "bleeding_5": {
       "locked": {
-        "lastModified": 1770853988,
-        "narHash": "sha256-FcOHI008a6+OIMIDqC4yR5mgdaeBM1RX9qrvcRc+2lI=",
+        "lastModified": 1780262094,
+        "narHash": "sha256-37sTRuanVO0G0Y15+MrgcbmqE9cIIIa+Yd1JObUOXAk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "59fa7dd4925fc590c261d84ff090dd53cc35c085",
+        "rev": "71eaeded152872b4d290394755aa7b5b793bfce5",
         "type": "github"
       },
       "original": {
@@ -194,11 +195,11 @@
     },
     "bleeding_6": {
       "locked": {
-        "lastModified": 1770853988,
-        "narHash": "sha256-FcOHI008a6+OIMIDqC4yR5mgdaeBM1RX9qrvcRc+2lI=",
+        "lastModified": 1780262094,
+        "narHash": "sha256-37sTRuanVO0G0Y15+MrgcbmqE9cIIIa+Yd1JObUOXAk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "59fa7dd4925fc590c261d84ff090dd53cc35c085",
+        "rev": "71eaeded152872b4d290394755aa7b5b793bfce5",
         "type": "github"
       },
       "original": {
@@ -210,11 +211,27 @@
     },
     "bleeding_7": {
       "locked": {
-        "lastModified": 1779846709,
-        "narHash": "sha256-rozjLNPWfe16625LBTEtaytViiYKL2Dz4/Gx+yHTmT8=",
+        "lastModified": 1780262094,
+        "narHash": "sha256-37sTRuanVO0G0Y15+MrgcbmqE9cIIIa+Yd1JObUOXAk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "e72228aec30dca6a1b5f88e9e1317ae2c4b1b8ca",
+        "rev": "71eaeded152872b4d290394755aa7b5b793bfce5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "master",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "bleeding_8": {
+      "locked": {
+        "lastModified": 1780262094,
+        "narHash": "sha256-37sTRuanVO0G0Y15+MrgcbmqE9cIIIa+Yd1JObUOXAk=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "71eaeded152872b4d290394755aa7b5b793bfce5",
         "type": "github"
       },
       "original": {
@@ -396,21 +413,6 @@
       "original": {
         "owner": "microvm-nix",
         "repo": "microvm.nix",
-        "type": "github"
-      }
-    },
-    "nixos-hardware": {
-      "locked": {
-        "lastModified": 1779826373,
-        "narHash": "sha256-3sRzgLX86qV5NlhWUAufLmHwkyP03tmL3VdZIM13dEo=",
-        "owner": "NixOS",
-        "repo": "nixos-hardware",
-        "rev": "ef4efb84766a166c906bd55759574676bf91267c",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "repo": "nixos-hardware",
         "type": "github"
       }
     },
@@ -627,9 +629,8 @@
         "OKAMI": "OKAMI",
         "SOTO": "SOTO",
         "UCHI": "UCHI",
-        "bleeding": "bleeding_7",
+        "bleeding": "bleeding_8",
         "microvm": "microvm_8",
-        "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs_8",
         "rffmpeg-nix": "rffmpeg-nix",
         "sops-nix": "sops-nix",

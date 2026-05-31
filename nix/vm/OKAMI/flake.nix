@@ -27,6 +27,11 @@
         inherit system;
         config.allowUnfree = true;
       };
+      bleedingPackageNames = [
+        "vector"
+      ];
+      bleedingOverlay = final: prev:
+        nixpkgs.lib.genAttrs bleedingPackageNames (name: bleedingPkgs.${name});
     in
     {
       nixosConfigurations.OKAMI = nixpkgs.lib.nixosSystem {
@@ -35,6 +40,7 @@
           bleeding = bleedingPkgs;
         };
         modules = [
+          { nixpkgs.overlays = [ bleedingOverlay ]; }
           microvm.nixosModules.microvm
           quadlet-nix.nixosModules.quadlet
           ../../wolf-nix/modules/wolf-service.nix

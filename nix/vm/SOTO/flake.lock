@@ -2,11 +2,11 @@
   "nodes": {
     "bleeding": {
       "locked": {
-        "lastModified": 1770853988,
-        "narHash": "sha256-FcOHI008a6+OIMIDqC4yR5mgdaeBM1RX9qrvcRc+2lI=",
+        "lastModified": 1780262094,
+        "narHash": "sha256-37sTRuanVO0G0Y15+MrgcbmqE9cIIIa+Yd1JObUOXAk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "59fa7dd4925fc590c261d84ff090dd53cc35c085",
+        "rev": "71eaeded152872b4d290394755aa7b5b793bfce5",
         "type": "github"
       },
       "original": {

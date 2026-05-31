@@ -15,6 +15,11 @@
         inherit system;
         config.allowUnfree = true;
       };
+      bleedingPackageNames = [
+        "vector"
+      ];
+      bleedingOverlay = final: prev:
+        nixpkgs.lib.genAttrs bleedingPackageNames (name: bleedingPkgs.${name});
     in {
       nixosConfigurations.NIKKI = nixpkgs.lib.nixosSystem {
         inherit system;
@@ -22,6 +27,7 @@
           bleeding = bleedingPkgs;
         };
         modules = [
+          { nixpkgs.overlays = [ bleedingOverlay ]; }
           microvm.nixosModules.microvm
           ../../config/infra/vms/NIKKI.nix
         ];
