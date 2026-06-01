@@ -4,10 +4,8 @@
 
 { config, pkgs, lib, bleeding, ... }:
 let
-  # Should be pkgs.emacsGcc but tired of recompiling all the fucking time.
-  myEmacs =   ((pkgs.emacsPackagesFor pkgs.emacs-gtk).emacsWithPackages (epkgs: [
-    epkgs.vterm
-  ]));
+  # Use the default X/lucid build for better daemon stability than GTK under X11.
+  myEmacs = pkgs.emacs;
   myRofi =  pkgs.rofi.override { plugins = [ pkgs.rofi-bluetooth pkgs.rofi-rbw]; };
 in
 {
@@ -304,16 +302,4 @@ in
     ];
   nix.settings.builders-use-substitutes = true;
   nix.distributedBuilds = true;
-
-  fileSystems."/theta" = {
-    device = "mother.lan:/theta";
-    fsType = "nfs";
-    options = [
-      "x-systemd.automount"
-      "noauto"
-      "_netdev"
-      "x-systemd.idle-timeout=300"
-      "nofail" ];
-  };
-
 }
