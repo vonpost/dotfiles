@@ -66,21 +66,11 @@ let
       }
 
       on_battery() {
-        local ps type online status
+        local ps status
 
-        shopt -s nullglob
-        for ps in /sys/class/power_supply/*; do
-          [ -r "$ps/type" ] || continue
-          type="$(<"$ps/type")"
-          case "$type" in
-            Mains|USB|USB_C|USB_PD)
-              if [ -r "$ps/online" ]; then
-                online="$(<"$ps/online")"
-                [ "$online" = "1" ] && return 1
-              fi
-              ;;
-          esac
-        done
+        if ac_online; then
+          return 1
+        fi
 
         for ps in /sys/class/power_supply/BAT*; do
           [ -r "$ps/status" ] || continue
@@ -91,9 +81,51 @@ let
         return 1
       }
 
+      ac_online() {
+        local ps type online
+
+        shopt -s nullglob
+        for ps in /sys/class/power_supply/*; do
+          [ -r "$ps/type" ] || continue
+          type="$(<"$ps/type")"
+          case "$type" in
+            Mains|USB|USB_C|USB_PD)
+              if [ -r "$ps/online" ]; then
+                online="$(<"$ps/online")"
+                [ "$online" = "1" ] && return 0
+              fi
+              ;;
+          esac
+        done
+
+        return 1
+      }
+
+      ac_state_from_event() {
+        local event="''${1:-}"
+        local value
+
+        [ -n "$event" ] || return 1
+        value="''${event##* }"
+
+        case "$value" in
+          00000001|1)
+            printf 'online\n'
+            ;;
+          00000000|0)
+            printf 'offline\n'
+            ;;
+          *)
+            return 1
+            ;;
+        esac
+      }
+
       notify_desktop() {
         local title="$1"
         local body="$2"
+        local urgency="''${3:-critical}"
+        local expire_time="''${4:-0}"
         local user="${desktopUser}"
         local uid
 
@@ -107,10 +139,54 @@ let
           DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
           notify-send \
             --app-name="Battery" \
-            --urgency=critical \
-            --expire-time=0 \
+            --urgency="$urgency" \
+            --expire-time="$expire_time" \
             "$title" \
             "$body" || true
+      }
+
+      notify_ac() {
+        local event="''${1:-}"
+        local percent state state_dir state_file
+        local body="Running on battery."
+
+        if state="$(ac_state_from_event "$event")"; then
+          :
+        else
+          # If the ACPI event payload is ambiguous, give sysfs a brief moment to settle.
+          sleep 0.2
+        fi
+
+        if [ -z "''${state:-}" ] && ac_online; then
+          state="online"
+        elif [ -z "''${state:-}" ]; then
+          state="offline"
+        fi
+
+        state_dir="/run/terra-battery-guard"
+        state_file="$state_dir/ac-state"
+        mkdir -p "$state_dir"
+        if [ -r "$state_file" ] && [ "$(<"$state_file")" = "$state" ]; then
+          return 0
+        fi
+        printf '%s\n' "$state" > "$state_file"
+
+        if [ "$state" = "online" ]; then
+          notify_desktop \
+            "AC plugged in" \
+            "Running on external power." \
+            normal \
+            5000
+        else
+          if percent="$(battery_percent 2>/dev/null)"; then
+            body="Running on battery ($percent%)."
+          fi
+          notify_desktop \
+            "AC unplugged" \
+            "$body" \
+            normal \
+            5000
+        fi
       }
 
       notify_low() {
@@ -225,11 +301,14 @@ let
         notify-low)
           notify_low
           ;;
+        notify-ac)
+          notify_ac
+          ;;
         hybrid-sleep-low)
           hybrid_sleep_low
           ;;
         *)
-          printf 'Usage: %s {notify-low|hybrid-sleep-low}\n' "$0" >&2
+          printf 'Usage: %s {notify-low|notify-ac|hybrid-sleep-low}\n' "$0" >&2
           exit 2
           ;;
       esac
@@ -280,6 +359,9 @@ in
 
   boot.resumeDevice = builtins.head (map (d: d.device) config.swapDevices);
   services.acpid.enable = true;
+  services.acpid.acEventCommands = ''
+    ${batteryGuard}/bin/terra-battery-guard notify-ac "$@"
+  '';
 
   systemd.user.services.terra-low-battery-notify = {
     description = "Persistent low battery notification for TERRA";
