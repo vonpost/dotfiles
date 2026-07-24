@@ -48,7 +48,7 @@
         };
       };
     };
-    jellyseerr = { name = "jellyseerr"; uid = 2105; mediaGroup = true; logging.enable = true; };
+    seerr = { name = "seerr"; uid = 2105; mediaGroup = true; logging.enable = true; };
     sabnzbd = {
       name = "sabnzbd";
       uid = 2106;

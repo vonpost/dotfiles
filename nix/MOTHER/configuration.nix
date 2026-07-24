@@ -62,8 +62,8 @@ in
     systemd.targets.hibernate.enable = false;
     systemd.targets.hybrid-sleep.enable = false;
     systemd.settings.Manager.DefaultTimeoutStopSec = "10s";
-    boot.initrd.kernelModules = [ "8812au" ];
-    boot.extraModulePackages = [ config.boot.kernelPackages.rtl8812au ];
+    boot.initrd.kernelModules = [  ];
+    boot.extraModulePackages = [  ];
     nix.gc.automatic = true;
     nix.gc.dates = "weekly";
     nix.gc.options = "--delete-older-than 60d";
@@ -139,5 +139,5 @@ in
     # compatible, in order to avoid breaking some software such as database
     # servers. You should change this only after NixOS release notes say you
     # should.
-    system.stateVersion = "25.11"; # Did you read the comment?
+    system.stateVersion = "26.05"; # Did you read the comment?
 }

@@ -5,9 +5,11 @@
 
   "/boot" = {
     device = "/dev/disk/by-label/boot";
+    fsType = "vfat";
   };
   "/omega" = {
     device = "/dev/disk/by-label/omega";
+    fsType = "ext4";
   };
 
   "/mnt/btr_pool" = {

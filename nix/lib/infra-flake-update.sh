@@ -165,7 +165,7 @@ nix_flake_update() {
 sync_remote() {
   [ -n "$remote_host" ] || return 0
 
-  rsync_args=( -a )
+  rsync_args=( --no-owner --no-group -a )
   if [ "$rsync_delete" -eq 1 ]; then
     rsync_args+=( --delete )
   fi

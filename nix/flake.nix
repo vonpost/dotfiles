@@ -12,12 +12,19 @@
           rffmpeg-nix.url = ./rffmpeg-nix;
           wolf.url = ./wolf-nix;
           UCHI.url = ./vm/UCHI;
+          UCHI.inputs.microvm.follows = "microvm";
           SOTO.url = ./vm/SOTO;
+          SOTO.inputs.microvm.follows = "microvm";
           KAIZOKU.url = ./vm/KAIZOKU;
+          KAIZOKU.inputs.microvm.follows = "microvm";
           DARE.url = ./vm/DARE;
+          DARE.inputs.microvm.follows = "microvm";
           OKAMI.url = ./vm/OKAMI;
+          OKAMI.inputs.microvm.follows = "microvm";
           MAMORU.url = ./vm/MAMORU;
+          MAMORU.inputs.microvm.follows = "microvm";
           NIKKI.url = ./vm/NIKKI;
+          NIKKI.inputs.microvm.follows = "microvm";
         };
 
   outputs =

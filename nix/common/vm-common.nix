@@ -65,6 +65,7 @@ in
   ];
 
   microvm.hypervisor = lib.mkDefault "qemu";
+  microvm.registerWithMachined = true;
   microvm.vsock.cid = infra.topology.vms.${hostname}.id;
 
   microvm.shares = [

@@ -34,9 +34,9 @@ in
       environment.systemPackages = [ pkgs.jellyfin-ffmpeg ];
     })
 
-    (lib.mkIf (svc.hasService "jellyseerr") {
-      services.jellyseerr.enable = true;
-      users.users.jellyseerr.extraGroups = [ "media" ];
+    (lib.mkIf (svc.hasService "seerr") {
+      services.seerr.enable = true;
+      users.users.seerr.extraGroups = [ "media" ];
     })
   ];
 }

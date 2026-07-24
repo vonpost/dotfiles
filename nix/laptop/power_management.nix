@@ -341,8 +341,8 @@ in
   ## Suspend on lid / power-button actions
   ########################################
   services.logind.settings.Login = {
-    HandleLidSwitch = "suspend"; # close lid -> suspend
-    HandleLidSwitchExternalPower = "suspend"; # also suspend when on AC
+    HandleLidSwitch = "hybrid-sleep"; # close lid -> suspend with hibernate fallback
+    HandleLidSwitchExternalPower = "hybrid-sleep"; # also protect sleep state when on AC
     HandleLidSwitchDocked = "ignore"; # don't suspend if docked
 
     HandlePowerKey = "suspend"; # short press power button -> suspend
