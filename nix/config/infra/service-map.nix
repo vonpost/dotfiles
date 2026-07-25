@@ -80,7 +80,10 @@
       logging.enable = true;
     };
     "llama-cpp" = { name = "llama-cpp"; uid = 2109; logging.enable = true; };
-    logDigest = { name = "logDigest"; uid = 2110; managedState = false; logging.enable = true; };
+    # managedState: the signature catalog and volume baseline are the digest's
+    # only long-term memory, and they must outlive both reboots and Loki's much
+    # shorter retention.
+    logDigest = { name = "logDigest"; uid = 2110; logging.enable = true; };
     acme = { name = "acme"; uid = 2111; unit = "acme-setup"; logging.enable = true; };
     nginx = {
       name = "nginx";

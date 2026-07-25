@@ -32,32 +32,23 @@ in
       enable = true;
       url = llmUrl;
       model = "Qwen3.6-35B-A3B-UD-Q4_K_XL";
-      port = 8888;
-      contextWindow = llamaCppCfg.contextSize;
-      investigationEnable = true;
-      investigationMaxRounds = 10;
-      investigationMaxQueriesPerRound = 8;
-      investigationMaxTotalQueries = 40;
-      investigationPlannerMaxPromptChars = 28000;
-      investigationPlannerMaxTokens = 1800;
-      summaryMaxTokens = 3000;
-      logQueries = [
-        {
-          title = "PRIORITY: warning..emerg";
-          expr = "{vm=~\".+\"}";
-          priorityMax = 4;
-        }
-      ]
-      ++ (map (service: {
-        title = "SERVICE: ${service}";
-        expr = "{service=\"${service}\"}";
-      }) [
-        "nginx"
-        "radarr"
-        "sonarr"
-        "jellyfin"
-        "wolf"
-      ]);
+      port = llamaCppCfg.port;
+
+      # Runs five minutes after the GPU window opens, so the model is resident by
+      # the time the first request lands. See llama-cpp.nix for the window itself.
+      reasonOnCalendar = llamaCppCfg.gpuWindowStart;
+
+      # Measured on this hardware: prefill ~220 tok/s, decode ~15-30 tok/s. The
+      # old design burned ~380s per run, over half of it on planner output that
+      # was then discarded. This budget is deliberately below that.
+      gpuBudgetSeconds = 240;
+      synthesisReserveSeconds = 90;
+
+      # Internet background radiation and Loki's own housekeeping. Both are high
+      # volume and carry no operational signal, so they are counted but never
+      # narrated. Excluding them is what stops every digest opening with a
+      # paragraph about firewall drops.
+      noiseServices = [ "firewall" "loki" ];
     };
   };
 }

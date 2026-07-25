@@ -52,12 +52,41 @@ in
       extraFlags = llamaCppCfg.extraFlags;
     };
 
+    # The GPU is shared with wolf and jellyfin, and llama-cpp serves nothing but
+    # logDigest. So it never auto-starts: a timer opens a window, and
+    # RuntimeMaxSec closes it whether or not the digest finished.
+    systemd.services.llama-cpp.wantedBy = lib.mkForce [ ];
+
+    systemd.services.llama-cpp-window = {
+      description = "Bounded GPU window for llama-cpp";
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${pkgs.systemd}/bin/systemctl start llama-cpp.service";
+        ExecStop = "${pkgs.systemd}/bin/systemctl stop llama-cpp.service";
+        RuntimeMaxSec = llamaCppCfg.gpuWindowMaxSec;
+      };
+    };
+
+    systemd.timers.llama-cpp-window = {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = llamaCppCfg.gpuWindowOpen;
+        # Not Persistent: a missed window must not reopen at an arbitrary time
+        # after boot, which would defeat the whole point of bounding it.
+        Persistent = false;
+        AccuracySec = "1s";
+      };
+    };
+
     systemd.services.llama-cpp-router-watchdog = {
       description = "Restart llama-cpp if router mode leaves behind a zombie worker";
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${routerWatchdog}/bin/llama-cpp-router-watchdog";
       };
+      # Only meaningful while llama-cpp is actually running.
+      unitConfig.ConditionPathExists = "/run/systemd/units/invocation:llama-cpp.service";
     };
 
     systemd.timers.llama-cpp-router-watchdog = {

@@ -345,12 +345,12 @@ let
         };
         targets = [
           {
-            expr = "{vm=\"NIKKI\", service=\"logDigest\", kind=\"summary\"}";
+            expr = "{vm=\"${svc.hostname}\", service=\"logDigest\", kind=\"summary\"}";
             queryType = "range";
             refId = "A";
           }
         ];
-        title = "Daily Summaries";
+        title = "Daily Digests";
         type = "logs";
       }
       {
@@ -373,12 +373,12 @@ let
         };
         targets = [
           {
-            expr = "{vm=\"NIKKI\", service=\"logDigest\", kind=\"memory\"}";
+            expr = "{vm=\"${svc.hostname}\", service=\"logDigest\", source_type=\"journald\"}";
             queryType = "range";
             refId = "A";
           }
         ];
-        title = "Rolling Memory";
+        title = "Digest Run Log (GPU budget, tool calls, warnings)";
         type = "logs";
       }
       {
@@ -422,12 +422,12 @@ let
         };
         targets = [
           {
-            expr = "sum(count_over_time({vm=\"NIKKI\", service=\"logDigest\", kind=\"summary\"}[7d]))";
+            expr = "sum(count_over_time({vm=\"${svc.hostname}\", service=\"logDigest\", kind=\"summary\"}[7d]))";
             queryType = "instant";
             refId = "A";
           }
         ];
-        title = "Summaries Last 7d";
+        title = "Digests Last 7d";
         type = "stat";
       }
       {
@@ -471,20 +471,22 @@ let
         };
         targets = [
           {
-            expr = "sum(count_over_time({vm=\"NIKKI\", service=\"logDigest\", kind=\"memory\"}[7d]))";
+            expr = "sum(count_over_time({vm=\"${svc.hostname}\", service=\"logDigest\"} |~ `synthesis failed|FAILED` [7d]))";
             queryType = "instant";
             refId = "A";
           }
         ];
-        title = "Memory Updates Last 7d";
+        title = "Failed Runs Last 7d";
         type = "stat";
       }
     ];
     schemaVersion = 39;
     tags = [ "homelab" "loki" "digest" ];
     templating.list = [ ];
+    # Bounded by Loki's 168h retention. The durable copies live on disk in the
+    # logDigest state directory, which is where to look for anything older.
     time = {
-      from = "now-30d";
+      from = "now-7d";
       to = "now";
     };
     timezone = "browser";
@@ -537,6 +539,9 @@ in
           server = {
             http_listen_address = "0.0.0.0";
             http_listen_port = 3100;
+            # Loki's own info-level housekeeping was 55k lines/day, over 60% of
+            # all fleet log volume, and crowded real events out of every query.
+            log_level = "warn";
           };
           common = {
             path_prefix = "/var/lib/loki";

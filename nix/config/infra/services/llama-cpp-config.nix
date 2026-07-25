@@ -5,6 +5,13 @@ in
   inherit contextSize;
   host = "0.0.0.0";
   port = 8888;
+
+  # Bounded GPU window. llama-cpp serves nothing but logDigest, so it is started
+  # on a timer and stopped unconditionally rather than left running. The digest
+  # starts five minutes after the window opens, which covers model load.
+  gpuWindowOpen = "03:25";
+  gpuWindowStart = "03:30";
+  gpuWindowMaxSec = "25min";
   model = null;
   modelsDir = "/var/lib/llama-cpp/models/";
   extraFlags = [
