@@ -6,20 +6,25 @@ usage() {
   cat <<'EOF'
 Usage:
   infra-flake-update [-R] [--remote HOST] [--root PATH] mother [INPUT...]
+  infra-flake-update [--remote HOST] [--root PATH] fleet [INPUT...]
   infra-flake-update [-R] [--root PATH] terra [INPUT...]
-  infra-flake-update [-R] [--remote HOST] [--root PATH] vm VM [INPUT...]
+  infra-flake-update [-R] [--remote HOST] [--root PATH] vm VM
   infra-flake-update [--root PATH] list
 
 Commands:
-  mother       Update only root inputs used by MOTHER by default.
-               Defaults: nixpkgs bleeding sops-nix microvm
+  mother       Update MOTHER's own inputs. MOTHER stays on nixpkgs-mother so
+               fleet updates can never move its pin by accident.
+               Defaults: nixpkgs-mother sops-nix microvm
+
+  fleet        Update the inputs the VMs build from.
+               Defaults: nixpkgs bleeding quadlet-nix
 
   terra        Update the standalone TERRA laptop flake.
 
-  vm VM        Update one standalone VM flake, then refresh only that VM input
-               in the root flake lock so fresh MOTHER installs use the same pin.
+  vm VM        Deploy one VM from the root flake (sync remote, then
+               microvm -Ru VM with -R). Inputs are updated via 'fleet'.
 
-  list         List VM flakes under the root flake.
+  list         List VMs defined by the root flake.
 
 Options:
   -R           Apply after updating. Runs nixos-rebuild switch for mother,
@@ -37,14 +42,12 @@ Options:
 Examples:
   infra-flake-update mother
   infra-flake-update --remote root@mother.lan -R mother
-  infra-flake-update -R mother
+  infra-flake-update fleet
+  infra-flake-update --remote root@mother.lan fleet nixpkgs
   infra-flake-update terra
   infra-flake-update -R terra
-  infra-flake-update mother nixpkgs microvm
-  infra-flake-update vm DARE
   infra-flake-update --remote root@mother.lan -R vm DARE
   infra-flake-update -R vm DARE
-  infra-flake-update vm DARE bleeding
 EOF
 }
 
@@ -62,12 +65,12 @@ detect_root() {
   cwd="$(pwd -P)"
   search="$cwd"
   while [ "$search" != "/" ]; do
-    if [ -f "$search/nix/flake.nix" ] && [ -d "$search/nix/vm" ] && [ -f "$search/nix/laptop/flake.nix" ]; then
+    if [ -f "$search/nix/flake.nix" ] && [ -d "$search/nix/config/infra" ] && [ -f "$search/nix/laptop/flake.nix" ]; then
       printf '%s\n' "$search/nix"
       return
     fi
 
-    if [ -f "$search/flake.nix" ] && [ -d "$search/vm" ] && [ -f "$search/laptop/flake.nix" ]; then
+    if [ -f "$search/flake.nix" ] && [ -d "$search/config/infra" ] && [ -f "$search/laptop/flake.nix" ]; then
       printf '%s\n' "$search"
       return
     fi
@@ -209,10 +212,9 @@ run_vm_rebuild() {
 }
 
 vm_names() {
-  for flake in "$root"/vm/*/flake.nix; do
-    [ -e "$flake" ] || continue
-    basename "$(dirname "$flake")"
-  done | sort
+  nix --extra-experimental-features "nix-command flakes" \
+    eval --json "$root#nixosConfigurations" --apply builtins.attrNames \
+    | tr -d '[]"' | tr ',' '\n' | grep -v '^MOTHER$' | sort
 }
 
 command="${1:-}"
@@ -228,7 +230,7 @@ case "$command" in
     if [ "${#parsed_inputs[@]}" -gt 0 ]; then
       inputs=( "${parsed_inputs[@]}" )
     else
-      inputs=( nixpkgs bleeding sops-nix microvm )
+      inputs=( nixpkgs-mother sops-nix microvm )
     fi
 
     printf 'Updating root flake inputs for MOTHER: %s\n' "${inputs[*]}"
@@ -238,6 +240,20 @@ case "$command" in
     if [ "$rebuild" -eq 1 ]; then
       run_mother_rebuild
     fi
+    ;;
+
+  fleet)
+    parse_input_args "$@"
+    [ "$rebuild" -eq 0 ] || die "fleet has no -R; deploy per VM with: infra-flake-update -R vm NAME"
+    if [ "${#parsed_inputs[@]}" -gt 0 ]; then
+      inputs=( "${parsed_inputs[@]}" )
+    else
+      inputs=( nixpkgs bleeding quadlet-nix )
+    fi
+
+    printf 'Updating root flake inputs for the VM fleet: %s\n' "${inputs[*]}"
+    nix_flake_update --flake "$root" "${inputs[@]}"
+    sync_remote
     ;;
 
   terra)
@@ -279,21 +295,9 @@ case "$command" in
     vm="$1"
     shift
 
-    vm_dir="$root/vm/$vm"
-    [ -f "$vm_dir/flake.nix" ] || die "unknown VM '$vm'; run: infra-flake-update list"
-
     parse_input_args "$@"
-    if [ "${#parsed_inputs[@]}" -gt 0 ]; then
-      inputs=( "${parsed_inputs[@]}" )
-      printf 'Updating VM flake %s inputs: %s\n' "$vm" "${inputs[*]}"
-      nix_flake_update --flake "$vm_dir" "${inputs[@]}"
-    else
-      printf 'Updating VM flake %s inputs: all\n' "$vm"
-      nix_flake_update --flake "$vm_dir"
-    fi
+    [ "${#parsed_inputs[@]}" -eq 0 ] || die "VMs build from the root flake; update inputs with: infra-flake-update mother ${parsed_inputs[*]}"
 
-    printf 'Refreshing root flake pin for VM %s\n' "$vm"
-    nix_flake_update --flake "$root" "$vm"
     sync_remote
 
     if [ "$rebuild" -eq 1 ]; then
