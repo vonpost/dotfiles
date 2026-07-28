@@ -53,6 +53,11 @@ let
         serviceConfig.DynamicUser = lib.mkForce false;
         serviceConfig.User = lib.mkForce user;
         serviceConfig.Group = lib.mkForce group;
+        # Upstream hardening (PrivateUsers=true) leaves supplementary gids
+        # unmapped in the unit's user namespace, so chown to media/downloads
+        # fails with EINVAL. Group ownership must come from setgid dirs +
+        # this umask, not from the service chowning after import.
+        serviceConfig.UMask = lib.mkIf mediaGroup (lib.mkForce "0027");
         unitConfig.RequiresMountsFor =
           [ "/var/lib/${bindTarget}" ]
           ++ lib.optional hasCacheDir "/var/cache/${bindTarget}";
