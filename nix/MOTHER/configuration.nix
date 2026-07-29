@@ -17,6 +17,7 @@ in
     [ # Include the results of the hardware scan.
     ./filesystems.nix
     ./hardware-configuration.nix
+    ./boot-resilience.nix
     ./vfio.nix
     ./vm.nix
     ./wifi.nix
