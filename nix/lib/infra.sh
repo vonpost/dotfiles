@@ -17,15 +17,25 @@ Check (local, nothing deployed):
   infra check               evaluate all systems (nix flake check --no-build)
   infra check --build       also build them
 
-Deploy (syncs repo to MOTHER first; builds from committed HEAD):
+Deploy (syncs repo to MOTHER first):
   infra deploy VM...        one or more VMs via microvm -Ru (case-insensitive)
   infra deploy vms          every VM
   infra deploy mother       nixos-rebuild switch on MOTHER (shows pin age first)
   infra deploy terra        nixos-rebuild switch on this machine
 
+  Deadman's switch: MOTHER is offsite, so deploys to it and to MAMORU (which
+  carries the WAN path) arm an automatic rollback BEFORE activating. If the
+  deploy is not confirmed over a fresh connection within the window, the
+  previous system is restored. Default: on for mother and MAMORU, off
+  elsewhere.
+    --deadman[=MIN]         force deadman on (window in minutes, default 10)
+    --no-deadman            force deadman off
+
+  infra disarm              cancel any armed deadman timers on MOTHER
+
 Info:
   infra list                VMs defined by the flake
-  infra status              local repo/pin state + VM status on MOTHER
+  infra status              local repo/pin state, armed deadmen, VM status
 
 Options / environment:
   --host HOST         MOTHER ssh destination   (INFRA_HOST, default root@mother.lan)
@@ -117,6 +127,9 @@ nixcmd() {
   nix --extra-experimental-features "nix-command flakes" "$@"
 }
 
+# ControlPath=none: every call is a genuinely fresh connection. A disarm that
+# rode an ssh session established before the switch would prove nothing about
+# whether we can still get back in.
 remote() {
   if [ "$on_mother" -eq 1 ]; then
     "$@"
@@ -127,7 +140,7 @@ remote() {
     quoted="${quoted} $(printf '%q' "$arg")"
   done
   # shellcheck disable=SC2029
-  ssh "$host" "${quoted# }"
+  ssh -o ControlPath=none "$host" "${quoted# }"
 }
 
 sync_repo() {
@@ -175,7 +188,58 @@ deploy_mother() {
   printf 'MOTHER pin:  nixpkgs-mother %s\n' "$(pin_info nixpkgs-mother)"
   printf 'fleet pin:   nixpkgs        %s\n' "$(pin_info nixpkgs)"
   confirm "Rebuild and switch MOTHER?"
+
+  if [ "$use_deadman" = "on" ]; then
+    # Build first so the armed window covers only eval + activation, and so a
+    # build failure never leaves a timer running against an undeployed system.
+    printf 'Pre-building MOTHER closure...\n'
+    remote nix --extra-experimental-features "nix-command flakes" build --no-link \
+      "$remote_root/nix#nixosConfigurations.MOTHER.config.system.build.toplevel"
+    old_sys="$(remote readlink -f /run/current-system)"
+    deadman_arm MOTHER "$deadman_min" \
+      "nix-env -p /nix/var/nix/profiles/system --set $old_sys && $old_sys/bin/switch-to-configuration switch"
+  fi
+
   remote nixos-rebuild switch --flake "$remote_root/nix#MOTHER"
+
+  if [ "$use_deadman" = "on" ]; then
+    printf 'Health check over a fresh connection...\n'
+    new_sys="$(remote readlink -f /run/current-system)"
+    state="$(remote systemctl is-system-running || true)"
+    printf 'MOTHER state: %s (%s)\n' "$state" "$new_sys"
+    case "$state" in
+      running|degraded) ;;
+      *) die "health check failed (state=$state); leaving deadman armed to roll back" ;;
+    esac
+    deadman_disarm MOTHER
+  fi
+}
+
+# Deadman's switch: a transient systemd timer on MOTHER, armed AFTER the new
+# system is built but BEFORE it is activated, carrying a fully-baked rollback
+# command (no lookups at fire time). Disarming requires a fresh connection.
+deadman_arm() {
+  unit="infra-deadman-$1"
+  minutes="$2"
+  rollback_cmd="$3"
+  remote systemctl stop "$unit.timer" 2>/dev/null || true
+  remote systemctl reset-failed "$unit.service" 2>/dev/null || true
+  remote systemd-run --unit="$unit" --on-active="${minutes}min" /bin/sh -c "$rollback_cmd"
+  printf 'Deadman armed: %s rolls back in %s min unless disarmed.\n' "$1" "$minutes"
+}
+
+deadman_disarm() {
+  unit="infra-deadman-$1"
+  remote systemctl stop "$unit.timer" 2>/dev/null || true
+  remote systemctl reset-failed "$unit.service" 2>/dev/null || true
+  printf 'Deadman disarmed for %s.\n' "$1"
+}
+
+deadman_default_for() {
+  case "$1" in
+    MOTHER|MAMORU) printf 'on' ;;
+    *) printf 'off' ;;
+  esac
 }
 
 # The laptop flake needs the nix/secrets submodule (self.submodules = true),
@@ -196,7 +260,40 @@ deploy_terra() {
 deploy_vm() {
   vm="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
   vm_names | grep -qx "$vm" || die "unknown VM '$1'; run: infra list"
-  remote microvm -Ru "$vm"
+
+  vm_deadman="$deadman_mode"
+  [ "$vm_deadman" = "auto" ] && vm_deadman="$(deadman_default_for "$vm")"
+
+  if [ "$vm_deadman" != "on" ]; then
+    remote microvm -Ru "$vm"
+    return
+  fi
+
+  # Build + swap the current symlink first (VM keeps running the old system),
+  # then arm against the still-running old runner before restarting into the
+  # new one. The gcroot keeps the rollback target safe from GC while armed.
+  printf 'Building %s...\n' "$vm"
+  remote microvm -u "$vm"
+  old_runner="$(remote readlink -f "/var/lib/microvms/$vm/booted" 2>/dev/null || true)"
+  [ -n "$old_runner" ] || die "cannot determine running system for $vm"
+  remote ln -sfn "$old_runner" "/nix/var/nix/gcroots/infra-deadman-$vm"
+  deadman_arm "$vm" "$deadman_min" \
+    "ln -sfn $old_runner /var/lib/microvms/$vm/current && systemctl restart microvm@$vm.service; rm -f /nix/var/nix/gcroots/infra-deadman-$vm"
+  remote systemctl restart "microvm@$vm.service"
+
+  vm_host="root@$(printf '%s' "$vm" | tr '[:upper:]' '[:lower:]').lan"
+  printf 'Health check: waiting for %s...\n' "$vm_host"
+  healthy=0
+  for _ in 1 2 3 4 5 6 7 8; do
+    if ssh -o ControlPath=none -o ConnectTimeout=10 -o BatchMode=yes "$vm_host" true 2>/dev/null; then
+      healthy=1
+      break
+    fi
+    sleep 10
+  done
+  [ "$healthy" -eq 1 ] || die "cannot reach $vm_host; leaving deadman armed to roll back $vm"
+  deadman_disarm "$vm"
+  remote rm -f "/nix/var/nix/gcroots/infra-deadman-$vm"
 }
 
 command="${1:-}"
@@ -249,10 +346,21 @@ case "$command" in
     ;;
 
   deploy)
-    [ "$#" -ge 1 ] || die "deploy requires a target; see: infra --help"
+    deadman_mode="auto"
+    deadman_min=10
+    targets=()
+    for arg in "$@"; do
+      case "$arg" in
+        --deadman) deadman_mode="on" ;;
+        --deadman=*) deadman_mode="on"; deadman_min="${arg#*=}" ;;
+        --no-deadman) deadman_mode="off" ;;
+        *) targets+=( "$arg" ) ;;
+      esac
+    done
+    [ "${#targets[@]}" -ge 1 ] || die "deploy requires a target; see: infra --help"
 
-    if [ "$1" = "terra" ]; then
-      [ "$#" -eq 1 ] || die "terra deploys alone"
+    if [ "${targets[0]}" = "terra" ]; then
+      [ "${#targets[@]}" -eq 1 ] || die "terra deploys alone"
       deploy_terra
       exit 0
     fi
@@ -260,9 +368,11 @@ case "$command" in
     guard_dirty
     sync_repo
 
-    for target in "$@"; do
+    for target in "${targets[@]}"; do
       case "$target" in
         mother)
+          use_deadman="$deadman_mode"
+          [ "$use_deadman" = "auto" ] && use_deadman="$(deadman_default_for MOTHER)"
           deploy_mother
           ;;
         vms)
@@ -275,6 +385,12 @@ case "$command" in
           ;;
       esac
     done
+    ;;
+
+  disarm)
+    remote systemctl stop 'infra-deadman-*.timer' 2>/dev/null || true
+    remote /bin/sh -c 'rm -f /nix/var/nix/gcroots/infra-deadman-*'
+    printf 'All deadman timers stopped.\n'
     ;;
 
   list)
@@ -294,6 +410,8 @@ case "$command" in
     printf 'nixpkgs        %s\n' "$(pin_info nixpkgs)"
     printf 'nixpkgs-mother %s\n' "$(pin_info nixpkgs-mother)"
     printf 'bleeding       %s\n' "$(pin_info bleeding)"
+    printf '\n== deadman timers on MOTHER\n'
+    remote systemctl list-timers 'infra-deadman-*' --no-pager --no-legend || true
     printf '\n== VMs on MOTHER\n'
     remote microvm -l
     ;;
