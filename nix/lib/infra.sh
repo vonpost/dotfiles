@@ -133,7 +133,10 @@ remote() {
 sync_repo() {
   [ "$on_mother" -eq 1 ] && return 0
   printf 'Syncing %s -> %s:%s\n' "$repo_root/" "$host" "$remote_root/"
-  rsync --no-owner --no-group -a "$repo_root/" "$host:$remote_root/"
+  # --chown, not --no-owner: rsync applies options in order, so a later -a
+  # would re-enable the -o/-g that --no-owner/--no-group disabled. Forcing
+  # root:root keeps libgit2's repo-ownership check happy for root on MOTHER.
+  rsync -a --chown=root:root "$repo_root/" "$host:$remote_root/"
 }
 
 confirm() {
