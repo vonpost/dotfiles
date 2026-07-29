@@ -28,7 +28,7 @@ Deploy (syncs repo to MOTHER first):
   deploy is not confirmed over a fresh connection within the window, the
   previous system is restored. Default: on for mother and MAMORU, off
   elsewhere.
-    --deadman[=MIN]         force deadman on (window in minutes, default 10)
+    --deadman[=MIN]         force deadman on (window in minutes, default 30)
     --no-deadman            force deadman off
 
   infra disarm              cancel any armed deadman timers on MOTHER
@@ -196,8 +196,12 @@ deploy_mother() {
     remote nix --extra-experimental-features "nix-command flakes" build --no-link \
       "$remote_root/nix#nixosConfigurations.MOTHER.config.system.build.toplevel"
     old_sys="$(remote readlink -f /run/current-system)"
+    # Stage 1: restore the previous generation. Stage 2 (scheduled only if
+    # stage 1 fires): if rollback did not restore reachability — network
+    # *state* does not always follow config — reboot into the restored
+    # generation to rebuild it from scratch.
     deadman_arm MOTHER "$deadman_min" \
-      "nix-env -p /nix/var/nix/profiles/system --set $old_sys && $old_sys/bin/switch-to-configuration switch"
+      "nix-env -p /nix/var/nix/profiles/system --set $old_sys && $old_sys/bin/switch-to-configuration switch; systemd-run --unit=infra-deadman-MOTHER-stage2 --on-active=10min systemctl start infra-net-rescue.service"
   fi
 
   remote nixos-rebuild switch --flake "$remote_root/nix#MOTHER"
@@ -230,8 +234,8 @@ deadman_arm() {
 
 deadman_disarm() {
   unit="infra-deadman-$1"
-  remote systemctl stop "$unit.timer" 2>/dev/null || true
-  remote systemctl reset-failed "$unit.service" 2>/dev/null || true
+  remote systemctl stop "$unit.timer" "$unit-stage2.timer" 2>/dev/null || true
+  remote systemctl reset-failed "$unit.service" "$unit-stage2.service" 2>/dev/null || true
   printf 'Deadman disarmed for %s.\n' "$1"
 }
 
@@ -347,7 +351,7 @@ case "$command" in
 
   deploy)
     deadman_mode="auto"
-    deadman_min=10
+    deadman_min=30
     targets=()
     for arg in "$@"; do
       case "$arg" in
