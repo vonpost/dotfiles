@@ -34,12 +34,12 @@
         });
       };
       localOverlay = final: prev: {
-        infra-flake-update = final.callPackage ../pkgs/infra-flake-update.nix { };
+        infra = final.callPackage ../pkgs/infra.nix { };
       };
     in
     {
-      packages.${system}.infra-flake-update =
-        nixpkgs.legacyPackages.${system}.callPackage ../pkgs/infra-flake-update.nix { };
+      packages.${system}.infra =
+        nixpkgs.legacyPackages.${system}.callPackage ../pkgs/infra.nix { };
 
       nixosConfigurations.TERRA = nixpkgs.lib.nixosSystem {
         inherit system;

@@ -5,7 +5,7 @@
           self.submodules = true;
           nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
           # MOTHER is headless; a bad nixpkgs bump can cost physical access.
-          # Its pin moves only via `infra-flake-update mother`, never with the
+          # Its pin moves only via `infra update mother`, never with the
           # fleet's nixpkgs.
           nixpkgs-mother.url = "github:NixOS/nixpkgs/nixos-unstable";
           bleeding.url = "github:NixOS/nixpkgs/master";
@@ -50,7 +50,7 @@
         vector = bleedingPkgs.vector;
       };
       localOverlay = final: prev: {
-        infra-flake-update = final.callPackage ./pkgs/infra-flake-update.nix { };
+        infra = final.callPackage ./pkgs/infra.nix { };
       };
 
       vmNames = [ "UCHI" "SOTO" "KAIZOKU" "DARE" "OKAMI" "MAMORU" "NIKKI" ];
@@ -77,8 +77,8 @@
       };
     in
     {
-      packages.${system}.infra-flake-update =
-        nixpkgs.legacyPackages.${system}.callPackage ./pkgs/infra-flake-update.nix { };
+      packages.${system}.infra =
+        nixpkgs.legacyPackages.${system}.callPackage ./pkgs/infra.nix { };
 
       nixosConfigurations = lib.genAttrs vmNames mkVm // {
         MOTHER = nixpkgs-mother.lib.nixosSystem {

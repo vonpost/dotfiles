@@ -128,7 +128,8 @@ in
     environment.systemPackages = with pkgs; [
       wget
       git
-      infra-flake-update
+      # explicit: `with pkgs` cannot shadow the `infra` let-binding above
+      pkgs.infra
     ];
     services.openssh.enable = true;
     services.openssh.settings.PasswordAuthentication = false;

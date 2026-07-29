@@ -1,4 +1,6 @@
 { coreutils
+, git
+, jq
 , nix
 , openssh
 , rsync
@@ -6,14 +8,16 @@
 }:
 
 writeShellApplication {
-  name = "infra-flake-update";
+  name = "infra";
 
   runtimeInputs = [
     coreutils
+    git
+    jq
     nix
     openssh
     rsync
   ];
 
-  text = builtins.readFile ../lib/infra-flake-update.sh;
+  text = builtins.readFile ../lib/infra.sh;
 }
