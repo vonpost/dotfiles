@@ -288,12 +288,24 @@ in
       };
     };
     systemd.network.wait-online.anyInterface = true;
+    # Pin the microvm fleet's stable SSH host keys (see config/infra/vm-host-keys.nix).
+    programs.ssh.knownHosts =
+      lib.mapAttrs'
+        (vmName: publicKey: lib.nameValuePair "${lib.toLower vmName}.lan" {
+          inherit publicKey;
+          extraHostNames = [ (lib.toLower vmName) ];
+        })
+        (import ../config/infra/vm-host-keys.nix);
     nix.buildMachines = [
       {
         hostName = "100.92.25.95";
         sshUser = "root";
         protocol = "ssh-ng";
         sshKey = "/run/secrets/ssh/TERRA";
+        # Without a pinned host key the nix-daemon's BatchMode ssh fails host
+        # verification (root has no known_hosts entry) and every build falls
+        # back to building locally.
+        publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSUVRNW9SWllvczFXK3JlVlRra1hxOEVUeEY0UkZjOTB5ZGN3NWpvL2RIYUc=";
         systems = ["x86_64-linux" ];
         maxJobs = 10;
         speedFactor = 10;

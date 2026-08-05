@@ -175,13 +175,11 @@ pin_info() {
     "$root/flake.lock"
 }
 
-vm_list=""
 vm_names() {
-  if [ -z "$vm_list" ]; then
-    vm_list="$(nixcmd eval --json "$root#nixosConfigurations" --apply builtins.attrNames \
-      | jq -r '.[] | select(. != "MOTHER")' | sort)"
-  fi
-  printf '%s\n' "$vm_list"
+  names="$(nixcmd eval --json "$root#nixosConfigurations" --apply builtins.attrNames \
+    | jq -r '.[] | select(. != "MOTHER")' | sort)"
+  [ -n "$names" ] || die "could not enumerate VMs from $root (flake eval failed?)"
+  printf '%s\n' "$names"
 }
 
 deploy_mother() {
@@ -263,7 +261,7 @@ deploy_terra() {
 
 deploy_vm() {
   vm="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
-  vm_names | grep -qx "$vm" || die "unknown VM '$1'; run: infra list"
+  printf '%s\n' "$known_vms" | grep -qx "$vm" || die "unknown VM '$1'; run: infra list"
 
   vm_deadman="$deadman_mode"
   [ "$vm_deadman" = "auto" ] && vm_deadman="$(deadman_default_for "$vm")"
@@ -285,17 +283,36 @@ deploy_vm() {
     "ln -sfn $old_runner /var/lib/microvms/$vm/current && systemctl restart microvm@$vm.service; rm -f /nix/var/nix/gcroots/infra-deadman-$vm"
   remote systemctl restart "microvm@$vm.service"
 
-  vm_host="root@$(printf '%s' "$vm" | tr '[:upper:]' '[:lower:]').lan"
-  printf 'Health check: waiting for %s...\n' "$vm_host"
+  if [ "$vm" = "MAMORU" ]; then
+    # MAMORU intentionally has no network access from anywhere; it is only
+    # reachable from MOTHER over vsock. Probing through `remote` also proves
+    # the laptop->MOTHER path — the WAN route this deadman protects — and the
+    # vsock leg proves the VM booted. Host key checks are pointless on a
+    # hypervisor-local vsock channel and would break on key rotation.
+    cid="$(nixcmd eval "$root#nixosConfigurations.$vm.config.microvm.vsock.cid")"
+    probe_desc="vsock/$cid via MOTHER"
+    probe() {
+      remote ssh -o ConnectTimeout=10 -o BatchMode=yes \
+        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        "vsock/$cid" true
+    }
+  else
+    vm_host="root@$(printf '%s' "$vm" | tr '[:upper:]' '[:lower:]').lan"
+    probe_desc="$vm_host"
+    probe() {
+      ssh -o ControlPath=none -o ConnectTimeout=10 -o BatchMode=yes "$vm_host" true
+    }
+  fi
+  printf 'Health check: waiting for %s...\n' "$probe_desc"
   healthy=0
   for _ in 1 2 3 4 5 6 7 8; do
-    if ssh -o ControlPath=none -o ConnectTimeout=10 -o BatchMode=yes "$vm_host" true 2>/dev/null; then
+    if probe 2>/dev/null; then
       healthy=1
       break
     fi
     sleep 10
   done
-  [ "$healthy" -eq 1 ] || die "cannot reach $vm_host; leaving deadman armed to roll back $vm"
+  [ "$healthy" -eq 1 ] || die "cannot reach $probe_desc; leaving deadman armed to roll back $vm"
   deadman_disarm "$vm"
   remote rm -f "/nix/var/nix/gcroots/infra-deadman-$vm"
 }
@@ -371,6 +388,7 @@ case "$command" in
 
     guard_dirty
     sync_repo
+    known_vms="$(vm_names)"
 
     for target in "${targets[@]}"; do
       case "$target" in
@@ -380,9 +398,11 @@ case "$command" in
           deploy_mother
           ;;
         vms)
-          while IFS= read -r vm; do
+          # A while-read loop would lose everything after the first VM: the
+          # ssh under deploy_vm inherits the loop's stdin and drains it.
+          for vm in $known_vms; do
             deploy_vm "$vm"
-          done < <(vm_names)
+          done
           ;;
         *)
           deploy_vm "$target"

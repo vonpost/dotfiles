@@ -19,6 +19,22 @@ let
       else
         throw "Service secret source '${source}' must be under ${prefix}";
 
+  # Per-VM SSH host keys, passed into each guest via microvm.credentialFiles
+  # (qemu fw_cfg -> systemd credential -> sshd HostKey). The qemu runner opens
+  # these as the microvm user, hence the owner/group.
+  microvmHostKeySecrets =
+    lib.listToAttrs (
+      map (vmName:
+        lib.nameValuePair "microvm-ssh/${vmName}" {
+          sopsFile = ../secrets/microvm-ssh.yaml;
+          key = vmName;
+          owner = "microvm";
+          group = "kvm";
+          mode = "640";
+        })
+        (builtins.attrNames vmConfig)
+    );
+
   generatedServiceSecrets =
     lib.listToAttrs (
       lib.concatLists (
@@ -48,7 +64,7 @@ in
       defaultSopsFile = ../secrets/secrets.yaml;
       age.sshKeyPaths = [ "/root/.ssh/id_ed25519" ];
       keepGenerations = 0;
-      secrets = generatedServiceSecrets // {
+      secrets = generatedServiceSecrets // microvmHostKeySecrets // {
         "wifi" = {
           format = "dotenv";
           sopsFile = ../secrets/wifi.env;

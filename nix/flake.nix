@@ -14,7 +14,6 @@
           microvm.url = "github:microvm-nix/microvm.nix";
           microvm.inputs.nixpkgs.follows = "nixpkgs";
           quadlet-nix.url = "github:SEIAROTg/quadlet-nix";
-          rffmpeg-nix.url = ./rffmpeg-nix;
           wolf.url = ./wolf-nix;
         };
 
@@ -36,7 +35,6 @@
       sops-nix,
       microvm,
       quadlet-nix,
-      rffmpeg-nix,
       wolf,
       ... }:
     let
@@ -113,6 +111,18 @@
       # fast eval-only pass, or plain nix flake check to build everything.
       checks.${system} = lib.genAttrs (vmNames ++ [ "MOTHER" ]) (name:
         self.nixosConfigurations.${name}.config.system.build.toplevel
+      ) // (
+        let pkgs = import nixpkgs {
+          inherit system;
+          overlays = [
+            (final: prev: { okuri = final.callPackage ./okuri/pkgs/okuri.nix { }; })
+          ];
+        };
+        in {
+          okuri-unit = pkgs.okuri;
+          okuri-integration =
+            pkgs.testers.runNixOSTest (import ./okuri/tests/integration.nix);
+        }
       );
     };
 }

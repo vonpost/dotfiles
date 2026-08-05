@@ -8,27 +8,34 @@ let
     builtins.filter
       (vmName: builtins.elem "sshJellyfin" topology.vms.${vmName}.provides)
       (builtins.attrNames topology.vms);
-  rffmpegHosts =
+  okuriHosts =
     map
       (vmName: "${lib.toLower vmName}.${topology.domain}")
       (builtins.filter (vmName: vmName != svc.hostname) sshJellyfinProviders);
-  useRffmpeg = pkgs ? rffmpeg && enableJellyfinService && rffmpegHosts != [ ];
+  useOkuri = pkgs ? okuri && enableJellyfinService && okuriHosts != [ ];
   jellyfinPackage =
-    if useRffmpeg
-    then bleeding.jellyfin.override { jellyfin-ffmpeg = pkgs.rffmpeg; }
+    if useOkuri
+    then bleeding.jellyfin.override { jellyfin-ffmpeg = pkgs.okuri; }
     else bleeding.jellyfin;
 in
 {
   config = lib.mkMerge [
     (lib.mkIf enableJellyfinService {
+      assertions = [{
+        # okuri dispatches to a single target; priority ordering across
+        # several GPU nodes is not implemented (and not needed here).
+        assertion = builtins.length okuriHosts <= 1;
+        message = "okuri supports exactly one sshJellyfin provider, got: ${toString okuriHosts}";
+      }];
+
       services.jellyfin = {
         enable = true;
         package = jellyfinPackage;
       };
 
-      services.rffmpeg = lib.mkIf useRffmpeg {
+      services.okuri = lib.mkIf useOkuri {
         enable = true;
-        hosts = rffmpegHosts;
+        targetHost = lib.head okuriHosts;
       };
 
       environment.systemPackages = [ pkgs.jellyfin-ffmpeg ];

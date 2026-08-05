@@ -71,22 +71,6 @@
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1770562336,
-        "narHash": "sha256-ub1gpAONMFsT/GU2hV6ZWJjur8rJ6kKxdm9IlCT0j84=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "d6c71932130818840fc8fe9509cf50be8c64634f",
-        "type": "github"
-      },
-      "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
-        "repo": "nixpkgs",
-        "type": "github"
-      }
-    },
-    "nixpkgs_3": {
-      "locked": {
         "lastModified": 1771848320,
         "narHash": "sha256-0MAd+0mun3K/Ns8JATeHT1sX28faLII5hVLq0L3BdZU=",
         "owner": "NixOS",
@@ -131,20 +115,6 @@
         "type": "github"
       }
     },
-    "rffmpeg-nix": {
-      "inputs": {
-        "nixpkgs": "nixpkgs_2"
-      },
-      "locked": {
-        "path": "rffmpeg-nix",
-        "type": "path"
-      },
-      "original": {
-        "path": "rffmpeg-nix",
-        "type": "path"
-      },
-      "parent": []
-    },
     "root": {
       "inputs": {
         "bleeding": "bleeding",
@@ -152,7 +122,6 @@
         "nixpkgs": "nixpkgs",
         "nixpkgs-mother": "nixpkgs-mother",
         "quadlet-nix": "quadlet-nix",
-        "rffmpeg-nix": "rffmpeg-nix",
         "sops-nix": "sops-nix",
         "wolf": "wolf"
       }
@@ -195,7 +164,7 @@
     },
     "wolf": {
       "inputs": {
-        "nixpkgs": "nixpkgs_3",
+        "nixpkgs": "nixpkgs_2",
         "quadlet-nix": "quadlet-nix_2"
       },
       "locked": {

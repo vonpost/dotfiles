@@ -25,14 +25,15 @@ in
 
   imports = [
     ../lib/modules/infra
-    ../rffmpeg-nix/nixos-modules/rffmpeg.nix
+    ../okuri/nixos-modules/controller.nix
+    ../okuri/nixos-modules/target.nix
     ../config/infra/services
   ] ++ lib.optional (builtins.elem "sabnzbd" vmConfig.${hostname}.serviceMounts) ./sabnzbd_config.nix
     ++ (svc.mkMany statefulServices);
 
   nixpkgs.overlays = lib.mkBefore [
     (final: prev: {
-      rffmpeg = prev.callPackage ../rffmpeg-nix/pkgs/rffmpeg.nix { };
+      okuri = prev.callPackage ../okuri/pkgs/okuri.nix { };
     })
   ];
 
@@ -90,6 +91,28 @@ in
     KbdInteractiveAuthentication = false;
     PermitRootLogin = "yes";
   };
+
+  # Stable SSH host identity: the rootfs is ephemeral, so boot-generated host
+  # keys would change on every reboot. Instead each VM receives its sops-stored
+  # key from MOTHER as a systemd credential (fw_cfg) and sshd uses only that.
+  # hostKeys must be empty: the module emits its HostKey lines at mkOrder 0,
+  # and sshd offers the first ed25519 key listed — a generated key would
+  # shadow the stable one. A missing credential can't strand sshd anyway:
+  # qemu refuses to start when a credential file is absent on the host.
+  microvm.credentialFiles."ssh-host-key" = "/run/secrets/microvm-ssh/${hostname}";
+  systemd.services.sshd.serviceConfig.LoadCredential = [ "ssh-host-key" ];
+  services.openssh.hostKeys = lib.mkForce [ ];
+  services.openssh.extraConfig =
+    lib.mkBefore "HostKey /run/credentials/sshd.service/ssh-host-key";
+
+  # With stable identities the whole fleet can pin each other declaratively.
+  programs.ssh.knownHosts =
+    lib.mapAttrs'
+      (vmName: publicKey: lib.nameValuePair "${lib.toLower vmName}.lan" {
+        inherit publicKey;
+        extraHostNames = [ (lib.toLower vmName) ];
+      })
+      (import ../config/infra/vm-host-keys.nix);
 
   users.users.root.openssh.authorizedKeys.keys = map (h: sshHosts.${h}.publicKey ) (builtins.attrNames sshHosts);
   system.stateVersion = "26.05";
