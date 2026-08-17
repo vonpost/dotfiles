@@ -381,6 +381,11 @@ let
 
       programs.dconf.enable = true;
       services.dbus.enable = true;
+      # dbus-broker-launch crash-loops in the Wolf container (child exec ENOENT,
+      # launcher dies ENOTCONN, retried forever) and systemd never reaches
+      # basic.target, so the desktop never starts (2026-08-18 black-screen bug).
+      # Plasma's module selects the broker implementation; force classic dbus.
+      services.dbus.implementation = lib.mkForce "dbus";
       services.pipewire.enable = true;
       services.upower.enable = lib.mkForce true;
       environment.etc."xdg/baloofilerc".text = ''
