@@ -156,6 +156,10 @@ PY
     WOLF_ENCODER_NODE = "/dev/dri/renderD128";
     WOLF_STOP_CONTAINER_ON_EXIT = "TRUE";
     WOLF_LOG_LEVEL = "INFO";
+    # Upstream default for newly paired clients (replaces the old source patch
+    # that derived these from getuid/getgid); matches the containers' retro uid.
+    WOLF_DEFAULT_RUN_UID = "1000";
+    WOLF_DEFAULT_RUN_GID = "1000";
   } // lib.optionalAttrs cfg.nvidiaBundle.enable {
     LD_LIBRARY_PATH = nvidiaCudaLibraryPath;
   };

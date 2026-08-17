@@ -3,13 +3,15 @@ with lib;
 let
   buildJobs = max 1 maxBuildJobs;
 
-  # Your target Wolf commit
-  wolfRev = "ea4a75d59deb9171dde3d21d6beb2785cb69585";
-  wolfHash = "sha256-KgBkxL7mIs8TBL3hbkq8tMFRgfo1dDcequ1AE6I2UKQ=";
+  # Your target Wolf commit (stable, 2026-08-08; config_version 7).
+  # Audited against wolf-nix/lib/contract.nix -- re-audit that file on bumps.
+  wolfRev = "7f416ec0f26bb4d95218af806cd1181fe5434598";
+  wolfHash = "sha256-Exu9DdFUvq4mflPdXGeD4htsPhv4oSc8O7vDcXh1aDo=";
   interpipeRev = "953db14b1fb97ac1865b95222a2688717a88867d";
   interpipeHash = "sha256-R6M2hH9kzMxPyaEqaWLYfLqlS00aRNhGM8mFj5oBZpI=";
-  waylandDisplayRev = "328fbf66c23cdafe5053f0803267e75aef9f7841";
-  waylandDisplayHash = "sha256-59gObVHuCsoUlRjVh56je9O5vIgyMVuOuA8YYIUMUW8=";
+  # Matches upstream wolf's docker/wolf.Dockerfile pin (explicit-sync era).
+  waylandDisplayRev = "b15285a2f1bb4dae5725b049915a4971664fafc6";
+  waylandDisplayHash = "sha256-8z5jBjEwDwLtdJBdoGtiBSAX03N9AHD95ozwQXxggxE=";
 
   # Copying the “deps as sources” idea from the dev-nix flake.
   # These hashes come from that branch’s flake.nix, so they should be correct
@@ -25,7 +27,6 @@ let
       repo = "wolf";
       rev = wolfRev;
       hash = wolfHash;
-      fetchSubmodules = true;
     };
     sourceRoot = "${src.name}/src/fake-udev";
 
@@ -270,7 +271,6 @@ pkgs.stdenv.mkDerivation (finalAttrs: rec {
     repo = "wolf";
     rev = wolfRev;
     hash = wolfHash;
-    fetchSubmodules = true;
   };
 
   nativeBuildInputs = with pkgs; [
@@ -371,21 +371,11 @@ pkgs.stdenv.mkDerivation (finalAttrs: rec {
     "-G Ninja"
 
   ];
+  # Patches dropped at 7f416ec: run_uid/run_gid defaults are now env-driven
+  # upstream (WOLF_DEFAULT_RUN_UID/GID, set by the NixOS module) and the
+  # UpdateClientSettings run_gid/run_uid typo was fixed upstream.
   postPatch = ''
-    serialCfg="src/moonlight-server/state/serialised_config.hpp"
-    if ! grep -q '#include <unistd.h>' "$serialCfg"; then
-      sed -i '/#include <rfl.hpp>/a #include <unistd.h>' "$serialCfg"
-    fi
-    substituteInPlace "$serialCfg" \
-      --replace-fail 'uint run_uid = 1000;' 'uint run_uid = static_cast<uint>(::getuid());' \
-      --replace-fail 'uint run_gid = 1000;' 'uint run_gid = static_cast<uint>(::getgid());'
-
-    # Upstream typo: UpdateClientSettings uses run_gid for both run_uid and run_gid.
-    # This breaks explicit UID settings via API/UI.
-    substituteInPlace src/moonlight-server/api/endpoints.cpp \
-      --replace-fail '.run_uid = new_settings.run_gid.value_or(current_settings.run_uid),' '.run_uid = new_settings.run_uid.value_or(current_settings.run_uid),'
-
-    # 2) Ensure the wolf executable gets installed
+    # Ensure the wolf executable gets installed
     cmakeFile="src/moonlight-server/CMakeLists.txt"
     if ! grep -q "install(TARGETS wolf" "$cmakeFile"; then
       printf '\n# Nix packaging: install the wolf executable\ninstall(TARGETS wolf\n  RUNTIME DESTINATION bin\n)\n' >> "$cmakeFile"
