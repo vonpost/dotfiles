@@ -386,6 +386,7 @@ let
       # basic.target, so the desktop never starts (2026-08-18 black-screen bug).
       # Plasma's module selects the broker implementation; force classic dbus.
       services.dbus.implementation = lib.mkForce "dbus";
+      security.rtkit.enable = true;
       services.pipewire.enable = true;
       services.upower.enable = lib.mkForce true;
       environment.etc."xdg/baloofilerc".text = ''
@@ -534,6 +535,23 @@ let
           }
 
           sanitize_plasma_profile_if_incompatible
+
+          # Plasma re-resolves the theme's optional `colors` file on every color
+          # read (~343x per popup) and never memoizes the negative result; with
+          # our ~84-entry XDG_DATA_DIRS that cost ~58k statx / ~10s of main-thread
+          # churn per UI interaction (2026-08-18 diagnosis, plans/wolf-native-images.md).
+          # A colors file in XDG_DATA_HOME (searched first) ends every lookup at
+          # dir #1. Runs after the sanitizer, which may have moved the dir away.
+          install_theme_colors_shortcircuit() {
+            local theme_dir="$HOME/.local/share/plasma/desktoptheme/default"
+            local src="/run/current-system/sw/share/plasma/desktoptheme/breeze-light/colors"
+            if [ ! -f "$theme_dir/colors" ] && [ -f "$src" ]; then
+              ${pkgs.coreutils}/bin/mkdir -p "$theme_dir/translucent"
+              ${pkgs.coreutils}/bin/cp "$src" "$theme_dir/colors"
+              ${pkgs.coreutils}/bin/cp "$src" "$theme_dir/translucent/colors"
+            fi
+          }
+          install_theme_colors_shortcircuit
 
           restore_kickerdash_from_latest_backup() {
             if [ "''${GOW_KDE_RESTORE_KICKERDASH:-1}" != "1" ]; then

@@ -84,7 +84,41 @@ construction, nvidia userland is literally the same store path as the host's.
 - Audit that `/dev/nvidia*` nodes are actually in create-JSON `Devices` (today masked
   by the GOW_REQUIRED_DEVICES perms dance).
 
-#### Known issue folded into M4 (added 2026-08-18)
+#### KDE session: diagnosis results (2026-08-18 live-debug session)
+Fixed and committed:
+- **Black screen**: dbus-broker-launch crash-loops in the container (child exec
+  ENOENT -> ENOTCONN, retried forever); systemd never reaches basic.target, the
+  desktop never starts. Fix: `services.dbus.implementation = lib.mkForce "dbus"`.
+- rtkit was missing from the KDE closure (GNOME block had it); added.
+
+Root cause of the historic "terrible UI lag" (evidence-complete, fix pending
+final verification): Plasma re-resolves the theme's OPTIONAL `colors` file on
+every color read — ~343 reads per popup/tooltip — and the file exists nowhere,
+so each read walks the full fallback chain. Our session env has **84
+XDG_DATA_DIRS entries** (nixpkgs Qt wrapper bloat), so one hover = ~58,000
+statx calls =~ 10 s of main-thread churn. Queued clicks all pop at once when
+the walk finishes. Everything else was measured clean and acquitted: input
+path, NVIDIA EGL in kwin+plasmashell, output 1080p60, session+system dbus
+round-trips, virtiofs read/lock latency, systemd spawn, CLI window mapping.
+Fix layers: (1) ship a `colors` file so lookups terminate at dir #1 (verified
+live by planting one in XDG_DATA_HOME); (2) M3: stop inheriting wrapper-bloated
+XDG_DATA_DIRS in session units — the merged system profile suffices.
+
+Upstream landscape (researched 2026-08-18): **no one upstream has a working
+full-KDE session under wolf** — ABeltramo's own KDE (gow PR #277) and Hyprland
+(PR #257) attempts are stuck (black screen / still-image), community PR #356
+unreproducible, discussion #476 open on exactly this. Our KDE image is ahead of
+upstream; the dbus/colors findings are candidate upstream contributions.
+gst-wayland-display sends frame callbacks unconditionally per encoder pull
+(no idle throttle), so nested compositors are viable by design. Two notes for
+M2/M5: our gst-wayland-display pin (328fbf6, 2026-02) includes the
+presentation-refresh fix but predates the explicit-sync work in wolf's official
+pin (b15285a) — bump together with wolf; and the commit handler has a
+pending-window drop race (first commit before caps negotiation strands the
+window unmapped forever) — plausible cause of upstream's #476 black screens,
+worth patching/reporting.
+
+#### Original suspicion list (pre-diagnosis, kept for context)
 The current KDE session (`wolfKdeImage`, the only app OKAMI loads) **never worked
 properly** — severe UI lag, cause never found. So M4's gate is NOT "parity with
 current KDE"; it is "a desktop session that performs". Leads, in suspicion order:
