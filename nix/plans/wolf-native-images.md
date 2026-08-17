@@ -84,6 +84,29 @@ construction, nvidia userland is literally the same store path as the host's.
 - Audit that `/dev/nvidia*` nodes are actually in create-JSON `Devices` (today masked
   by the GOW_REQUIRED_DEVICES perms dance).
 
+#### Known issue folded into M4 (added 2026-08-18)
+The current KDE session (`wolfKdeImage`, the only app OKAMI loads) **never worked
+properly** — severe UI lag, cause never found. So M4's gate is NOT "parity with
+current KDE"; it is "a desktop session that performs". Leads, in suspicion order:
+1. **KWin on llvmpipe.** If the container's KWin doesn't find the NVIDIA
+   EGL/GBM/Vulkan stack it silently falls back to software rendering. The
+   mesa-ICD-overwrite shim in `wolf-nvidia-driver-sync` exists precisely because
+   this area was fought before. First diagnostic in any session:
+   `journalctl`/`qdbus org.kde.KWin /KWin supportInformation | grep -i renderer`
+   (llvmpipe = confirmed). The M3 redesign (real `/run/opengl-driver` in the
+   closure, same store paths as the host driver) may fix this outright.
+2. **wlr-randr vs KWin.** The compat layer reconciles resolution with `wlr-randr`,
+   but KWin does not implement wlr-output-management — so the KDE session likely
+   never matched the Moonlight-negotiated mode (`kscreen-doctor` is the KDE way).
+   Mode mismatch → scaling/copy overhead every frame.
+3. Frame pacing between nested compositors (KWin client → wolf's smithay
+   compositor) and/or a non-zero-copy pipeline path (verify `WOLF_USE_ZERO_COPY`
+   actually engages nvidia zero-copy in wolf logs).
+Strategy: validate M3 first on sway/gamescope sessions (wlroots — matches the
+existing tooling, far simpler render path), get those *performing well*, then
+bring up KDE on the nix-native stack with the diagnostics above before declaring
+M4 done.
+
 ### 4. Steam
 - `wolfApp` + nixpkgs `programs.steam` FHS env + gamescope; state via the `/home/retro`
   mount as today; Proton arrives via Steam's own downloads (upstream doesn't bake it either).
