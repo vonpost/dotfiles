@@ -2,6 +2,7 @@
 
 let
   cfg = config.services.wolf;
+  contract = import ../lib/contract.nix;
   tomlFormat = pkgs.formats.toml { };
   appOptionType = lib.types.submodule {
     freeformType = tomlFormat.type;
@@ -130,7 +131,7 @@ PY
       "${managedConfigSeedOnceScript}"
     else
       "${managedConfigMergePairingsScript}";
-  xdgRuntimeDir = "/run/wolf";
+  xdgRuntimeDir = contract.host.xdgRuntimeDir;
   gstPluginSystemPath = lib.concatStringsSep ":" [
     "${cfg.package}/lib/gstreamer-1.0"
     "${pkgs.gst_all_1.gst-plugins-base}/lib/gstreamer-1.0"
@@ -269,7 +270,7 @@ in
 
     stateDir = lib.mkOption {
       type = lib.types.str;
-      default = "/var/lib/wolf";
+      default = contract.host.stateDir;
       description = "Persistent state directory for wolf.";
     };
 
@@ -476,7 +477,7 @@ in
 
       wolfSocketPath = lib.mkOption {
         type = lib.types.str;
-        default = "${xdgRuntimeDir}/pulse-socket";
+        default = contract.host.pulseSocket;
         description = "Socket path exposed to Wolf and mounted into app containers as PULSE_SERVER.";
       };
 
