@@ -507,13 +507,13 @@ in
 
     tcpPorts = lib.mkOption {
       type = lib.types.listOf lib.types.port;
-      default = [ 47984 47989 48010 ];
+      default = contract.ports.tcp;
       description = "TCP ports opened when openFirewall is enabled.";
     };
 
     udpPorts = lib.mkOption {
       type = lib.types.listOf lib.types.port;
-      default = [ 47998 47999 48000 48002 48010 ];
+      default = contract.ports.udp;
       description = "UDP ports opened when openFirewall is enabled.";
     };
   };
@@ -613,6 +613,12 @@ in
             # Some NVIDIA setups expose /dev/nvidia-caps lazily; prime it deterministically.
             "${pkgs.bash}/bin/bash -lc 'if [ ! -e /dev/nvidia-caps/nvidia-cap1 ]; then ${config.hardware.nvidia.package.bin}/bin/nvidia-smi >/dev/null 2>&1 || true; fi'"
           ] ++ [
+            # Wolf bind-mounts <stateDir>/fake-udev into every app container but never
+            # installs the binary there (upstream's Docker entrypoint does that copy).
+            # Without this, podman auto-creates the missing source as an empty DIRECTORY
+            # and every in-container hotplug announcement fails. rm -rf clears such a
+            # stale directory before installing.
+            "${pkgs.bash}/bin/bash -c 'rm -rf ${cfg.stateDir}/fake-udev && ${pkgs.coreutils}/bin/install -m 0755 ${cfg.package}/bin/fake-udev ${cfg.stateDir}/fake-udev'"
             "-${pkgs.coreutils}/bin/rm -f ${xdgRuntimeDir}/wayland-* ${xdgRuntimeDir}/.wayland-*"
             # Wolf can crash before tearing down this helper container; stale name blocks next boot.
             "-${pkgs.podman}/bin/podman rm -f WolfPulseAudio"
