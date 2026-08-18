@@ -592,4 +592,87 @@ rec {
     }
     """
   '';
+
+  # ── M3: shared stub image ────────────────────────────────────────────────
+  # One image for every pass-through desktop app. The rootfs and /opt/gow//cfg
+  # asset trees are desktop-independent; per-desktop identity (PATH,
+  # GOW_NIXOS_SYSTEM, dimensions) moves into the app definition env, which the
+  # docker create request merges over the image env. Image contents stay tiny
+  # because the actual system arrives via the host /nix/store mount.
+  wolfStubImage = pkgs.dockerTools.buildLayeredImage {
+    name = "localhost/wolf/stub";
+    tag = imageTag;
+    maxLayers = 128;
+    contents = [
+      nixosPassThroughRootfs
+      baseAssets
+      baseAppAssets
+      gnomeAssets
+      labwcAssets
+      labwcNoctaliaAssets
+      xfceAssets
+      kdeAssets
+    ];
+    config = commonConfig // {
+      Env = commonBaseEnv ++ [
+        "GOW_STARTUP_SCRIPT=/opt/gow/base-app-startup.sh"
+        "GOW_NVIDIA_PREFIX=/usr/nvidia"
+      ];
+    };
+    extraCommands = materializeRuntimeTrees + ''
+      mkdir -p tmp/.X11-unix
+      chmod 1777 tmp tmp/.X11-unix
+    '';
+  };
+
+  # KDE Plasma on the shared stub. Same session closure as wolfKdeApp; only
+  # the image reference and env-carried identity differ.
+  wolfKdeStubApp = {
+    title = "KDE Plasma Desktop (Stub)";
+    icon_png_path = "https://games-on-whales.github.io/wildlife/apps/desktop/assets/icon.png";
+    runner = {
+      type = "docker";
+      name = "WolfKdeStub";
+      image = "localhost/wolf/stub:${imageTag}";
+      mounts = [
+        "/nix/store:/nix/store:ro"
+        "/nix/var/nix/db:/nix/var/nix/db:ro"
+        "/sys/fs/cgroup:/sys/fs/cgroup:rw"
+      ];
+      env = [
+        "UNAME=root"
+        "PATH=${basePath}:${nixosKdePath}"
+        "GOW_NIXOS_SYSTEM=${nixosKdeSystemMount}"
+        "GAMESCOPE_WIDTH=1920"
+        "GAMESCOPE_HEIGHT=1080"
+        "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
+        "GOW_NVIDIA_PREFIX=/usr/nvidia"
+      ];
+      devices = [ ];
+      ports = [ ];
+      base_create_json = ''
+        {
+          "StopSignal": "RTMIN+3",
+          "HostConfig": {
+            "IpcMode": "host",
+            "Privileged": false,
+            "CgroupnsMode": "host",
+            "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE", "SYS_PTRACE"],
+            "SecurityOpt": ["label=disable", "apparmor=unconfined", "seccomp=unconfined"],
+            "Devices": [
+              {"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"},
+              {"PathOnHost": "/dev/dri", "PathInContainer": "/dev/dri", "CgroupPermissions": "rwm"}
+            ],
+            "Ulimits": [{"Name": "nofile", "Soft": 10240, "Hard": 524288}],
+            "DeviceCgroupRules": ["c 10:229 rmw", "c 13:* rmw", "c 226:* rmw", "c 244:* rmw"],
+            "Tmpfs": {
+              "/run": "rw,nosuid,nodev,size=64m,mode=755",
+              "/run/lock": "rw,nosuid,nodev,size=16m,mode=755",
+              "/tmp": "rw,nosuid,nodev,size=1024m,mode=1777"
+            }
+          }
+        }
+      '';
+    };
+  };
 }

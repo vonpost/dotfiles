@@ -1842,7 +1842,9 @@ in
     wolfKdeImage
     wolfKdeSystem
     wolfKdeApp
-    wolfKdeWolfConfig;
+    wolfKdeWolfConfig
+    wolfStubImage
+    wolfKdeStubApp;
 })
 // lib.optionalAttrs steamSupported {
   wolfSteamImage = pkgs.dockerTools.buildLayeredImage {
