@@ -201,6 +201,26 @@ stream after M2; firefox after M3; KDE parity + gamepad hotplug (exercises fake-
 after M4; encoder check (nvh264enc in wolf logs) + stream after M5; Steam client + one
 game launch after M6.
 
+### Progress log (2026-08-18)
+- M0/M1 done: branch, contract.nix, behavior-neutral deploy (bd01eeb).
+- M2 done: fake-udev repair + port sync (011c022); KDE black-screen dbus fix
+  (f53ab9c); KDE lag root-caused and fixed + rtkit (8d15a59); wolf 7f416ec +
+  gst-wayland-display b15285a bump, patches dropped for upstream equivalents,
+  WOLF_DEFAULT_RUN_UID/GID via module (dfdd8c2). All deploy-verified: wolf
+  active, serverinfo 200, config v7 migration with pairings intact, nvcodec +
+  zero-copy selected. PENDING USER GATE: one stream test on the new wolf.
+- M3 slice 1 done (0ad3cbb): shared stub image `localhost/wolf/stub` +
+  KDE-on-stub app entry alongside the classic image. Smoke-tested: entrypoint
+  chain runs on the stub with env-carried PATH (note: PATH in app env is
+  load-bearing for boot). PENDING USER GATE: stream "KDE Plasma Desktop (Stub)"
+  once; on parity, delete the per-desktop images (slice 2) and convert
+  firefox/steam to closures-on-stub (slice 3, the big image-size win).
+- Learned for M3 design: docker Env reaches systemd's manager environment
+  directly (units inherit session vars; no capture shim needed), and session
+  units already self-discover the wayland socket by scanning /run/wolf. The
+  direct-`init` entrypoint (dropping the gow chain) is viable but needs the
+  cont-init device/nvidia steps ported into closure units first.
+
 Milestones → commits:
 - **M0** — branch, baseline capture (probe outputs recorded into `plans/`), this doc.
   Docs-only commit, no deploy.
