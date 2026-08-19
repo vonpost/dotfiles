@@ -141,6 +141,16 @@ existing tooling, far simpler render path), get those *performing well*, then
 bring up KDE on the nix-native stack with the diagnostics above before declaring
 M4 done.
 
+#### HARD CONSTRAINT (user, 2026-08-19): Steam profile holds 249 GB of installed games
+`/var/lib/wolf/profile-data/user/WolfSteam` on OKAMI = 249 GB of installed
+games. Wolf keys the per-app state folder by the runner `name`, so the Steam
+conversion MUST keep `runner.name = "WolfSteam"` (NOT WolfSteamNix — a separate
+smaller dir of that name also exists) for the profile to carry over. Games
+never lived in the image; with the name preserved, the image swap is
+data-safe by construction. Do not rename runners casually in general — every
+rename orphans a profile dir (see WolfKdeStub, 19M, created by the M3 slice-1
+test; the slice-2 collapse deliberately kept WolfKdeNix).
+
 ### 4. Steam
 - `wolfApp` + nixpkgs `programs.steam` FHS env + gamescope; state via the `/home/retro`
   mount as today; Proton arrives via Steam's own downloads (upstream doesn't bake it either).

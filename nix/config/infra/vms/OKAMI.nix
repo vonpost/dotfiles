@@ -15,15 +15,11 @@ in
     enable = true;
     podmanLoadImages = true;
     podmanImages = [
-      wolfImagePackages.wolfKdeImage
+      # wolfKdeImage is an alias of the shared stub image (M3).
       wolfImagePackages.wolfStubImage
     ];
     extraApps = [
       wolfImagePackages.wolfKdeApp
-      # M3 beachhead: same KDE closure served from the shared stub image.
-      # Validated in parallel with the classic image; the classic entry is the
-      # fallback until stub parity is confirmed via a stream test.
-      wolfImagePackages.wolfKdeStubApp
     ];
     wolfDen.enable = true;
     hostPulseAudio.anonymousSocket.enable = true;

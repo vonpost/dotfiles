@@ -1838,13 +1838,11 @@ in
     wolfXfceSystem
     wolfXfceApp
     wolfXfceWolfConfig
-    wolfKdeNixosImage
     wolfKdeImage
     wolfKdeSystem
     wolfKdeApp
     wolfKdeWolfConfig
-    wolfStubImage
-    wolfKdeStubApp;
+    wolfStubImage;
 })
 // lib.optionalAttrs steamSupported {
   wolfSteamImage = pkgs.dockerTools.buildLayeredImage {
