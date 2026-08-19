@@ -586,10 +586,6 @@ rec {
       nixosPassThroughRootfs
       baseAssets
       baseAppAssets
-      gnomeAssets
-      labwcAssets
-      labwcNoctaliaAssets
-      xfceAssets
       kdeAssets
     ];
     config = commonConfig // {

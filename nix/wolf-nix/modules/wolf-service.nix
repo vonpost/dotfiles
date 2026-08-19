@@ -10,7 +10,7 @@ let
   };
   defaultPackage = pkgs.callPackage ../packages/wolf.nix { pkgs = pkgs; };
   imagePackages = pkgs.callPackage ../packages/images.nix { };
-  defaultPodmanImages = lib.optionals (imagePackages ? wolfGnomeImage) [ imagePackages.wolfGnomeImage ];
+  defaultPodmanImages = lib.optionals (imagePackages ? wolfStubImage) [ imagePackages.wolfStubImage ];
   packageWithDefaultConfigSource =
     if lib.hasAttrByPath [ "src" ] cfg.package then cfg.package else defaultPackage;
   defaultConfigIncludePath =
@@ -363,26 +363,6 @@ in
       default = defaultPodmanImages;
       example = lib.literalExpression "[ inputs.wolf-nix.packages.${pkgs.system}.wolfFirefoxImage ]";
       description = "OCI archive derivations loaded into Podman with `podman load -i`.";
-    };
-
-    firefoxQuadlet = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Create a Podman Quadlet service named `wolf-firefox` for the Firefox image.";
-      };
-
-      image = lib.mkOption {
-        type = lib.types.str;
-        default = "localhost/gow/firefox-nix:edge";
-        description = "Image reference used by the generated `wolf-firefox` Quadlet.";
-      };
-
-      autoStart = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Auto-start the generated `wolf-firefox` Quadlet at boot.";
-      };
     };
 
     nvidiaBundle = {
@@ -921,33 +901,11 @@ in
         '';
       };
 
-      virtualisation.quadlet = lib.mkIf (cfg.firefoxQuadlet.enable || cfg.wolfDen.enable) {
+      virtualisation.quadlet = lib.mkIf cfg.wolfDen.enable {
         enable = true;
 
         containers =
-          lib.optionalAttrs cfg.firefoxQuadlet.enable {
-            wolf-firefox = {
-              autoStart = cfg.firefoxQuadlet.autoStart;
-              serviceConfig = {
-                Restart = "on-failure";
-              };
-              containerConfig = {
-                image = cfg.firefoxQuadlet.image;
-                environments = {
-                  RUN_SWAY = "1";
-                  MOZ_ENABLE_WAYLAND = "1";
-                  GOW_REQUIRED_DEVICES = "/dev/input/* /dev/dri/* /dev/nvidia*";
-                };
-                addCapabilities = [ "NET_RAW" "MKNOD" "NET_ADMIN" ];
-                podmanArgs = [
-                  "--ipc=host"
-                  "--device-cgroup-rule=c 13:* rmw"
-                  "--device-cgroup-rule=c 244:* rmw"
-                ];
-              };
-            };
-          }
-          // lib.optionalAttrs cfg.wolfDen.enable {
+          lib.optionalAttrs cfg.wolfDen.enable {
             "wolf-den" = {
               autoStart = cfg.wolfDen.autoStart;
               unitConfig = {
