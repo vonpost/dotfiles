@@ -20,6 +20,9 @@ in
     ];
     extraApps = [
       wolfImagePackages.wolfKdeApp
+      # Steam closure on the stub — validation profile (WolfSteamNix); the
+      # WolfSteam (249 GB) cutover happens only after a proven game launch.
+      wolfImagePackages.wolfSteamNixApp
     ];
     wolfDen.enable = true;
     hostPulseAudio.anonymousSocket.enable = true;

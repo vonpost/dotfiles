@@ -1491,13 +1491,15 @@ EOF
       mkImportEnvironmentCommand
       mkSyncDbusActivationCommand
       mkWolfDesktopServiceConfig
-      noctaliaShell;
+      noctaliaShell
+      steamPackage;
   };
   inherit (desktopSystems)
     nixosGnomeSystemMount
     nixosKdeSystemMount
     nixosLabwcSystemMount
-    nixosXfceSystemMount;
+    nixosXfceSystemMount
+    nixosSteamSystemMount;
 
   nixosFirefoxRootfs = pkgs.runCommand "wolf-firefox-nixos-rootfs" { } ''
     mkdir -p "$out"
@@ -1703,7 +1705,8 @@ EOF
       nixosGnomeSystemMount
       nixosLabwcSystemMount
       nixosXfceSystemMount
-      nixosKdeSystemMount;
+      nixosKdeSystemMount
+      nixosSteamSystemMount;
   };
 
 in
@@ -1747,4 +1750,7 @@ in
     wolfKdeApp
     wolfKdeWolfConfig
     wolfStubImage;
+}
+// lib.optionalAttrs steamSupported {
+  inherit (desktopImages) wolfSteamNixApp;
 })

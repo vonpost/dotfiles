@@ -20,6 +20,7 @@
 , nixosLabwcSystemMount
 , nixosXfceSystemMount
 , nixosKdeSystemMount
+, nixosSteamSystemMount
 }:
 
 rec {
@@ -571,6 +572,60 @@ rec {
     }
     """
   '';
+
+  # ── Steam on the shared stub (M6, validation phase) ─────────────────────
+  # Runner name is deliberately WolfSteamNix (a throwaway profile) until the
+  # session is proven; the cutover to WolfSteam (249 GB games profile) is a
+  # one-line rename gated on a successful stream + game launch.
+  wolfSteamNixApp = {
+    title = "Steam (Nix)";
+    icon_png_path = "https://games-on-whales.github.io/wildlife/apps/steam/assets/icon.png";
+    runner = {
+      type = "docker";
+      name = "WolfSteamNix";
+      image = "localhost/wolf/stub:${imageTag}";
+      mounts = [
+        "/nix/store:/nix/store:ro"
+        "/nix/var/nix/db:/nix/var/nix/db:ro"
+        "/sys/fs/cgroup:/sys/fs/cgroup:rw"
+      ];
+      env = [
+        "UNAME=root"
+        "PATH=${basePath}:${nixosKdePath}"
+        "GOW_NIXOS_SYSTEM=${nixosSteamSystemMount}"
+        "GAMESCOPE_WIDTH=1920"
+        "GAMESCOPE_HEIGHT=1080"
+        "STEAM_STARTUP_FLAGS=-bigpicture"
+        "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
+        "GOW_NVIDIA_PREFIX=/usr/nvidia"
+      ];
+      devices = [ ];
+      ports = [ ];
+      base_create_json = ''
+        {
+          "StopSignal": "RTMIN+3",
+          "HostConfig": {
+            "IpcMode": "host",
+            "Privileged": false,
+            "CgroupnsMode": "host",
+            "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE", "SYS_PTRACE"],
+            "SecurityOpt": ["label=disable", "apparmor=unconfined", "seccomp=unconfined"],
+            "Devices": [
+              {"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"},
+              {"PathOnHost": "/dev/dri", "PathInContainer": "/dev/dri", "CgroupPermissions": "rwm"}
+            ],
+            "Ulimits": [{"Name": "nofile", "Soft": 10240, "Hard": 524288}],
+            "DeviceCgroupRules": ["c 10:229 rmw", "c 13:* rmw", "c 226:* rmw", "c 244:* rmw"],
+            "Tmpfs": {
+              "/run": "rw,nosuid,nodev,size=64m,mode=755",
+              "/run/lock": "rw,nosuid,nodev,size=16m,mode=755",
+              "/tmp": "rw,nosuid,nodev,size=1024m,mode=1777"
+            }
+          }
+        }
+      '';
+    };
+  };
 
   # ── M3: shared stub image ────────────────────────────────────────────────
   # One image for every pass-through desktop app. The rootfs and /opt/gow//cfg

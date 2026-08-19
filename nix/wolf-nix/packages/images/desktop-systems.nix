@@ -7,6 +7,7 @@
 , mkSyncDbusActivationCommand
 , mkWolfDesktopServiceConfig
 , noctaliaShell
+, steamPackage
 }:
 
 let
@@ -1313,15 +1314,120 @@ let
     };
   };
 in
-{
+rec {
   inherit
     nixosGnomeSystem
     nixosKdeSystem
     nixosLabwcSystem
     nixosXfceSystem;
 
+  # ── Steam (M6): gamescope session booting as a NixOS closure on the shared
+  # stub. Validated under runner name WolfSteamNix first; flips to WolfSteam
+  # (the 249 GB games profile) only after the session is proven safe — see
+  # plans/wolf-native-images.md, Steam constraint.
+  nixosSteamSystem = import "${pkgs.path}/nixos" {
+    system = pkgs.system;
+    configuration = { config, pkgs, lib, ... }: {
+      boot.isContainer = true;
+      networking.hostName = "wolf-steam";
+      networking.useDHCP = false;
+
+      users.groups.retro.gid = 1000;
+      users.groups.video = { };
+      users.groups.render = { };
+      users.groups.input = { };
+      users.groups.audio = { };
+      users.users.root.initialHashedPassword = "!";
+      users.users.retro = {
+        isNormalUser = true;
+        uid = 1000;
+        group = "retro";
+        extraGroups = [ "video" "render" "input" "audio" ];
+        home = "/home/retro";
+        createHome = true;
+        linger = true;
+        initialHashedPassword = "!";
+      };
+
+      services.dbus.enable = true;
+      # dbus-broker crash-loops in Wolf containers (see the KDE black-screen
+      # diagnosis, 2026-08-18); always use classic dbus in these closures.
+      services.dbus.implementation = lib.mkForce "dbus";
+      security.rtkit.enable = true;
+
+      # Stage-2 activation in this container rootfs cannot rewrite /bin.
+      system.activationScripts.binsh = lib.mkForce "";
+
+      security.pam.services.wolf-session-anchor.startSession = true;
+      security.pam.services.wolf-steam-session.startSession = true;
+
+      systemd.services.wolf-session-anchor = mkWolfSessionAnchorService "wolf-steam-session.service";
+
+      systemd.services.wolf-steam-session = {
+        description = "Wolf Steam Session (gamescope)";
+        wantedBy = [ "multi-user.target" ];
+        after = [ "dbus.service" "systemd-user-sessions.service" "user@1000.service" "wolf-session-anchor.service" ];
+        wants = [ "dbus.service" "user@1000.service" "wolf-session-anchor.service" ];
+        path = with pkgs; [
+          coreutils
+          dbus
+          gawk
+          gnugrep
+          systemd
+          wlr-randr
+          gamescope
+        ] ++ [ steamPackage ];
+        preStart = sessionUserDirsPreStart;
+        script = ''
+          set -euo pipefail
+
+          source /opt/gow/bash-lib/desktop-compat.sh
+
+          export HOME=/home/retro
+          export XDG_RUNTIME_DIR=/run/user/1000
+          export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+          export XDG_SESSION_TYPE=wayland
+          export XDG_SESSION_CLASS=user
+          export XDG_SEAT=seat0
+          export GAMESCOPE_WIDTH="''${GAMESCOPE_WIDTH:-1920}"
+          export GAMESCOPE_HEIGHT="''${GAMESCOPE_HEIGHT:-1080}"
+          export GAMESCOPE_REFRESH="''${GAMESCOPE_REFRESH:-60}"
+
+          gow_apply_common_ui_scale_defaults
+          gow_apply_common_xdg_defaults
+          gow_apply_graphics_runtime_env
+
+          if ! gow_export_wolf_wayland_env /run/wolf 80 0.1; then
+            echo "[STEAM] missing Wolf Wayland socket under /run/wolf"
+            exit 1
+          fi
+
+          gow_export_pulse_server_from_wolf
+          gow_require_session_bus /run/user/1000/bus 200 0.1
+          gow_export_logind_session_id 1000 retro seat0
+
+          # gamescope runs nested as a client of Wolf's compositor; Steam runs
+          # inside gamescope's embedded (SteamOS-style) session.
+          exec gamescope \
+            --backend wayland \
+            -W "$GAMESCOPE_WIDTH" -H "$GAMESCOPE_HEIGHT" \
+            -r "$GAMESCOPE_REFRESH" \
+            -e -- steam ''${STEAM_STARTUP_FLAGS:--bigpicture}
+        '';
+        serviceConfig = mkWolfDesktopServiceConfig "wolf-steam-session";
+      };
+
+      environment.systemPackages = with pkgs; [
+        dbus
+        systemd
+        gamescope
+      ] ++ [ steamPackage ];
+    };
+  };
+
   nixosGnomeSystemMount = nixosGnomeSystem.config.system.build.toplevel;
   nixosKdeSystemMount = nixosKdeSystem.config.system.build.toplevel;
   nixosLabwcSystemMount = nixosLabwcSystem.config.system.build.toplevel;
   nixosXfceSystemMount = nixosXfceSystem.config.system.build.toplevel;
+  nixosSteamSystemMount = nixosSteamSystem.config.system.build.toplevel;
 }
