@@ -980,8 +980,12 @@ in
       virtualisation.podman.dockerSocket.enable = lib.mkDefault true;
       virtualisation.podman.autoPrune.enable = lib.mkDefault true;
       virtualisation.podman.autoPrune.dates = lib.mkDefault "daily";
+      # No `--all`: nix-built images are timestamped 1970 (reproducibility), so
+      # any `until=` filter sees them as ancient and `--all` prunes every loaded
+      # image the moment no container references it (observed 2026-08-19: the
+      # stub image vanished overnight). Dangling-only pruning still reclaims the
+      # untagged layers left behind by repeated `podman load` tag replacements.
       virtualisation.podman.autoPrune.flags = lib.mkDefault [
-        "--all"
         "--volumes"
         "--filter=until=168h"
       ];
