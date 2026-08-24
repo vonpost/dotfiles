@@ -1358,6 +1358,49 @@ rec {
       # Stage-2 activation in this container rootfs cannot rewrite /bin.
       system.activationScripts.binsh = lib.mkForce "";
 
+      # Steam's FHS sandbox (bwrap) tmpfs-mounts /tmp and replaces /usr, hiding
+      # both /tmp/gow-graphics and the /usr/nvidia driver mount — the client
+      # then segfaults with no GPU stack (observed 2026-08-19). bwrap DOES bind
+      # /run through, and nixpkgs' FHS looks for drivers at /run/opengl-driver,
+      # so present the wolf driver volume in that standard shape and keep the
+      # gow graphics runtime dir under /run as well.
+      systemd.tmpfiles.rules = [
+        "d /run/gow-graphics 0755 retro retro -"
+      ];
+
+      # Expose ONLY lib/ through the standard driver path (the full /usr/nvidia
+      # tree carries the driver-sync shim's duplicate Vulkan ICDs in share/,
+      # which trips gamescope's CVulkanDevice::BInit). Deliberately NOT done
+      # with tmpfiles: root-context path rules that can resolve through a
+      # symlink into the RW-mounted /usr/nvidia tree destroyed the host's
+      # driver tree on every container boot (2026-08-20 incident — tmpfiles L+
+      # replaced the real lib/ with a symlink through a chained resolution).
+      # This unit only ever creates fresh real directories under /run and
+      # refuses to touch anything that already exists in an unexpected shape.
+      systemd.services.wolf-opengl-driver-shim = {
+        description = "Expose /usr/nvidia libs at /run/opengl-driver for FHS apps";
+        wantedBy = [ "multi-user.target" ];
+        before = [ "wolf-steam-session.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+        };
+        script = ''
+          set -euo pipefail
+          for d in /run/opengl-driver /run/opengl-driver-32; do
+            if [ -L "$d" ]; then
+              echo "refusing: $d is a symlink" >&2
+              exit 1
+            fi
+            ${pkgs.coreutils}/bin/mkdir -p "$d"
+          done
+          # Target the /run-mounted driver tree, NOT /usr/nvidia: these links
+          # must still resolve inside Steam's bwrap, which replaces /usr.
+          ${pkgs.coreutils}/bin/ln -sfnT /run/nvidia-driver/lib /run/opengl-driver/lib
+          ${pkgs.coreutils}/bin/ln -sfnT /run/nvidia-driver/lib32 /run/opengl-driver-32/lib
+        '';
+      };
+
       security.pam.services.wolf-session-anchor.startSession = true;
       security.pam.services.wolf-steam-session.startSession = true;
 
@@ -1396,6 +1439,18 @@ rec {
           gow_apply_common_ui_scale_defaults
           gow_apply_common_xdg_defaults
           gow_apply_graphics_runtime_env
+
+          # glvnd auto-selects mesa/llvmpipe GLX on gamescope's Xwayland here
+          # (no ldconfig-global nvidia like GoW's Ubuntu images), and Steam's
+          # vgui2 then dies on glXChooseVisual (root cause of the black screen,
+          # 2026-08-23). Forcing the vendor gives NVIDIA GLX visuals — verified
+          # with glxinfo: direct rendering on the RTX 4070 Ti SUPER.
+          export __GLX_VENDOR_LIBRARY_NAME=nvidia
+          # The scout runtime's bundled 32-bit GL stack cannot produce GLX
+          # visuals against nix DRI drivers (ABI split) — the vgui2 fatal
+          # assert. The nixpkgs FHS provides everything the client needs;
+          # games are unaffected (they run under pressure-vessel/sniper).
+          export STEAM_RUNTIME=0
 
           if ! gow_export_wolf_wayland_env /run/wolf 80 0.1; then
             echo "[STEAM] missing Wolf Wayland socket under /run/wolf"

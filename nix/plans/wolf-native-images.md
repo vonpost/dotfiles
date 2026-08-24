@@ -151,6 +151,48 @@ data-safe by construction. Do not rename runners casually in general — every
 rename orphans a profile dir (see WolfKdeStub, 19M, created by the M3 slice-1
 test; the slice-2 collapse deliberately kept WolfKdeNix).
 
+#### Steam (Nix) black screen: root-cause chain (2026-08-23/24 deep-dive)
+Solved and deployed, in causal order:
+1. Driver tree destruction: container tmpfiles rules chained through a symlink
+   into the RW /usr/nvidia mount and replaced the host tree's lib/ on every
+   boot (fixed: guarded shim unit; sync self-heals). Interrupted sync copies
+   from deploy reboots compounded it (sync hardening still TODO: atomic
+   staging + rename).
+2. gamescope Vulkan aborts: first from the truncated tree (no nvidia ICD lib),
+   then from my /run/opengl-driver full-tree link exposing the driver-sync
+   shim's ~15 duplicate ICDs (fixed: lib/-only exposure; driver tree now also
+   RO-mounted at /run/nvidia-driver so it stays visible inside Steam's bwrap).
+3. Steam client fatal assert (vgui2 glXChooseVisual, breakpad SIGTRAP): the
+   scout runtime's bundled 32-bit GL cannot produce GLX visuals here.
+   STEAM_RUNTIME=0 gets past it (verified: with it, Steam advanced to
+   steamui.so loading for the first time). __GLX_VENDOR_LIBRARY_NAME=nvidia is
+   exported by the compat lib automatically once the driver tree is healthy.
+4. steamui.so dlmopen chain under STEAM_RUNTIME=0: progressively added
+   libxtst/X11 set, gtk2, pipewire, udev, libvdpau, libva, bzip2 to the FHS
+   (steamPackage extraLibraries). Verified headlessly via wolf's lobbies API
+   (curl over wolf.sock — no Moonlight needed; see /tmp/lobby-selftest.py
+   pattern).
+
+REMAINING BLOCKER: dlmopen still reports libbz2.so.1.0 missing although the
+FHS rootfs contains a valid 32-bit copy in usr/lib32. Leading hypothesis: the
+nixpkgs FHS disables ld.so.cache (empty tmpfs over the glibc etc dir — see the
+bwrap args) and nix i686 glibc's builtin search lacks /lib32, so 32-bit dlmopen
+resolution rides ENTIRELY on LD_LIBRARY_PATH — which in the session lacks
+/lib32 (it carries only the gow nvidia dirs). Discriminating test: run the
+32-bit loader inside the live FHS namespace with and without :/lib32 appended;
+if that's it, the fix is one env line (append /lib32:/lib to LD_LIBRARY_PATH
+for the steam session) or steam-run-style profile handling. Secondary
+hypothesis: only ubuntu-built steam-shipped sub-libraries (no RUNPATH, Debian
+sonames) miss, matching the .so.1.0 pattern.
+
+Debugging infrastructure built along the way (reusable): headless lobby
+creation via wolf.sock API; stable-compositor testbed (gamescope headless +
+inert child) at /tmp/steam-testbed.sh (laptop) — capture/compositor/glxtest/
+steamtest/steamstrace subcommands; strace-wrapped session unit override
+pattern; coredumpctl on OKAMI catches container crashes (kernel-global
+core_pattern). Beware: /proc/PID/root probes lie across mount namespaces for
+absolute symlinks, pkill -f self-matches, and pgrep must race the crash loop.
+
 ### 4. Steam
 - `wolfApp` + nixpkgs `programs.steam` FHS env + gamescope; state via the `/home/retro`
   mount as today; Proton arrives via Steam's own downloads (upstream doesn't bake it either).

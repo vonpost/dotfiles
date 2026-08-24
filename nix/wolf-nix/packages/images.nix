@@ -1411,8 +1411,34 @@ EOF
   steamPackage =
     if steamSupported then
       pkgs.steam.override {
-        # Needed by steamui.so (32-bit path) in this containerized setup.
-        extraLibraries = p: with p; [ libxtst ];
+        # steamui.so (32-bit) dlmopens these at runtime; with STEAM_RUNTIME=0
+        # (required — the scout runtime's classic mesa GLX cannot produce
+        # visuals against nix DRI drivers, root cause of the vgui2
+        # glXChooseVisual fatal assert, diagnosed 2026-08-24) the FHS must
+        # provide them all. libxtst was found in the Feb 2026 attempt,
+        # libXrandr in this one; the rest are steamui's known X11 dep set.
+        extraLibraries = p: with p; [
+          libxtst
+          xorg.libXrandr
+          xorg.libXcursor
+          xorg.libXinerama
+          xorg.libXi
+          xorg.libXfixes
+          xorg.libXrender
+          xorg.libXcomposite
+          xorg.libXdamage
+          xorg.libXScrnSaver
+          # steamui also dlmopens the GTK2 family (scout-runtime era UI),
+          # pipewire (desktop capture) and libudev (device enumeration).
+          gtk2
+          pipewire
+          udev
+          # Sub-deps of steam's bundled libavcodec (hw video accel).
+          libvdpau
+          libva
+          # nixpkgs bzip2 ships both .so.1 and Debian's .so.1.0 sonames.
+          bzip2
+        ];
       }
     else
       null;

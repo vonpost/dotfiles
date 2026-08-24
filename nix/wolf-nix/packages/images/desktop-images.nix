@@ -588,16 +588,23 @@ rec {
         "/nix/store:/nix/store:ro"
         "/nix/var/nix/db:/nix/var/nix/db:ro"
         "/sys/fs/cgroup:/sys/fs/cgroup:rw"
+        # Steam's FHS bwrap replaces /usr, so the wolf-injected /usr/nvidia
+        # mount is invisible inside it and every driver path dangles (root
+        # cause of the vgui2 glXChooseVisual fatal assert, 2026-08-23). bwrap
+        # binds /run through, so mount the same tree under /run read-only and
+        # point everything there instead.
+        "/var/lib/wolf/nvidia-driver:/run/nvidia-driver:ro"
       ];
       env = [
         "UNAME=root"
         "PATH=${basePath}:${nixosKdePath}"
         "GOW_NIXOS_SYSTEM=${nixosSteamSystemMount}"
+        "GOW_GRAPHICS_RUNTIME_DIR=/run/gow-graphics"
         "GAMESCOPE_WIDTH=1920"
         "GAMESCOPE_HEIGHT=1080"
         "STEAM_STARTUP_FLAGS=-bigpicture"
         "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
-        "GOW_NVIDIA_PREFIX=/usr/nvidia"
+        "GOW_NVIDIA_PREFIX=/run/nvidia-driver"
       ];
       devices = [ ];
       ports = [ ];
