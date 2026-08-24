@@ -173,17 +173,31 @@ Solved and deployed, in causal order:
    (curl over wolf.sock — no Moonlight needed; see /tmp/lobby-selftest.py
    pattern).
 
-REMAINING BLOCKER: dlmopen still reports libbz2.so.1.0 missing although the
-FHS rootfs contains a valid 32-bit copy in usr/lib32. Leading hypothesis: the
-nixpkgs FHS disables ld.so.cache (empty tmpfs over the glibc etc dir — see the
-bwrap args) and nix i686 glibc's builtin search lacks /lib32, so 32-bit dlmopen
-resolution rides ENTIRELY on LD_LIBRARY_PATH — which in the session lacks
-/lib32 (it carries only the gow nvidia dirs). Discriminating test: run the
-32-bit loader inside the live FHS namespace with and without :/lib32 appended;
-if that's it, the fix is one env line (append /lib32:/lib to LD_LIBRARY_PATH
-for the steam session) or steam-run-style profile handling. Secondary
-hypothesis: only ubuntu-built steam-shipped sub-libraries (no RUNPATH, Debian
-sonames) miss, matching the .so.1.0 pattern.
+RESOLVED SINCE (2026-08-24 continued session): the empty-ld.so.cache/LD-path
+hypothesis was right — appending /lib32:/lib to the session LD_LIBRARY_PATH
+fixed the entire dlmopen chain. steamui.so then loaded after adding its full
+NEEDED set (X11 family incl. libSM/libICE, gtk2, pipewire, udev, libvdpau,
+libva, bzip2, openal, plus vgui2_s.so's manifest — extracted via readelf, all
+in steamPackage extraLibraries). Steam's updater completes and the client
+starts. Scout runtime (STEAM_RUNTIME default) retested on healthy infra:
+still instant vgui2 assert — conclusively dead here; STEAM_RUNTIME=0 stands.
+Also: a -steamdeck flag experiment permanently opted the profile into the
+steamdeck_stable beta (package/beta file — disabled by rename); avoid -steamdeck.
+
+CURRENT FRONTIER (one layer left): the 32-bit mesa GLX vendor
+(libGLX_mesa.so.0 from /run/opengl-driver-32/lib, valid ELF32, opens fine —
+strace fd 4) initializes to ZERO visuals, silently (LIBGL_DEBUG=verbose says
+nothing), inside the steam FHS on gamescope's Xwayland — while 64-bit mesa on
+the same display yields 320+ visuals. vgui2 (32-bit) therefore asserts on
+glXChooseVisual. Forcing the nvidia vendor is not a fix (server glamor is
+llvmpipe; forced clients get zero visuals — reverted to unset). Next probes,
+in order: (1) validly test 32-bit FORCED nvidia inside the FHS (all earlier
+"32-bit" evidence was contaminated by a pipeline-grep misread — the harness
+now does this in seconds via steam-run + the lobby API); (2) xcb/DRI3 delta
+between 32/64-bit vendor init (FHS lib32 xcb versions); (3) check how the
+steam-headless community images handle vgui2 on nested Xwayland (research
+agent); (4) longer-term M5 fix: server-side NVIDIA glamor for Xwayland, which
+makes all GLX nvidia-native and moots the mesa path.
 
 Debugging infrastructure built along the way (reusable): headless lobby
 creation via wolf.sock API; stable-compositor testbed (gamescope headless +

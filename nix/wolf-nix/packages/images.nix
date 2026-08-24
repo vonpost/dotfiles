@@ -1438,6 +1438,10 @@ EOF
           libva
           # nixpkgs bzip2 ships both .so.1 and Debian's .so.1.0 sonames.
           bzip2
+          # vgui2_s.so additionally needs these (X session mgmt + audio).
+          xorg.libSM
+          xorg.libICE
+          openal
         ];
       }
     else
@@ -1519,6 +1523,7 @@ EOF
       mkWolfDesktopServiceConfig
       noctaliaShell
       steamPackage;
+    steamRunPackage = if steamSupported then pkgs.steam-run else null;
   };
   inherit (desktopSystems)
     nixosGnomeSystemMount

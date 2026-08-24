@@ -8,6 +8,7 @@
 , mkWolfDesktopServiceConfig
 , noctaliaShell
 , steamPackage
+, steamRunPackage
 }:
 
 let
@@ -1440,17 +1441,24 @@ rec {
           gow_apply_common_xdg_defaults
           gow_apply_graphics_runtime_env
 
-          # glvnd auto-selects mesa/llvmpipe GLX on gamescope's Xwayland here
-          # (no ldconfig-global nvidia like GoW's Ubuntu images), and Steam's
-          # vgui2 then dies on glXChooseVisual (root cause of the black screen,
-          # 2026-08-23). Forcing the vendor gives NVIDIA GLX visuals — verified
-          # with glxinfo: direct rendering on the RTX 4070 Ti SUPER.
-          export __GLX_VENDOR_LIBRARY_NAME=nvidia
+          # Do NOT force the nvidia GLX vendor here (the compat lib exports it
+          # when the driver tree is healthy): gamescope's Xwayland runs glamor
+          # on llvmpipe, so GLX clients must match the server's mesa vendor —
+          # forced-nvidia clients get ZERO visuals and vgui2 fatally asserts
+          # (2026-08-24). Steam's vgui2 surface renders fine on llvmpipe; the
+          # real rendering (CEF, games) uses EGL/Vulkan and stays on NVIDIA.
+          unset __GLX_VENDOR_LIBRARY_NAME
           # The scout runtime's bundled 32-bit GL stack cannot produce GLX
           # visuals against nix DRI drivers (ABI split) — the vgui2 fatal
           # assert. The nixpkgs FHS provides everything the client needs;
           # games are unaffected (they run under pressure-vessel/sniper).
           export STEAM_RUNTIME=0
+          # The nixpkgs FHS runs with an EMPTY ld.so.cache (tmpfs over the
+          # glibc etc dir) and nix i686 glibc's builtin search has no /lib32,
+          # so 32-bit dlmopen inside the sandbox resolves ONLY via
+          # LD_LIBRARY_PATH. Outside bwrap these paths don't exist and are
+          # ignored; inside they are the FHS library dirs.
+          export LD_LIBRARY_PATH="''${LD_LIBRARY_PATH:+''${LD_LIBRARY_PATH}:}/lib32:/lib"
 
           if ! gow_export_wolf_wayland_env /run/wolf 80 0.1; then
             echo "[STEAM] missing Wolf Wayland socket under /run/wolf"
@@ -1476,7 +1484,13 @@ rec {
         dbus
         systemd
         gamescope
-      ] ++ [ steamPackage ];
+      ] ++ [
+        steamPackage
+        # Same FHS as steam but runs an arbitrary command — the only way to
+        # run diagnostics (glxinfo etc.) inside the exact sandbox steam sees.
+        # Passed from the outer (allowUnfree) package set.
+        steamRunPackage
+      ];
     };
   };
 
