@@ -184,20 +184,34 @@ still instant vgui2 assert — conclusively dead here; STEAM_RUNTIME=0 stands.
 Also: a -steamdeck flag experiment permanently opted the profile into the
 steamdeck_stable beta (package/beta file — disabled by rename); avoid -steamdeck.
 
-CURRENT FRONTIER (one layer left): the 32-bit mesa GLX vendor
-(libGLX_mesa.so.0 from /run/opengl-driver-32/lib, valid ELF32, opens fine —
-strace fd 4) initializes to ZERO visuals, silently (LIBGL_DEBUG=verbose says
-nothing), inside the steam FHS on gamescope's Xwayland — while 64-bit mesa on
-the same display yields 320+ visuals. vgui2 (32-bit) therefore asserts on
-glXChooseVisual. Forcing the nvidia vendor is not a fix (server glamor is
-llvmpipe; forced clients get zero visuals — reverted to unset). Next probes,
-in order: (1) validly test 32-bit FORCED nvidia inside the FHS (all earlier
-"32-bit" evidence was contaminated by a pipeline-grep misread — the harness
-now does this in seconds via steam-run + the lobby API); (2) xcb/DRI3 delta
-between 32/64-bit vendor init (FHS lib32 xcb versions); (3) check how the
-steam-headless community images handle vgui2 on nested Xwayland (research
-agent); (4) longer-term M5 fix: server-side NVIDIA glamor for Xwayland, which
-makes all GLX nvidia-native and moots the mesa path.
+RESOLVED (2026-08-25): the zero-visuals mystery was the driver-path shape,
+not mesa/xcb. gow-30-nvidia.sh symlinked BOTH /run/opengl-driver and
+/run/opengl-driver-32 at the full driver tree, so -32/lib resolved to the
+64-bit lib/ — 32-bit glvnd found only a wrong-ELF-class libGLX_mesa.so.0
+there (ld.so skips wrong-class candidates silently and finds nothing else in
+the FHS → zero visuals; LIBGL_DEBUG says nothing because mesa never loads).
+The guarded steam-closure shim never ran — cont-init creates the links before
+systemd starts, so the guard always refused; unit removed. Fix: 30-nvidia now
+builds /run/opengl-driver-32 as a real dir with lib → $prefix/lib32 (the
+64-bit full-tree link stays: the FHS EGL vendor dirs need share/). Verified
+live in-container (FHS glxinfo matrix: 32-bit mesa 0→320 visuals, 32-bit
+forced-nvidia 0→480 on the real GPU; 64-bit unchanged) and end-to-end
+headlessly after deploy: big picture up, 9 webhelpers, 0 vgui2 asserts, 0
+session restarts over 3+ min. Corrections to earlier contaminated evidence:
+64-bit forced-nvidia GLX works fine on this Xwayland (480 visuals, RTX
+renderer), and this Xwayland actually runs with glamor fully DISABLED
+(eglInitialize fails → sw fallback) yet GLX works — so server-side NVIDIA
+glamor (the old probe 4 / M5 idea) is an optimization, not a requirement. The
+session-teardown gamescope SEGVs in coredumpctl were secondary (steam's exit
+crashed gamescope teardown), gone now that steam lives. Community research
+(steam-headless / GoW / SteamOS): every working stack ships a real distro
+lib32 GL on a real GPU node; no startup flag dodges the vgui2 GLX assert
+(-gamepadui asserts identically in steamUI/Main.cpp); keep -cef-force-glx in
+the back pocket if CEF GPU init ever falls back to software rendering.
+
+PENDING USER GATE: one manual stream of the WolfSteamNix app to confirm
+visually; then flip runner name WolfSteamNix → WolfSteam (249 GB profile
+constraint above) only on explicit approval.
 
 Debugging infrastructure built along the way (reusable): headless lobby
 creation via wolf.sock API; stable-compositor testbed (gamescope headless +

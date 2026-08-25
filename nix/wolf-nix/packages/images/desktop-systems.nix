@@ -1369,38 +1369,12 @@ rec {
         "d /run/gow-graphics 0755 retro retro -"
       ];
 
-      # Expose ONLY lib/ through the standard driver path (the full /usr/nvidia
-      # tree carries the driver-sync shim's duplicate Vulkan ICDs in share/,
-      # which trips gamescope's CVulkanDevice::BInit). Deliberately NOT done
-      # with tmpfiles: root-context path rules that can resolve through a
-      # symlink into the RW-mounted /usr/nvidia tree destroyed the host's
-      # driver tree on every container boot (2026-08-20 incident — tmpfiles L+
-      # replaced the real lib/ with a symlink through a chained resolution).
-      # This unit only ever creates fresh real directories under /run and
-      # refuses to touch anything that already exists in an unexpected shape.
-      systemd.services.wolf-opengl-driver-shim = {
-        description = "Expose /usr/nvidia libs at /run/opengl-driver for FHS apps";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "wolf-steam-session.service" ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-        };
-        script = ''
-          set -euo pipefail
-          for d in /run/opengl-driver /run/opengl-driver-32; do
-            if [ -L "$d" ]; then
-              echo "refusing: $d is a symlink" >&2
-              exit 1
-            fi
-            ${pkgs.coreutils}/bin/mkdir -p "$d"
-          done
-          # Target the /run-mounted driver tree, NOT /usr/nvidia: these links
-          # must still resolve inside Steam's bwrap, which replaces /usr.
-          ${pkgs.coreutils}/bin/ln -sfnT /run/nvidia-driver/lib /run/opengl-driver/lib
-          ${pkgs.coreutils}/bin/ln -sfnT /run/nvidia-driver/lib32 /run/opengl-driver-32/lib
-        '';
-      };
+      # /run/opengl-driver{,-32} are created by the shared gow-30-nvidia
+      # cont-init step (runs before systemd, so a closure unit can never win
+      # that race): -driver is a full-tree link (FHS EGL vendor dirs need
+      # share/), -driver-32 is a lib32-shaped dir — see images.nix. Both
+      # target the /run-mounted driver tree, which stays visible inside
+      # Steam's bwrap (it replaces /usr, hiding /usr/nvidia).
 
       security.pam.services.wolf-session-anchor.startSession = true;
       security.pam.services.wolf-steam-session.startSession = true;

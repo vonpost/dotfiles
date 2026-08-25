@@ -719,12 +719,18 @@ let
     if [ ! -e /run/opengl-driver ]; then
       ln -s "$nvidia_prefix" /run/opengl-driver || true
     fi
-    if [ -d "$nvidia_prefix/lib32" ] || [ -d "$nvidia_prefix/lib" ]; then
-      if [ -L /run/opengl-driver-32 ] && [ ! -e /run/opengl-driver-32 ]; then
+    # /run/opengl-driver-32 must present the *32-bit* libs at lib/. A full-tree
+    # symlink (like /run/opengl-driver above) points -32/lib at the 64-bit lib/,
+    # so 32-bit glvnd finds only a wrong-ELF-class libGLX_mesa there and comes
+    # up with ZERO GLX visuals — silently; Steam's 32-bit vgui2 then fatally
+    # asserts on glXChooseVisual (root-caused 2026-08-25).
+    if [ -d "$nvidia_prefix/lib32" ]; then
+      if [ -L /run/opengl-driver-32 ]; then
         rm -f /run/opengl-driver-32
       fi
       if [ ! -e /run/opengl-driver-32 ]; then
-        ln -s "$nvidia_prefix" /run/opengl-driver-32 || true
+        mkdir -p /run/opengl-driver-32
+        ln -sfnT "$nvidia_prefix/lib32" /run/opengl-driver-32/lib
       fi
     fi
 
