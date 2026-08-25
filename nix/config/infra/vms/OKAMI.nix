@@ -20,10 +20,14 @@ in
     ];
     extraApps = [
       wolfImagePackages.wolfKdeApp
-      # Steam closure on the stub — validation profile (WolfSteamNix); the
-      # WolfSteam (249 GB) cutover happens only after a proven game launch.
-      wolfImagePackages.wolfSteamNixApp
+      # Nix Steam closure on the stub, owning the WolfSteam runner name (the
+      # 249 GB games profile). Cutover user-approved 2026-08-26 after a
+      # verified stream on the WolfSteamNix validation profile.
+      wolfImagePackages.wolfSteamApp
     ];
+    # The upstream ghcr Steam app is superseded by wolfSteamApp, which takes
+    # over its runner name (= profile dir); two apps must not share it.
+    removeDefaultApps = [ "WolfSteam" ];
     wolfDen.enable = true;
     hostPulseAudio.anonymousSocket.enable = true;
   };

@@ -24,11 +24,18 @@ let
       userProfileId = "user";
       existingProfiles = if builtins.isList profiles then profiles else [ ];
       userProfileExists = lib.any (profile: (profile ? id) && profile.id == userProfileId) existingProfiles;
+      # Drop upstream-default apps whose runner name is being taken over by an
+      # extraApp (e.g. the ghcr Steam image once the nix Steam owns WolfSteam):
+      # two apps sharing a runner name would share one profile dir.
+      dropRemoved = apps:
+        builtins.filter
+          (app: !((app ? runner) && (app.runner ? name) && lib.elem app.runner.name cfg.removeDefaultApps))
+          apps;
       patchedProfiles = builtins.map
         (profile:
           if (profile ? id) && profile.id == userProfileId then
             profile // {
-              apps = (if profile ? apps && builtins.isList profile.apps then profile.apps else [ ]) ++ cfg.extraApps;
+              apps = dropRemoved (if profile ? apps && builtins.isList profile.apps then profile.apps else [ ]) ++ cfg.extraApps;
             }
           else
             profile)
@@ -309,6 +316,17 @@ in
       '';
       description = ''
         Additional apps appended to profile `user` in the generated config.
+      '';
+    };
+
+    removeDefaultApps = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "WolfSteam" ];
+      description = ''
+        Runner names to drop from the upstream-default app list of profile
+        `user` before extraApps are appended. Use when an extraApp takes over
+        a default app's runner name (and thus its profile-data folder).
       '';
     };
 

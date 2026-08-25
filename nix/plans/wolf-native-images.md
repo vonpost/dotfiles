@@ -260,9 +260,34 @@ MOTHER-built) against the container's sway output. steam-run caveat: it is
 VANILLA pkgs.steam-run (no extraLibraries) — never use it to prove library
 presence for steam proper; nsenter into the live steam bwrap instead.
 
-PENDING USER GATE: one manual stream of the WolfSteamNix app to confirm
-visually; then flip runner name WolfSteamNix → WolfSteam (249 GB profile
-constraint above) only on explicit approval.
+CUTOVER DONE (2026-08-26, user-approved after a successful stream): the nix
+Steam app now owns runner name WolfSteam (title "Steam"); the upstream ghcr
+Steam entry is dropped via the new services.wolf.removeDefaultApps module
+option (two apps must never share a runner name = profile dir). Two things
+the flip surfaced, both fixed:
+1. Profile layout: the Debian/GoW image keeps the install root at ~/.steam
+   with DATA at ~/.steam/steam as a REAL directory; Valve's launcher (what
+   the nixpkgs steam bin is) hard-requires ~/.steam/steam to be a SYMLINK
+   and errors out ("Couldn't set up Steam data", headless zenity). One-time
+   state migration performed on OKAMI (same-fs mv, instant): data dir moved
+   to ~/.local/share/Steam, install pieces (steam.sh, ubuntu12_32/64,
+   steamrt*, package/, steamui, ...) moved into it, ~/.steam rebuilt as the
+   standard symlink farm (root/steam -> ~/.local/share/Steam), registry.vdf
+   and steam.token kept. The client then self-healed the remaining install
+   assets via its updater ("uninstalled manifest" -> reinstall, data
+   untouched). steamapps (245 GB), login, userdata all carried over —
+   verified by screenshot: logged-in big picture home with the library.
+2. GAMESCOPE_WIDTH/HEIGHT/REFRESH in steam's env make the client assume a
+   gamescope session and render a deck-sized 1280x800 canvas inside the
+   fullscreen sway window (A/B-verified live). The sway exec line now strips
+   them (env -u) for steam only; the session script still uses them for the
+   sway output mode. X/RandR itself reported 1920x1080 all along.
+Final deployed state verified headlessly: session active 0 restarts, 11
+webhelpers, 0 asserts, 60 fps to the compositor, full-canvas 1920x1080
+logged-in big picture with the games library. Orphaned validation profile
+dir WolfSteamNix (~small) left in place per the no-casual-renames rule —
+delete manually if desired. M6 gate remaining: one game launch under
+pressure-vessel (user, whenever).
 
 Debugging infrastructure built along the way (reusable): headless lobby
 creation via wolf.sock API; stable-compositor testbed (gamescope headless +

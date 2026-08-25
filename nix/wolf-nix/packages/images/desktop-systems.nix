@@ -1322,10 +1322,10 @@ rec {
     nixosLabwcSystem
     nixosXfceSystem;
 
-  # ── Steam (M6): gamescope session booting as a NixOS closure on the shared
-  # stub. Validated under runner name WolfSteamNix first; flips to WolfSteam
-  # (the 249 GB games profile) only after the session is proven safe — see
-  # plans/wolf-native-images.md, Steam constraint.
+  # ── Steam (M6): sway session booting as a NixOS closure on the shared
+  # stub. Validated under runner name WolfSteamNix, then cut over to
+  # WolfSteam (the 249 GB games profile) with user approval 2026-08-26 —
+  # see plans/wolf-native-images.md, Steam constraint.
   nixosSteamSystem = import "${pkgs.path}/nixos" {
     system = pkgs.system;
     configuration = { config, pkgs, lib, ... }: {
@@ -1477,7 +1477,12 @@ rec {
             # loads libXrandr before Valve's XRR workaround shim resolves the
             # real symbols, so display enumeration fails and big picture
             # never creates its window (real: (nil), 2026-08-25).
-            echo "exec env LD_PRELOAD=libXrandr.so.2 steam ''${STEAM_STARTUP_FLAGS:--bigpicture} && killall sway"
+            # GAMESCOPE_* must NOT reach steam: their presence makes the
+            # client assume a gamescope session and render a deck-sized
+            # 1280x800 canvas inside the fullscreen window (A/B-verified
+            # 2026-08-26). The session script still uses them for the sway
+            # output mode above.
+            echo "exec env -u GAMESCOPE_WIDTH -u GAMESCOPE_HEIGHT -u GAMESCOPE_REFRESH LD_PRELOAD=libXrandr.so.2 steam ''${STEAM_STARTUP_FLAGS:--bigpicture} && killall sway"
           } > "$cfg"
 
           exec sway --unsupported-gpu -c "$cfg"

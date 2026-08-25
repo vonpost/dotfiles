@@ -1807,5 +1807,5 @@ in
     wolfStubImage;
 }
 // lib.optionalAttrs steamSupported {
-  inherit (desktopImages) wolfSteamNixApp;
+  inherit (desktopImages) wolfSteamApp;
 })

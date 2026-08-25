@@ -573,16 +573,19 @@ rec {
     """
   '';
 
-  # ── Steam on the shared stub (M6, validation phase) ─────────────────────
-  # Runner name is deliberately WolfSteamNix (a throwaway profile) until the
-  # session is proven; the cutover to WolfSteam (249 GB games profile) is a
-  # one-line rename gated on a successful stream + game launch.
-  wolfSteamNixApp = {
-    title = "Steam (Nix)";
+  # ── Steam on the shared stub (M6) ────────────────────────────────────────
+  # Runner name WolfSteam = the 249 GB games profile (user-approved cutover
+  # 2026-08-26 after a verified stream; validated first under the throwaway
+  # WolfSteamNix name). The profile's Steam install lives at ~/.steam with
+  # root -> ~/.steam, so the carried-over client (and steamapps under
+  # .steam/steam/) runs in place; the retired ghcr app entry is dropped via
+  # services.wolf.removeDefaultApps.
+  wolfSteamApp = {
+    title = "Steam";
     icon_png_path = "https://games-on-whales.github.io/wildlife/apps/steam/assets/icon.png";
     runner = {
       type = "docker";
-      name = "WolfSteamNix";
+      name = "WolfSteam";
       image = "localhost/wolf/stub:${imageTag}";
       mounts = [
         "/nix/store:/nix/store:ro"
