@@ -1382,7 +1382,7 @@ rec {
       systemd.services.wolf-session-anchor = mkWolfSessionAnchorService "wolf-steam-session.service";
 
       systemd.services.wolf-steam-session = {
-        description = "Wolf Steam Session (gamescope)";
+        description = "Wolf Steam Session (sway)";
         wantedBy = [ "multi-user.target" ];
         after = [ "dbus.service" "systemd-user-sessions.service" "user@1000.service" "wolf-session-anchor.service" ];
         wants = [ "dbus.service" "user@1000.service" "wolf-session-anchor.service" ];
@@ -1391,9 +1391,12 @@ rec {
           dbus
           gawk
           gnugrep
+          gnused
+          procps
+          psmisc
           systemd
           wlr-randr
-          gamescope
+          sway
         ] ++ [ steamPackage ];
         preStart = sessionUserDirsPreStart;
         script = ''
@@ -1407,20 +1410,29 @@ rec {
           export XDG_SESSION_TYPE=wayland
           export XDG_SESSION_CLASS=user
           export XDG_SEAT=seat0
+          export XDG_CURRENT_DESKTOP=sway
+          export XDG_SESSION_DESKTOP=sway
           export GAMESCOPE_WIDTH="''${GAMESCOPE_WIDTH:-1920}"
           export GAMESCOPE_HEIGHT="''${GAMESCOPE_HEIGHT:-1080}"
           export GAMESCOPE_REFRESH="''${GAMESCOPE_REFRESH:-60}"
+
+          # Container Env does NOT reach the systemd manager (verified
+          # 2026-08-25: show-environment is empty of GOW_*), so pin the
+          # contract paths the compat lib needs. Without the runtime dir the
+          # VK_ICD_FILENAMES export silently never fires and Steam's UI shell
+          # cannot initialize Vulkan inside its bwrap.
+          export GOW_GRAPHICS_RUNTIME_DIR=/run/gow-graphics
+          export GOW_NVIDIA_PREFIX=/run/nvidia-driver
 
           gow_apply_common_ui_scale_defaults
           gow_apply_common_xdg_defaults
           gow_apply_graphics_runtime_env
 
-          # Do NOT force the nvidia GLX vendor here (the compat lib exports it
-          # when the driver tree is healthy): gamescope's Xwayland runs glamor
-          # on llvmpipe, so GLX clients must match the server's mesa vendor —
-          # forced-nvidia clients get ZERO visuals and vgui2 fatally asserts
-          # (2026-08-24). Steam's vgui2 surface renders fine on llvmpipe; the
-          # real rendering (CEF, games) uses EGL/Vulkan and stays on NVIDIA.
+          # Keep the default (mesa) GLX client vendor: measured on this stack,
+          # both mesa (320 visuals, llvmpipe) and nvidia (480, hw) work for
+          # 32-bit clients since the lib32-shaped /run/opengl-driver-32 fix;
+          # mesa is the shape every working reference runs. vgui2 only needs
+          # visuals; CEF/games use EGL/Vulkan on NVIDIA regardless.
           unset __GLX_VENDOR_LIBRARY_NAME
           # The scout runtime's bundled 32-bit GL stack cannot produce GLX
           # visuals against nix DRI drivers (ABI split) — the vgui2 fatal
@@ -1443,13 +1455,32 @@ rec {
           gow_require_session_bus /run/user/1000/bus 200 0.1
           gow_export_logind_session_id 1000 retro seat0
 
-          # gamescope runs nested as a client of Wolf's compositor; Steam runs
-          # inside gamescope's embedded (SteamOS-style) session.
-          exec gamescope \
-            --backend wayland \
-            -W "$GAMESCOPE_WIDTH" -H "$GAMESCOPE_HEIGHT" \
-            -r "$GAMESCOPE_REFRESH" \
-            -e -- steam ''${STEAM_STARTUP_FLAGS:--bigpicture}
+          # Chromium singleton locks in the persistent profile name the
+          # PREVIOUS container's hostname; the new container cannot prove that
+          # holder dead, so steamwebhelper refuses to serve the UI websocket
+          # and big picture never appears. Locks are meaningless across
+          # container boots — clear them (2026-08-25).
+          rm -f "$HOME/.local/share/Steam/config/htmlcache/Singleton"* || true
+
+          # Steam runs as an X11 client on sway's Xwayland — the same shape as
+          # the working upstream image (GoW ships RUN_SWAY=true; gamescope's
+          # nested-wayland backend never presents a single frame to Wolf's
+          # compositor, even with a trivial GL client — measured 2026-08-25).
+          cfg_dir="$(mktemp -d /tmp/steam-sway.XXXXXX)"
+          cfg="$cfg_dir/config"
+          {
+            echo "default_border none"
+            echo "output * resolution ''${GAMESCOPE_WIDTH}x''${GAMESCOPE_HEIGHT} position 0,0"
+            echo "xwayland enable"
+            echo "workspace main"
+            # LD_PRELOAD scoped to steam only: with STEAM_RUNTIME=0 nothing
+            # loads libXrandr before Valve's XRR workaround shim resolves the
+            # real symbols, so display enumeration fails and big picture
+            # never creates its window (real: (nil), 2026-08-25).
+            echo "exec env LD_PRELOAD=libXrandr.so.2 steam ''${STEAM_STARTUP_FLAGS:--bigpicture} && killall sway"
+          } > "$cfg"
+
+          exec sway --unsupported-gpu -c "$cfg"
         '';
         serviceConfig = mkWolfDesktopServiceConfig "wolf-steam-session";
       };
@@ -1457,12 +1488,14 @@ rec {
       environment.systemPackages = with pkgs; [
         dbus
         systemd
-        gamescope
+        sway
       ] ++ [
         steamPackage
-        # Same FHS as steam but runs an arbitrary command — the only way to
-        # run diagnostics (glxinfo etc.) inside the exact sandbox steam sees.
-        # Passed from the outer (allowUnfree) package set.
+        # Same FHS shape as steam for in-sandbox diagnostics (glxinfo etc.),
+        # but note it is VANILLA pkgs.steam-run — steam's extraLibraries do
+        # NOT apply here, so library-presence probes through it can mislead
+        # (they did on 2026-08-25). Prefer nsenter into the live steam bwrap
+        # for composition questions.
         steamRunPackage
       ];
     };

@@ -99,6 +99,15 @@ let
       allowBuiltinFetchGit = true;
     };
 
+    patches = [
+      # Drop renderer.bind_wl_display: smithay registers a second wl_drm
+      # global there (on top of the explicit create_drm_global), which
+      # aborts wlroots-0.20 nested-wayland clients (sway in the Steam app)
+      # on the duplicate device announcement, and can only ever succeed for
+      # the first compositor in the process. Diagnosed 2026-08-25.
+      ./patches/gst-wayland-display-single-wl-drm-global.patch
+    ];
+
     postPatch = ''
       # Upstream's `cuda` feature currently does not enable the matching core feature.
       substituteInPlace gst-plugin-wayland-display/Cargo.toml \

@@ -751,12 +751,22 @@ let
     done
     shopt -u nullglob
 
+    # The sync tree's manifests hardcode /usr/nvidia library paths. Steam's
+    # bwrap replaces /usr, so inside the FHS those ICDs are unloadable (the
+    # cause of "BInit - Unable to initialize Vulkan!", 2026-08-25). Rewrite
+    # them to the prefix actually in use — /run/nvidia-driver in app
+    # containers, which stays visible inside bwrap.
+    rewrite_manifest() {
+      ${pkgs.gnused}/bin/sed -i "s|/usr/nvidia|$nvidia_prefix|g" "$1"
+    }
+
     for candidate in \
       "$nvidia_prefix/share/vulkan/icd.d/nvidia_icd.json" \
       "$nvidia_prefix/share/vulkan/icd.d/nvidia_icd.x86_64.json" \
       "$nvidia_prefix/share/vulkan/icd.d/nvidia_icd.i686.json"; do
       if [ -f "$candidate" ]; then
         cp -f "$candidate" "$vulkan_icd_dir/$(basename "$candidate")"
+        rewrite_manifest "$vulkan_icd_dir/$(basename "$candidate")"
       fi
     done
 
@@ -765,11 +775,13 @@ let
       "$nvidia_prefix/share/egl/egl_external_platform.d/15_nvidia_gbm.json"; do
       if [ -f "$candidate" ]; then
         cp -f "$candidate" "$egl_external_dir/$(basename "$candidate")"
+        rewrite_manifest "$egl_external_dir/$(basename "$candidate")"
       fi
     done
 
     if [ -f "$nvidia_prefix/share/glvnd/egl_vendor.d/10_nvidia.json" ]; then
       cp -f "$nvidia_prefix/share/glvnd/egl_vendor.d/10_nvidia.json" "$egl_vendor_dir/10_nvidia.json"
+      rewrite_manifest "$egl_vendor_dir/10_nvidia.json"
     fi
 
     copy_tree "$nvidia_prefix/lib/gbm" "$gbm_dir"
@@ -1448,7 +1460,13 @@ EOF
           xorg.libSM
           xorg.libICE
           openal
+          # steam's bundled gldriverquery helpers dlopen SDL2.
+          SDL2
         ];
+        # Steam shells out to lsof while wiring the steamui<->webhelper
+        # websocket; without it the transport never comes up and big picture
+        # stays windowless (diagnosed 2026-08-25).
+        extraPkgs = p: [ p.lsof ];
       }
     else
       null;

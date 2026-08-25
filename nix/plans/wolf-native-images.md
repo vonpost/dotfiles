@@ -209,6 +209,57 @@ lib32 GL on a real GPU node; no startup flag dodges the vgui2 GLX assert
 (-gamepadui asserts identically in steamUI/Main.cpp); keep -cef-force-glx in
 the back pocket if CEF GPU init ever falls back to software rendering.
 
+CORRECTION (2026-08-25, same day): the GLX fix was real but the "success"
+criteria (webhelpers>0, no asserts) were insufficient — the user streamed and
+got a black screen. Root cause: NOT ONE more layer but FIVE, peeled with a
+new headless pixels-reach-encoder harness (below). In order:
+1. Steam's UI shell could not init Vulkan inside its bwrap → no BPM window
+   ever created. Two stacked causes: the driver-sync tree's ICD manifests
+   hardcode /usr/nvidia library paths (invisible inside bwrap — same class
+   as the driver-tree lesson; 30-nvidia now rewrites copied manifests to the
+   live prefix), and VK_ICD_FILENAMES was never exported because container
+   Env does NOT reach the systemd manager (M3's "docker Env reaches units"
+   is wrong — show-environment is empty; the session script now pins
+   GOW_GRAPHICS_RUNTIME_DIR/GOW_NVIDIA_PREFIX itself).
+2. steamui<->steamwebhelper websocket never came up: steam shells out to
+   lsof (1428 'command not found' vs 0 in the working ubuntu profile) —
+   added via steam extraPkgs. Also Chromium singleton locks in the
+   persistent profile name the previous CONTAINER's hostname ("in use on
+   another computer"), killing the first webhelper generation after every
+   container switch — session script clears them at start.
+3. Big picture sizes its window via XRandR; with STEAM_RUNTIME=0 nothing
+   loads libXrandr before Valve's XRR workaround shim resolves the real
+   symbols (real:(nil) vs real:0xf62.. in the working profile) — fixed with
+   LD_PRELOAD=libXrandr.so.2 scoped to the steam exec line.
+4. Even with the full UI rendering (verified: gamescope screenshot showed
+   the BPM splash), gamescope's nested-wayland backend presented ZERO
+   frames to wolf's compositor — ever, even with plain glxgears. Pivoted
+   the session to sway hosting steam on its Xwayland: the shape the working
+   upstream image actually uses (GoW ships RUN_SWAY=true) and the shape all
+   our proven desktop sessions share.
+5. sway/wlroots-0.20 then abort-looped: wolf's compositor advertises TWO
+   wl_drm globals (smithay's bind_wl_display registers a legacy one on top
+   of gst-wayland-display's explicit create_drm_global; wlroots asserts on
+   the duplicate device event). Patched gst-wayland-display to drop
+   bind_wl_display (gst-wayland-display-single-wl-drm-global.patch) — also
+   permanently silences the misleading per-lobby "OtherEGLDisplayAlreadyBound
+   / Failed to initialize EGL hardware-acceleration" INFO (that failure was
+   benign: dmabuf import never needed the bind; only the first compositor
+   in the process could ever bind).
+Verified headlessly on the deployed closure: session active 0 restarts, 11
+webhelpers, 0 asserts over 5+ min, and — the real criteria — ~300
+wl_buffer.attach/5s (60 fps) arriving at wolf's compositor with a grim
+screenshot showing the rendered big-picture sign-in screen.
+
+Headless pixels-reach-encoder harness (replaces webhelper-count as the M6
+gate): /tmp/wolf-lobby.py (parameterized lobby create over wolf.sock),
+/tmp/wolf-probe.sh (in-container session/webhelper/assert probe), host-side
+frame-rate probe = WAYLAND_DEBUG=1 runtime drop-in on wolf.service +
+journalctl attach(wl_buffer count per 5s, visual probe = grim (store path,
+MOTHER-built) against the container's sway output. steam-run caveat: it is
+VANILLA pkgs.steam-run (no extraLibraries) — never use it to prove library
+presence for steam proper; nsenter into the live steam bwrap instead.
+
 PENDING USER GATE: one manual stream of the WolfSteamNix app to confirm
 visually; then flip runner name WolfSteamNix → WolfSteam (249 GB profile
 constraint above) only on explicit approval.
