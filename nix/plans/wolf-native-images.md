@@ -286,8 +286,34 @@ Final deployed state verified headlessly: session active 0 restarts, 11
 webhelpers, 0 asserts, 60 fps to the compositor, full-canvas 1920x1080
 logged-in big picture with the games library. Orphaned validation profile
 dir WolfSteamNix (~small) left in place per the no-casual-renames rule —
-delete manually if desired. M6 gate remaining: one game launch under
-pressure-vessel (user, whenever).
+delete manually if desired.
+
+M6 DONE (2026-08-26): Path of Exile launches and plays under
+pressure-vessel — user-confirmed. One game-side issue diagnosed on the way,
+NOT a stack bug: PoE's DX12 renderer hangs at the login screen (render
+thread parked on a vkd3d fence forever, music keeps playing, intro video —
+a different code path — still clickable) under Proton Experimental
+`experimental-11.0-20260814b`, which the migration-triggered client update
+pulled in; the working ubuntu-era sessions ran an early-August build.
+Symptom masqueraded as "can't click anything". Workaround applied in the
+game's own config (state, not nix): device_type=DirectX11 (DXVK path) +
+borderless_windowed_fullscreen=true (set during bisection; exclusive
+fullscreen was exonerated and may be restored). Revisit DX12 when Proton
+Experimental moves, or pin PoE to stable Proton via CompatToolMapping.
+Diagnostic recipe that cracked it, reusable for any "frozen game": find the
+game pid by thread count, then per-thread state+wchan from /proc — fences/
+futexes with no D-state = GPU-sync hang, not I/O.
+
+Known rough edges carried past M6 (backlog):
+- Big-picture UI is CPU-rendered: CEF's GPU process dies (no DRI3 on the
+  glamor-less Xwayland). Candidate fixes: -cef-force-glx, or M5 server-side
+  GL for Xwayland.
+- Cold starts feel like a slow disk: the 245 GB profile lives on virtiofs.
+  Candidate fixes: virtiofs cache-mode tuning or a block volume for
+  /var/lib/wolf/profile-data.
+- Session teardown: gamescope-era note obsolete; sway sessions end cleanly.
+- Frozen-when-detached: an unwatched lobby's clients freeze at the last
+  frame (presentation throttling); resumes on reconnect. Benign so far.
 
 Debugging infrastructure built along the way (reusable): headless lobby
 creation via wolf.sock API; stable-compositor testbed (gamescope headless +
