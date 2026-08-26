@@ -1,0 +1,24 @@
+diff --git a/wayland-display-core/src/comp/mod.rs b/wayland-display-core/src/comp/mod.rs
+index 7994e95..8db946a 100644
+--- a/wayland-display-core/src/comp/mod.rs
++++ b/wayland-display-core/src/comp/mod.rs
+@@ -188,10 +188,15 @@ impl State {
+                 dmabuf_state.create_global::<State>(&dh, formats.clone())
+             };
+ 
+-            match renderer.bind_wl_display(&dh) {
+-                Ok(_) => tracing::info!("EGL hardware-acceleration enabled"),
+-                Err(err) => tracing::info!(?err, "Failed to initialize EGL hardware-acceleration"),
+-            }
++            // Deliberately NOT calling renderer.bind_wl_display(&dh): smithay
++            // registers its own legacy wl_drm global there, duplicating the
++            // explicit one created below. Advertising wl_drm twice makes
++            // wlroots' nested wayland backend abort on the second device
++            // announcement (legacy_drm_handle_device assertion), and in
++            // multi-compositor processes the EGLDisplay can only be bound
++            // once anyway (OtherEGLDisplayAlreadyBound for every later
++            // session). Clients import buffers via linux-dmabuf(+feedback)
++            // or the wl_drm global below; neither needs EGL_WL_bind_display.
+ 
+             // wl_drm (mesa protocol, so we don't need EGL_WL_bind_display)
+             let wl_drm_global = create_drm_global::<State>(

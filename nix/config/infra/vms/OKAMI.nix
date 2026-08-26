@@ -15,11 +15,19 @@ in
     enable = true;
     podmanLoadImages = true;
     podmanImages = [
-      wolfImagePackages.wolfKdeImage
+      # wolfKdeImage is an alias of the shared stub image (M3).
+      wolfImagePackages.wolfStubImage
     ];
     extraApps = [
       wolfImagePackages.wolfKdeApp
+      # Nix Steam closure on the stub, owning the WolfSteam runner name (the
+      # 249 GB games profile). Cutover user-approved 2026-08-26 after a
+      # verified stream on the WolfSteamNix validation profile.
+      wolfImagePackages.wolfSteamApp
     ];
+    # The upstream ghcr Steam app is superseded by wolfSteamApp, which takes
+    # over its runner name (= profile dir); two apps must not share it.
+    removeDefaultApps = [ "WolfSteam" ];
     wolfDen.enable = true;
     hostPulseAudio.anonymousSocket.enable = true;
   };

@@ -2,6 +2,7 @@
 
 let
   cfg = config.services.wolf;
+  contract = import ../lib/contract.nix;
   tomlFormat = pkgs.formats.toml { };
   appOptionType = lib.types.submodule {
     freeformType = tomlFormat.type;
@@ -9,7 +10,7 @@ let
   };
   defaultPackage = pkgs.callPackage ../packages/wolf.nix { pkgs = pkgs; };
   imagePackages = pkgs.callPackage ../packages/images.nix { };
-  defaultPodmanImages = lib.optionals (imagePackages ? wolfGnomeImage) [ imagePackages.wolfGnomeImage ];
+  defaultPodmanImages = lib.optionals (imagePackages ? wolfStubImage) [ imagePackages.wolfStubImage ];
   packageWithDefaultConfigSource =
     if lib.hasAttrByPath [ "src" ] cfg.package then cfg.package else defaultPackage;
   defaultConfigIncludePath =
@@ -23,11 +24,18 @@ let
       userProfileId = "user";
       existingProfiles = if builtins.isList profiles then profiles else [ ];
       userProfileExists = lib.any (profile: (profile ? id) && profile.id == userProfileId) existingProfiles;
+      # Drop upstream-default apps whose runner name is being taken over by an
+      # extraApp (e.g. the ghcr Steam image once the nix Steam owns WolfSteam):
+      # two apps sharing a runner name would share one profile dir.
+      dropRemoved = apps:
+        builtins.filter
+          (app: !((app ? runner) && (app.runner ? name) && lib.elem app.runner.name cfg.removeDefaultApps))
+          apps;
       patchedProfiles = builtins.map
         (profile:
           if (profile ? id) && profile.id == userProfileId then
             profile // {
-              apps = (if profile ? apps && builtins.isList profile.apps then profile.apps else [ ]) ++ cfg.extraApps;
+              apps = dropRemoved (if profile ? apps && builtins.isList profile.apps then profile.apps else [ ]) ++ cfg.extraApps;
             }
           else
             profile)
@@ -130,7 +138,7 @@ PY
       "${managedConfigSeedOnceScript}"
     else
       "${managedConfigMergePairingsScript}";
-  xdgRuntimeDir = "/run/wolf";
+  xdgRuntimeDir = contract.host.xdgRuntimeDir;
   gstPluginSystemPath = lib.concatStringsSep ":" [
     "${cfg.package}/lib/gstreamer-1.0"
     "${pkgs.gst_all_1.gst-plugins-base}/lib/gstreamer-1.0"
@@ -155,6 +163,10 @@ PY
     WOLF_ENCODER_NODE = "/dev/dri/renderD128";
     WOLF_STOP_CONTAINER_ON_EXIT = "TRUE";
     WOLF_LOG_LEVEL = "INFO";
+    # Upstream default for newly paired clients (replaces the old source patch
+    # that derived these from getuid/getgid); matches the containers' retro uid.
+    WOLF_DEFAULT_RUN_UID = "1000";
+    WOLF_DEFAULT_RUN_GID = "1000";
   } // lib.optionalAttrs cfg.nvidiaBundle.enable {
     LD_LIBRARY_PATH = nvidiaCudaLibraryPath;
   };
@@ -269,7 +281,7 @@ in
 
     stateDir = lib.mkOption {
       type = lib.types.str;
-      default = "/var/lib/wolf";
+      default = contract.host.stateDir;
       description = "Persistent state directory for wolf.";
     };
 
@@ -304,6 +316,17 @@ in
       '';
       description = ''
         Additional apps appended to profile `user` in the generated config.
+      '';
+    };
+
+    removeDefaultApps = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "WolfSteam" ];
+      description = ''
+        Runner names to drop from the upstream-default app list of profile
+        `user` before extraApps are appended. Use when an extraApp takes over
+        a default app's runner name (and thus its profile-data folder).
       '';
     };
 
@@ -358,26 +381,6 @@ in
       default = defaultPodmanImages;
       example = lib.literalExpression "[ inputs.wolf-nix.packages.${pkgs.system}.wolfFirefoxImage ]";
       description = "OCI archive derivations loaded into Podman with `podman load -i`.";
-    };
-
-    firefoxQuadlet = {
-      enable = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Create a Podman Quadlet service named `wolf-firefox` for the Firefox image.";
-      };
-
-      image = lib.mkOption {
-        type = lib.types.str;
-        default = "localhost/gow/firefox-nix:edge";
-        description = "Image reference used by the generated `wolf-firefox` Quadlet.";
-      };
-
-      autoStart = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
-        description = "Auto-start the generated `wolf-firefox` Quadlet at boot.";
-      };
     };
 
     nvidiaBundle = {
@@ -476,7 +479,7 @@ in
 
       wolfSocketPath = lib.mkOption {
         type = lib.types.str;
-        default = "${xdgRuntimeDir}/pulse-socket";
+        default = contract.host.pulseSocket;
         description = "Socket path exposed to Wolf and mounted into app containers as PULSE_SERVER.";
       };
 
@@ -506,13 +509,13 @@ in
 
     tcpPorts = lib.mkOption {
       type = lib.types.listOf lib.types.port;
-      default = [ 47984 47989 48010 ];
+      default = contract.ports.tcp;
       description = "TCP ports opened when openFirewall is enabled.";
     };
 
     udpPorts = lib.mkOption {
       type = lib.types.listOf lib.types.port;
-      default = [ 47998 47999 48000 48002 48010 ];
+      default = contract.ports.udp;
       description = "UDP ports opened when openFirewall is enabled.";
     };
   };
@@ -612,6 +615,12 @@ in
             # Some NVIDIA setups expose /dev/nvidia-caps lazily; prime it deterministically.
             "${pkgs.bash}/bin/bash -lc 'if [ ! -e /dev/nvidia-caps/nvidia-cap1 ]; then ${config.hardware.nvidia.package.bin}/bin/nvidia-smi >/dev/null 2>&1 || true; fi'"
           ] ++ [
+            # Wolf bind-mounts <stateDir>/fake-udev into every app container but never
+            # installs the binary there (upstream's Docker entrypoint does that copy).
+            # Without this, podman auto-creates the missing source as an empty DIRECTORY
+            # and every in-container hotplug announcement fails. rm -rf clears such a
+            # stale directory before installing.
+            "${pkgs.bash}/bin/bash -c 'rm -rf ${cfg.stateDir}/fake-udev && ${pkgs.coreutils}/bin/install -m 0755 ${cfg.package}/bin/fake-udev ${cfg.stateDir}/fake-udev'"
             "-${pkgs.coreutils}/bin/rm -f ${xdgRuntimeDir}/wayland-* ${xdgRuntimeDir}/.wayland-*"
             # Wolf can crash before tearing down this helper container; stale name blocks next boot.
             "-${pkgs.podman}/bin/podman rm -f WolfPulseAudio"
@@ -910,33 +919,11 @@ in
         '';
       };
 
-      virtualisation.quadlet = lib.mkIf (cfg.firefoxQuadlet.enable || cfg.wolfDen.enable) {
+      virtualisation.quadlet = lib.mkIf cfg.wolfDen.enable {
         enable = true;
 
         containers =
-          lib.optionalAttrs cfg.firefoxQuadlet.enable {
-            wolf-firefox = {
-              autoStart = cfg.firefoxQuadlet.autoStart;
-              serviceConfig = {
-                Restart = "on-failure";
-              };
-              containerConfig = {
-                image = cfg.firefoxQuadlet.image;
-                environments = {
-                  RUN_SWAY = "1";
-                  MOZ_ENABLE_WAYLAND = "1";
-                  GOW_REQUIRED_DEVICES = "/dev/input/* /dev/dri/* /dev/nvidia*";
-                };
-                addCapabilities = [ "NET_RAW" "MKNOD" "NET_ADMIN" ];
-                podmanArgs = [
-                  "--ipc=host"
-                  "--device-cgroup-rule=c 13:* rmw"
-                  "--device-cgroup-rule=c 244:* rmw"
-                ];
-              };
-            };
-          }
-          // lib.optionalAttrs cfg.wolfDen.enable {
+          lib.optionalAttrs cfg.wolfDen.enable {
             "wolf-den" = {
               autoStart = cfg.wolfDen.autoStart;
               unitConfig = {
@@ -969,8 +956,12 @@ in
       virtualisation.podman.dockerSocket.enable = lib.mkDefault true;
       virtualisation.podman.autoPrune.enable = lib.mkDefault true;
       virtualisation.podman.autoPrune.dates = lib.mkDefault "daily";
+      # No `--all`: nix-built images are timestamped 1970 (reproducibility), so
+      # any `until=` filter sees them as ancient and `--all` prunes every loaded
+      # image the moment no container references it (observed 2026-08-19: the
+      # stub image vanished overnight). Dangling-only pruning still reclaims the
+      # untagged layers left behind by repeated `podman load` tag replacements.
       virtualisation.podman.autoPrune.flags = lib.mkDefault [
-        "--all"
         "--volumes"
         "--filter=until=168h"
       ];

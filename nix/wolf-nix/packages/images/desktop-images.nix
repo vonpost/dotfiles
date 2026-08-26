@@ -20,6 +20,7 @@
 , nixosLabwcSystemMount
 , nixosXfceSystemMount
 , nixosKdeSystemMount
+, nixosSteamSystemMount
 }:
 
 rec {
@@ -478,33 +479,11 @@ rec {
     """
   '';
 
-  wolfKdeNixosImage = pkgs.dockerTools.buildLayeredImage {
-    name = "localhost/gow/kde-nix";
-    tag = imageTag;
-    maxLayers = 128;
-    contents = [
-      nixosPassThroughRootfs
-      baseAssets
-      baseAppAssets
-      kdeAssets
-    ];
-    config = commonConfig // {
-      Env = commonBaseEnv ++ [
-        "PATH=${basePath}:${nixosKdePath}"
-        "GOW_STARTUP_SCRIPT=/opt/gow/base-app-startup.sh"
-        "GOW_NVIDIA_PREFIX=/usr/nvidia"
-        "GAMESCOPE_WIDTH=1920"
-        "GAMESCOPE_HEIGHT=1080"
-        "UNAME=root"
-      ];
-    };
-    extraCommands = materializeRuntimeTrees + ''
-      mkdir -p tmp/.X11-unix
-      chmod 1777 tmp tmp/.X11-unix
-    '';
-  };
-
-  wolfKdeImage = wolfKdeNixosImage;
+  # KDE runs on the shared stub image (M3 slice 2); the per-desktop
+  # localhost/gow/kde-nix image is gone. PATH moves into the app env because
+  # the stub carries no desktop-specific PATH and the entrypoint chain needs
+  # it before the closure boots.
+  wolfKdeImage = wolfStubImage;
   wolfKdeSystem = nixosKdeSystemMount;
 
   wolfKdeApp = {
@@ -513,7 +492,7 @@ rec {
     runner = {
       type = "docker";
       name = "WolfKdeNix";
-      image = "localhost/gow/kde-nix:${imageTag}";
+      image = "localhost/wolf/stub:${imageTag}";
       mounts = [
         "/nix/store:/nix/store:ro"
         "/nix/var/nix/db:/nix/var/nix/db:ro"
@@ -521,6 +500,7 @@ rec {
       ];
       env = [
         "UNAME=root"
+        "PATH=${basePath}:${nixosKdePath}"
         "GOW_NIXOS_SYSTEM=${nixosKdeSystemMount}"
         "GAMESCOPE_WIDTH=1920"
         "GAMESCOPE_HEIGHT=1080"
@@ -592,4 +572,97 @@ rec {
     }
     """
   '';
+
+  # ── Steam on the shared stub (M6) ────────────────────────────────────────
+  # Runner name WolfSteam = the 249 GB games profile (user-approved cutover
+  # 2026-08-26 after a verified stream; validated first under the throwaway
+  # WolfSteamNix name). The profile's Steam install lives at ~/.steam with
+  # root -> ~/.steam, so the carried-over client (and steamapps under
+  # .steam/steam/) runs in place; the retired ghcr app entry is dropped via
+  # services.wolf.removeDefaultApps.
+  wolfSteamApp = {
+    title = "Steam";
+    icon_png_path = "https://games-on-whales.github.io/wildlife/apps/steam/assets/icon.png";
+    runner = {
+      type = "docker";
+      name = "WolfSteam";
+      image = "localhost/wolf/stub:${imageTag}";
+      mounts = [
+        "/nix/store:/nix/store:ro"
+        "/nix/var/nix/db:/nix/var/nix/db:ro"
+        "/sys/fs/cgroup:/sys/fs/cgroup:rw"
+        # Steam's FHS bwrap replaces /usr, so the wolf-injected /usr/nvidia
+        # mount is invisible inside it and every driver path dangles (root
+        # cause of the vgui2 glXChooseVisual fatal assert, 2026-08-23). bwrap
+        # binds /run through, so mount the same tree under /run read-only and
+        # point everything there instead.
+        "/var/lib/wolf/nvidia-driver:/run/nvidia-driver:ro"
+      ];
+      env = [
+        "UNAME=root"
+        "PATH=${basePath}:${nixosKdePath}"
+        "GOW_NIXOS_SYSTEM=${nixosSteamSystemMount}"
+        "GOW_GRAPHICS_RUNTIME_DIR=/run/gow-graphics"
+        "GAMESCOPE_WIDTH=1920"
+        "GAMESCOPE_HEIGHT=1080"
+        "STEAM_STARTUP_FLAGS=-bigpicture"
+        "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
+        "GOW_NVIDIA_PREFIX=/run/nvidia-driver"
+      ];
+      devices = [ ];
+      ports = [ ];
+      base_create_json = ''
+        {
+          "StopSignal": "RTMIN+3",
+          "HostConfig": {
+            "IpcMode": "host",
+            "Privileged": false,
+            "CgroupnsMode": "host",
+            "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE", "SYS_PTRACE"],
+            "SecurityOpt": ["label=disable", "apparmor=unconfined", "seccomp=unconfined"],
+            "Devices": [
+              {"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"},
+              {"PathOnHost": "/dev/dri", "PathInContainer": "/dev/dri", "CgroupPermissions": "rwm"}
+            ],
+            "Ulimits": [{"Name": "nofile", "Soft": 10240, "Hard": 524288}],
+            "DeviceCgroupRules": ["c 10:229 rmw", "c 13:* rmw", "c 226:* rmw", "c 244:* rmw"],
+            "Tmpfs": {
+              "/run": "rw,nosuid,nodev,size=64m,mode=755",
+              "/run/lock": "rw,nosuid,nodev,size=16m,mode=755",
+              "/tmp": "rw,nosuid,nodev,size=1024m,mode=1777"
+            }
+          }
+        }
+      '';
+    };
+  };
+
+  # ── M3: shared stub image ────────────────────────────────────────────────
+  # One image for every pass-through desktop app. The rootfs and /opt/gow//cfg
+  # asset trees are desktop-independent; per-desktop identity (PATH,
+  # GOW_NIXOS_SYSTEM, dimensions) moves into the app definition env, which the
+  # docker create request merges over the image env. Image contents stay tiny
+  # because the actual system arrives via the host /nix/store mount.
+  wolfStubImage = pkgs.dockerTools.buildLayeredImage {
+    name = "localhost/wolf/stub";
+    tag = imageTag;
+    maxLayers = 128;
+    contents = [
+      nixosPassThroughRootfs
+      baseAssets
+      baseAppAssets
+      kdeAssets
+    ];
+    config = commonConfig // {
+      Env = commonBaseEnv ++ [
+        "GOW_STARTUP_SCRIPT=/opt/gow/base-app-startup.sh"
+        "GOW_NVIDIA_PREFIX=/usr/nvidia"
+      ];
+    };
+    extraCommands = materializeRuntimeTrees + ''
+      mkdir -p tmp/.X11-unix
+      chmod 1777 tmp tmp/.X11-unix
+    '';
+  };
+
 }

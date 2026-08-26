@@ -719,12 +719,18 @@ let
     if [ ! -e /run/opengl-driver ]; then
       ln -s "$nvidia_prefix" /run/opengl-driver || true
     fi
-    if [ -d "$nvidia_prefix/lib32" ] || [ -d "$nvidia_prefix/lib" ]; then
-      if [ -L /run/opengl-driver-32 ] && [ ! -e /run/opengl-driver-32 ]; then
+    # /run/opengl-driver-32 must present the *32-bit* libs at lib/. A full-tree
+    # symlink (like /run/opengl-driver above) points -32/lib at the 64-bit lib/,
+    # so 32-bit glvnd finds only a wrong-ELF-class libGLX_mesa there and comes
+    # up with ZERO GLX visuals — silently; Steam's 32-bit vgui2 then fatally
+    # asserts on glXChooseVisual (root-caused 2026-08-25).
+    if [ -d "$nvidia_prefix/lib32" ]; then
+      if [ -L /run/opengl-driver-32 ]; then
         rm -f /run/opengl-driver-32
       fi
       if [ ! -e /run/opengl-driver-32 ]; then
-        ln -s "$nvidia_prefix" /run/opengl-driver-32 || true
+        mkdir -p /run/opengl-driver-32
+        ln -sfnT "$nvidia_prefix/lib32" /run/opengl-driver-32/lib
       fi
     fi
 
@@ -745,12 +751,22 @@ let
     done
     shopt -u nullglob
 
+    # The sync tree's manifests hardcode /usr/nvidia library paths. Steam's
+    # bwrap replaces /usr, so inside the FHS those ICDs are unloadable (the
+    # cause of "BInit - Unable to initialize Vulkan!", 2026-08-25). Rewrite
+    # them to the prefix actually in use — /run/nvidia-driver in app
+    # containers, which stays visible inside bwrap.
+    rewrite_manifest() {
+      ${pkgs.gnused}/bin/sed -i "s|/usr/nvidia|$nvidia_prefix|g" "$1"
+    }
+
     for candidate in \
       "$nvidia_prefix/share/vulkan/icd.d/nvidia_icd.json" \
       "$nvidia_prefix/share/vulkan/icd.d/nvidia_icd.x86_64.json" \
       "$nvidia_prefix/share/vulkan/icd.d/nvidia_icd.i686.json"; do
       if [ -f "$candidate" ]; then
         cp -f "$candidate" "$vulkan_icd_dir/$(basename "$candidate")"
+        rewrite_manifest "$vulkan_icd_dir/$(basename "$candidate")"
       fi
     done
 
@@ -759,11 +775,13 @@ let
       "$nvidia_prefix/share/egl/egl_external_platform.d/15_nvidia_gbm.json"; do
       if [ -f "$candidate" ]; then
         cp -f "$candidate" "$egl_external_dir/$(basename "$candidate")"
+        rewrite_manifest "$egl_external_dir/$(basename "$candidate")"
       fi
     done
 
     if [ -f "$nvidia_prefix/share/glvnd/egl_vendor.d/10_nvidia.json" ]; then
       cp -f "$nvidia_prefix/share/glvnd/egl_vendor.d/10_nvidia.json" "$egl_vendor_dir/10_nvidia.json"
+      rewrite_manifest "$egl_vendor_dir/10_nvidia.json"
     fi
 
     copy_tree "$nvidia_prefix/lib/gbm" "$gbm_dir"
@@ -1411,8 +1429,44 @@ EOF
   steamPackage =
     if steamSupported then
       pkgs.steam.override {
-        # Needed by steamui.so (32-bit path) in this containerized setup.
-        extraLibraries = p: with p; [ libxtst ];
+        # steamui.so (32-bit) dlmopens these at runtime; with STEAM_RUNTIME=0
+        # (required — the scout runtime's classic mesa GLX cannot produce
+        # visuals against nix DRI drivers, root cause of the vgui2
+        # glXChooseVisual fatal assert, diagnosed 2026-08-24) the FHS must
+        # provide them all. libxtst was found in the Feb 2026 attempt,
+        # libXrandr in this one; the rest are steamui's known X11 dep set.
+        extraLibraries = p: with p; [
+          libxtst
+          xorg.libXrandr
+          xorg.libXcursor
+          xorg.libXinerama
+          xorg.libXi
+          xorg.libXfixes
+          xorg.libXrender
+          xorg.libXcomposite
+          xorg.libXdamage
+          xorg.libXScrnSaver
+          # steamui also dlmopens the GTK2 family (scout-runtime era UI),
+          # pipewire (desktop capture) and libudev (device enumeration).
+          gtk2
+          pipewire
+          udev
+          # Sub-deps of steam's bundled libavcodec (hw video accel).
+          libvdpau
+          libva
+          # nixpkgs bzip2 ships both .so.1 and Debian's .so.1.0 sonames.
+          bzip2
+          # vgui2_s.so additionally needs these (X session mgmt + audio).
+          xorg.libSM
+          xorg.libICE
+          openal
+          # steam's bundled gldriverquery helpers dlopen SDL2.
+          SDL2
+        ];
+        # Steam shells out to lsof while wiring the steamui<->webhelper
+        # websocket; without it the transport never comes up and big picture
+        # stays windowless (diagnosed 2026-08-25).
+        extraPkgs = p: [ p.lsof ];
       }
     else
       null;
@@ -1491,13 +1545,16 @@ EOF
       mkImportEnvironmentCommand
       mkSyncDbusActivationCommand
       mkWolfDesktopServiceConfig
-      noctaliaShell;
+      noctaliaShell
+      steamPackage;
+    steamRunPackage = if steamSupported then pkgs.steam-run else null;
   };
   inherit (desktopSystems)
     nixosGnomeSystemMount
     nixosKdeSystemMount
     nixosLabwcSystemMount
-    nixosXfceSystemMount;
+    nixosXfceSystemMount
+    nixosSteamSystemMount;
 
   nixosFirefoxRootfs = pkgs.runCommand "wolf-firefox-nixos-rootfs" { } ''
     mkdir -p "$out"
@@ -1703,7 +1760,8 @@ EOF
       nixosGnomeSystemMount
       nixosLabwcSystemMount
       nixosXfceSystemMount
-      nixosKdeSystemMount;
+      nixosKdeSystemMount
+      nixosSteamSystemMount;
   };
 
 in
@@ -1738,203 +1796,16 @@ in
     extraCommands = mkExtraDirs + materializeRuntimeTrees;
   };
 
-  wolfFirefoxNixosImage = pkgs.dockerTools.buildLayeredImage {
-    name = "localhost/gow/firefox-nix";
-    tag = imageTag;
-    maxLayers = 128;
-    contents = [
-      nixosFirefoxRootfs
-      baseAssets
-      baseAppAssets
-      firefoxAssets
-    ];
-    config = commonConfig // {
-      Env = commonBaseEnv ++ [
-        "PATH=${nixosFirefoxPath}"
-        "GOW_STARTUP_SCRIPT=/opt/gow/base-app-startup.sh"
-        "UNAME=retro"
-        "RUN_SWAY=1"
-        "MOZ_ENABLE_WAYLAND=1"
-      ];
-    };
-    extraCommands = materializeRuntimeTrees + ''
-      mkdir -p tmp/.X11-unix
-      chmod 1777 tmp tmp/.X11-unix
-    '';
-  };
-
-  wolfFirefoxImage = wolfFirefoxNixosImage;
-
-  wolfFirefoxApp = {
-    title = "Firefox (Nix)";
-    icon_png_path = "https://games-on-whales.github.io/wildlife/apps/firefox/assets/icon.png";
-    runner = {
-      type = "docker";
-      name = "WolfFirefoxNix";
-      image = "localhost/gow/firefox-nix:${imageTag}";
-      mounts = [ ];
-      env = [
-        "UNAME=retro"
-        "RUN_SWAY=1"
-        "MOZ_ENABLE_WAYLAND=1"
-        "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
-        "GOW_NVIDIA_PREFIX=/usr/nvidia"
-      ];
-      devices = [ ];
-      ports = [ ];
-      base_create_json = ''
-        {
-          "HostConfig": {
-            "IpcMode": "host",
-            "Privileged": false,
-            "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN"],
-            "DeviceCgroupRules": ["c 13:* rmw", "c 226:* rmw", "c 244:* rmw"]
-          }
-        }
-      '';
-    };
-  };
-
-  wolfFirefoxWolfConfig = pkgs.writeText "wolf-firefox.config.toml" ''
-    [[apps]]
-    title = "Firefox (Nix)"
-    icon_png_path = "https://games-on-whales.github.io/wildlife/apps/firefox/assets/icon.png"
-
-    [apps.runner]
-    type = "docker"
-    name = "WolfFirefoxNix"
-    image = "localhost/gow/firefox-nix:${imageTag}"
-    mounts = []
-    env = ["UNAME=retro", "RUN_SWAY=1", "MOZ_ENABLE_WAYLAND=1", "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"]
-    devices = []
-    ports = []
-    base_create_json = """
-    {
-      "HostConfig": {
-        "IpcMode": "host",
-        "Privileged": false,
-        "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN"],
-        "DeviceCgroupRules": ["c 13:* rmw", "c 226:* rmw", "c 244:* rmw"]
-      }
-    }
-    """
-  '';
-
+  # Failed desktop/browser experiments removed 2026-08-19 (GNOME never worked
+  # nested, labwc/noctalia uninteresting, xfce/firefox exist upstream). Their
+  # internal let-bindings remain as dead code pending the M7 sweep.
   inherit (desktopImages)
-    wolfGnomeNixosImage
-    wolfGnomeImage
-    wolfGnomeSystem
-    wolfGnomeApp
-    wolfGnomeWolfConfig
-    wolfLabwcImage
-    wolfLabwcSystem
-    wolfLabwcApp
-    wolfLabwcWolfConfig
-    wolfNoctaliaImage
-    wolfNoctaliaSystem
-    wolfNoctaliaApp
-    wolfNoctaliaWolfConfig
-    wolfXfceImage
-    wolfXfceSystem
-    wolfXfceApp
-    wolfXfceWolfConfig
-    wolfKdeNixosImage
     wolfKdeImage
     wolfKdeSystem
     wolfKdeApp
-    wolfKdeWolfConfig;
-})
-// lib.optionalAttrs steamSupported {
-  wolfSteamImage = pkgs.dockerTools.buildLayeredImage {
-    name = "localhost/gow/steam-nix";
-    tag = imageTag;
-    maxLayers = 128;
-    contents = [
-      nixosFirefoxRootfs
-      steamPackage
-      baseAssets
-      baseAppAssets
-      steamAssets
-    ];
-    config = commonConfig // {
-      Env = commonBaseEnv ++ [
-        "PATH=${steamPath}"
-        "GOW_STARTUP_SCRIPT=/opt/gow/base-app-startup.sh"
-        "UNAME=retro"
-        "RUN_SWAY=1"
-        "STEAM_STARTUP_FLAGS=-bigpicture"
-      ];
-    };
-    extraCommands = materializeRuntimeTrees + ''
-      mkdir -p tmp/.X11-unix
-      chmod 1777 tmp tmp/.X11-unix
-    '';
-  };
-
-  wolfSteamApp = {
-    title = "Steam (Nix)";
-    icon_png_path = "https://games-on-whales.github.io/wildlife/apps/steam/assets/icon.png";
-    runner = {
-      type = "docker";
-      name = "WolfSteamNix";
-      image = "localhost/gow/steam-nix:${imageTag}";
-      mounts = [ ];
-      env = [
-        "UNAME=retro"
-        "RUN_SWAY=1"
-        "STEAM_STARTUP_FLAGS=-bigpicture"
-        "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*"
-        "GOW_NVIDIA_PREFIX=/usr/nvidia"
-      ];
-      devices = [ ];
-      ports = [ ];
-      base_create_json = ''
-        {
-          "HostConfig": {
-            "IpcMode": "host",
-            "Privileged": false,
-            "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE", "SYS_PTRACE"],
-            "SecurityOpt": ["label=disable", "apparmor=unconfined", "seccomp=unconfined"],
-            "Devices": [
-              {"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"},
-              {"PathOnHost": "/dev/dri", "PathInContainer": "/dev/dri", "CgroupPermissions": "rwm"}
-            ],
-            "Ulimits": [{"Name": "nofile", "Soft": 10240, "Hard": 524288}],
-            "DeviceCgroupRules": ["c 10:229 rmw", "c 13:* rmw", "c 226:* rmw", "c 244:* rmw"]
-          }
-        }
-      '';
-    };
-  };
-
-  wolfSteamWolfConfig = pkgs.writeText "wolf-steam.config.toml" ''
-    [[apps]]
-    title = "Steam (Nix)"
-    icon_png_path = "https://games-on-whales.github.io/wildlife/apps/steam/assets/icon.png"
-
-    [apps.runner]
-    type = "docker"
-    name = "WolfSteamNix"
-    image = "localhost/gow/steam-nix:${imageTag}"
-    mounts = []
-    env = ["UNAME=retro", "RUN_SWAY=1", "STEAM_STARTUP_FLAGS=-bigpicture", "GOW_REQUIRED_DEVICES=/dev/input/* /dev/dri/* /dev/nvidia*", "GOW_NVIDIA_PREFIX=/usr/nvidia"]
-    devices = []
-    ports = []
-    base_create_json = """
-    {
-      "HostConfig": {
-        "IpcMode": "host",
-        "Privileged": false,
-        "CapAdd": ["NET_RAW", "MKNOD", "NET_ADMIN", "SYS_ADMIN", "SYS_NICE", "SYS_PTRACE"],
-        "SecurityOpt": ["label=disable", "apparmor=unconfined", "seccomp=unconfined"],
-        "Devices": [
-          {"PathOnHost": "/dev/fuse", "PathInContainer": "/dev/fuse", "CgroupPermissions": "rwm"},
-          {"PathOnHost": "/dev/dri", "PathInContainer": "/dev/dri", "CgroupPermissions": "rwm"}
-        ],
-        "Ulimits": [{"Name": "nofile", "Soft": 10240, "Hard": 524288}],
-        "DeviceCgroupRules": ["c 10:229 rmw", "c 13:* rmw", "c 226:* rmw", "c 244:* rmw"]
-      }
-    }
-    """
-  '';
+    wolfKdeWolfConfig
+    wolfStubImage;
 }
+// lib.optionalAttrs steamSupported {
+  inherit (desktopImages) wolfSteamApp;
+})

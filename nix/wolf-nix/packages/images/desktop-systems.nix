@@ -7,6 +7,8 @@
 , mkSyncDbusActivationCommand
 , mkWolfDesktopServiceConfig
 , noctaliaShell
+, steamPackage
+, steamRunPackage
 }:
 
 let
@@ -381,6 +383,12 @@ let
 
       programs.dconf.enable = true;
       services.dbus.enable = true;
+      # dbus-broker-launch crash-loops in the Wolf container (child exec ENOENT,
+      # launcher dies ENOTCONN, retried forever) and systemd never reaches
+      # basic.target, so the desktop never starts (2026-08-18 black-screen bug).
+      # Plasma's module selects the broker implementation; force classic dbus.
+      services.dbus.implementation = lib.mkForce "dbus";
+      security.rtkit.enable = true;
       services.pipewire.enable = true;
       services.upower.enable = lib.mkForce true;
       environment.etc."xdg/baloofilerc".text = ''
@@ -529,6 +537,23 @@ let
           }
 
           sanitize_plasma_profile_if_incompatible
+
+          # Plasma re-resolves the theme's optional `colors` file on every color
+          # read (~343x per popup) and never memoizes the negative result; with
+          # our ~84-entry XDG_DATA_DIRS that cost ~58k statx / ~10s of main-thread
+          # churn per UI interaction (2026-08-18 diagnosis, plans/wolf-native-images.md).
+          # A colors file in XDG_DATA_HOME (searched first) ends every lookup at
+          # dir #1. Runs after the sanitizer, which may have moved the dir away.
+          install_theme_colors_shortcircuit() {
+            local theme_dir="$HOME/.local/share/plasma/desktoptheme/default"
+            local src="/run/current-system/sw/share/plasma/desktoptheme/breeze-light/colors"
+            if [ ! -f "$theme_dir/colors" ] && [ -f "$src" ]; then
+              ${pkgs.coreutils}/bin/mkdir -p "$theme_dir/translucent"
+              ${pkgs.coreutils}/bin/cp "$src" "$theme_dir/colors"
+              ${pkgs.coreutils}/bin/cp "$src" "$theme_dir/translucent/colors"
+            fi
+          }
+          install_theme_colors_shortcircuit
 
           restore_kickerdash_from_latest_backup() {
             if [ "''${GOW_KDE_RESTORE_KICKERDASH:-1}" != "1" ]; then
@@ -1290,15 +1315,200 @@ let
     };
   };
 in
-{
+rec {
   inherit
     nixosGnomeSystem
     nixosKdeSystem
     nixosLabwcSystem
     nixosXfceSystem;
 
+  # ── Steam (M6): sway session booting as a NixOS closure on the shared
+  # stub. Validated under runner name WolfSteamNix, then cut over to
+  # WolfSteam (the 249 GB games profile) with user approval 2026-08-26 —
+  # see plans/wolf-native-images.md, Steam constraint.
+  nixosSteamSystem = import "${pkgs.path}/nixos" {
+    system = pkgs.system;
+    configuration = { config, pkgs, lib, ... }: {
+      boot.isContainer = true;
+      networking.hostName = "wolf-steam";
+      networking.useDHCP = false;
+
+      users.groups.retro.gid = 1000;
+      users.groups.video = { };
+      users.groups.render = { };
+      users.groups.input = { };
+      users.groups.audio = { };
+      users.users.root.initialHashedPassword = "!";
+      users.users.retro = {
+        isNormalUser = true;
+        uid = 1000;
+        group = "retro";
+        extraGroups = [ "video" "render" "input" "audio" ];
+        home = "/home/retro";
+        createHome = true;
+        linger = true;
+        initialHashedPassword = "!";
+      };
+
+      services.dbus.enable = true;
+      # dbus-broker crash-loops in Wolf containers (see the KDE black-screen
+      # diagnosis, 2026-08-18); always use classic dbus in these closures.
+      services.dbus.implementation = lib.mkForce "dbus";
+      security.rtkit.enable = true;
+
+      # Stage-2 activation in this container rootfs cannot rewrite /bin.
+      system.activationScripts.binsh = lib.mkForce "";
+
+      # Steam's FHS sandbox (bwrap) tmpfs-mounts /tmp and replaces /usr, hiding
+      # both /tmp/gow-graphics and the /usr/nvidia driver mount — the client
+      # then segfaults with no GPU stack (observed 2026-08-19). bwrap DOES bind
+      # /run through, and nixpkgs' FHS looks for drivers at /run/opengl-driver,
+      # so present the wolf driver volume in that standard shape and keep the
+      # gow graphics runtime dir under /run as well.
+      systemd.tmpfiles.rules = [
+        "d /run/gow-graphics 0755 retro retro -"
+      ];
+
+      # /run/opengl-driver{,-32} are created by the shared gow-30-nvidia
+      # cont-init step (runs before systemd, so a closure unit can never win
+      # that race): -driver is a full-tree link (FHS EGL vendor dirs need
+      # share/), -driver-32 is a lib32-shaped dir — see images.nix. Both
+      # target the /run-mounted driver tree, which stays visible inside
+      # Steam's bwrap (it replaces /usr, hiding /usr/nvidia).
+
+      security.pam.services.wolf-session-anchor.startSession = true;
+      security.pam.services.wolf-steam-session.startSession = true;
+
+      systemd.services.wolf-session-anchor = mkWolfSessionAnchorService "wolf-steam-session.service";
+
+      systemd.services.wolf-steam-session = {
+        description = "Wolf Steam Session (sway)";
+        wantedBy = [ "multi-user.target" ];
+        after = [ "dbus.service" "systemd-user-sessions.service" "user@1000.service" "wolf-session-anchor.service" ];
+        wants = [ "dbus.service" "user@1000.service" "wolf-session-anchor.service" ];
+        path = with pkgs; [
+          coreutils
+          dbus
+          gawk
+          gnugrep
+          gnused
+          procps
+          psmisc
+          systemd
+          wlr-randr
+          sway
+        ] ++ [ steamPackage ];
+        preStart = sessionUserDirsPreStart;
+        script = ''
+          set -euo pipefail
+
+          source /opt/gow/bash-lib/desktop-compat.sh
+
+          export HOME=/home/retro
+          export XDG_RUNTIME_DIR=/run/user/1000
+          export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+          export XDG_SESSION_TYPE=wayland
+          export XDG_SESSION_CLASS=user
+          export XDG_SEAT=seat0
+          export XDG_CURRENT_DESKTOP=sway
+          export XDG_SESSION_DESKTOP=sway
+          export GAMESCOPE_WIDTH="''${GAMESCOPE_WIDTH:-1920}"
+          export GAMESCOPE_HEIGHT="''${GAMESCOPE_HEIGHT:-1080}"
+          export GAMESCOPE_REFRESH="''${GAMESCOPE_REFRESH:-60}"
+
+          # Container Env does NOT reach the systemd manager (verified
+          # 2026-08-25: show-environment is empty of GOW_*), so pin the
+          # contract paths the compat lib needs. Without the runtime dir the
+          # VK_ICD_FILENAMES export silently never fires and Steam's UI shell
+          # cannot initialize Vulkan inside its bwrap.
+          export GOW_GRAPHICS_RUNTIME_DIR=/run/gow-graphics
+          export GOW_NVIDIA_PREFIX=/run/nvidia-driver
+
+          gow_apply_common_ui_scale_defaults
+          gow_apply_common_xdg_defaults
+          gow_apply_graphics_runtime_env
+
+          # Keep the default (mesa) GLX client vendor: measured on this stack,
+          # both mesa (320 visuals, llvmpipe) and nvidia (480, hw) work for
+          # 32-bit clients since the lib32-shaped /run/opengl-driver-32 fix;
+          # mesa is the shape every working reference runs. vgui2 only needs
+          # visuals; CEF/games use EGL/Vulkan on NVIDIA regardless.
+          unset __GLX_VENDOR_LIBRARY_NAME
+          # The scout runtime's bundled 32-bit GL stack cannot produce GLX
+          # visuals against nix DRI drivers (ABI split) — the vgui2 fatal
+          # assert. The nixpkgs FHS provides everything the client needs;
+          # games are unaffected (they run under pressure-vessel/sniper).
+          export STEAM_RUNTIME=0
+          # The nixpkgs FHS runs with an EMPTY ld.so.cache (tmpfs over the
+          # glibc etc dir) and nix i686 glibc's builtin search has no /lib32,
+          # so 32-bit dlmopen inside the sandbox resolves ONLY via
+          # LD_LIBRARY_PATH. Outside bwrap these paths don't exist and are
+          # ignored; inside they are the FHS library dirs.
+          export LD_LIBRARY_PATH="''${LD_LIBRARY_PATH:+''${LD_LIBRARY_PATH}:}/lib32:/lib"
+
+          if ! gow_export_wolf_wayland_env /run/wolf 80 0.1; then
+            echo "[STEAM] missing Wolf Wayland socket under /run/wolf"
+            exit 1
+          fi
+
+          gow_export_pulse_server_from_wolf
+          gow_require_session_bus /run/user/1000/bus 200 0.1
+          gow_export_logind_session_id 1000 retro seat0
+
+          # Chromium singleton locks in the persistent profile name the
+          # PREVIOUS container's hostname; the new container cannot prove that
+          # holder dead, so steamwebhelper refuses to serve the UI websocket
+          # and big picture never appears. Locks are meaningless across
+          # container boots — clear them (2026-08-25).
+          rm -f "$HOME/.local/share/Steam/config/htmlcache/Singleton"* || true
+
+          # Steam runs as an X11 client on sway's Xwayland — the same shape as
+          # the working upstream image (GoW ships RUN_SWAY=true; gamescope's
+          # nested-wayland backend never presents a single frame to Wolf's
+          # compositor, even with a trivial GL client — measured 2026-08-25).
+          cfg_dir="$(mktemp -d /tmp/steam-sway.XXXXXX)"
+          cfg="$cfg_dir/config"
+          {
+            echo "default_border none"
+            echo "output * resolution ''${GAMESCOPE_WIDTH}x''${GAMESCOPE_HEIGHT} position 0,0"
+            echo "xwayland enable"
+            echo "workspace main"
+            # LD_PRELOAD scoped to steam only: with STEAM_RUNTIME=0 nothing
+            # loads libXrandr before Valve's XRR workaround shim resolves the
+            # real symbols, so display enumeration fails and big picture
+            # never creates its window (real: (nil), 2026-08-25).
+            # GAMESCOPE_* must NOT reach steam: their presence makes the
+            # client assume a gamescope session and render a deck-sized
+            # 1280x800 canvas inside the fullscreen window (A/B-verified
+            # 2026-08-26). The session script still uses them for the sway
+            # output mode above.
+            echo "exec env -u GAMESCOPE_WIDTH -u GAMESCOPE_HEIGHT -u GAMESCOPE_REFRESH LD_PRELOAD=libXrandr.so.2 steam ''${STEAM_STARTUP_FLAGS:--bigpicture} && killall sway"
+          } > "$cfg"
+
+          exec sway --unsupported-gpu -c "$cfg"
+        '';
+        serviceConfig = mkWolfDesktopServiceConfig "wolf-steam-session";
+      };
+
+      environment.systemPackages = with pkgs; [
+        dbus
+        systemd
+        sway
+      ] ++ [
+        steamPackage
+        # Same FHS shape as steam for in-sandbox diagnostics (glxinfo etc.),
+        # but note it is VANILLA pkgs.steam-run — steam's extraLibraries do
+        # NOT apply here, so library-presence probes through it can mislead
+        # (they did on 2026-08-25). Prefer nsenter into the live steam bwrap
+        # for composition questions.
+        steamRunPackage
+      ];
+    };
+  };
+
   nixosGnomeSystemMount = nixosGnomeSystem.config.system.build.toplevel;
   nixosKdeSystemMount = nixosKdeSystem.config.system.build.toplevel;
   nixosLabwcSystemMount = nixosLabwcSystem.config.system.build.toplevel;
   nixosXfceSystemMount = nixosXfceSystem.config.system.build.toplevel;
+  nixosSteamSystemMount = nixosSteamSystem.config.system.build.toplevel;
 }
