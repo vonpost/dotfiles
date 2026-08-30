@@ -80,3 +80,7 @@ flycheck_*.el
 
 .codex
 /.agent-shell/
+
+# Python bytecode, e.g. from running nix/lib/log-digest-agent.py directly
+__pycache__/
+*.pyc
