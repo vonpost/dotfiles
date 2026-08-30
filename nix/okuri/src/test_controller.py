@@ -11,6 +11,17 @@ SRC = pathlib.Path(__file__).resolve().parent
 GPU_ARGS = ["-hwaccel", "cuda", "-i", "file:/data/in.mkv",
             "-c:v", "h264_nvenc", "-preset", "p1", "/tmp/out.m3u8"]
 
+ATTACHMENT_ARGS = [
+    "-dump_attachment:18", "/var/lib/jellyfin/data/attachments/item/font.ttf",
+    "-i", "file:/data/in.mkv", "-t", "0", "-f", "null", "null",
+]
+
+SUBTITLE_ARGS = [
+    "-i", "file:/data/in.mkv", "-map", "0:2", "-an", "-vn",
+    "-c:s", "copy", "-flush_packets", "1",
+    "/var/lib/jellyfin/data/subtitles/item/2.ass",
+]
+
 
 def write_script(path, body):
     path.write_text("#!/bin/sh\n" + body)
@@ -82,6 +93,48 @@ class TestDispatch(ControllerHarness):
         self.assertEqual(ret.returncode, 0, ret.stderr)
         self.assertIn("'file:/data/media/A Show (2021) [x264]/e p.mkv'",
                       self.ssh_record.read_text())
+
+    def test_attachment_extraction_runs_locally(self):
+        cfg = self.make_config(self.make_ssh("exit 0\n"))
+        ret = self.run_controller(cfg, ATTACHMENT_ARGS)
+        self.assertEqual(ret.returncode, 0, ret.stderr)
+        self.assertIn("-dump_attachment:18", self.local_argv())
+        self.assertFalse(self.ssh_record.exists())
+        self.assertIn("attachment extraction", ret.stderr)
+
+    def test_subtitle_extraction_runs_locally(self):
+        cfg = self.make_config(self.make_ssh("exit 0\n"))
+        ret = self.run_controller(cfg, SUBTITLE_ARGS)
+        self.assertEqual(ret.returncode, 0, ret.stderr)
+        self.assertIn("-c:s copy", self.local_argv())
+        self.assertFalse(self.ssh_record.exists())
+        self.assertIn("subtitle extraction", ret.stderr)
+
+    def test_local_auxiliary_failure_propagates_without_remote_retry(self):
+        write_script(
+            self.fake_local,
+            f'echo "$@" >> {self.local_record}\nexit 9\n',
+        )
+        cfg = self.make_config(self.make_ssh("exit 0\n"))
+        ret = self.run_controller(cfg, ATTACHMENT_ARGS)
+        self.assertEqual(ret.returncode, 9, ret.stderr)
+        self.assertFalse(self.ssh_record.exists())
+
+    def test_gpu_job_with_attachment_option_remains_remote(self):
+        cfg = self.make_config(self.make_ssh("exit 0\n"))
+        ret = self.run_controller(cfg, ATTACHMENT_ARGS + GPU_ARGS)
+        self.assertEqual(ret.returncode, 0, ret.stderr)
+        self.assertIn("h264_nvenc", self.ssh_record.read_text())
+        self.assertIsNone(self.local_argv())
+
+    def test_audio_only_transcode_remains_remote(self):
+        cfg = self.make_config(self.make_ssh("exit 0\n"))
+        args = ["-i", "file:/data/in.mkv", "-vn", "-c:a", "aac",
+                "/tmp/out.m4a"]
+        ret = self.run_controller(cfg, args)
+        self.assertEqual(ret.returncode, 0, ret.stderr)
+        self.assertIn("-c:a aac", self.ssh_record.read_text())
+        self.assertIsNone(self.local_argv())
 
 
 class TestFallback(ControllerHarness):

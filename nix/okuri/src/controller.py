@@ -1,8 +1,10 @@
 """okuri controller: the ffmpeg/ffprobe the Jellyfin host actually runs.
 
-Dispatches every invocation to the GPU target over SSH. When the transport
-itself fails fast (target down, network cut), rewrites the argv to software
-and runs the local CPU ffmpeg instead, so playback degrades instead of dying.
+Dispatches transcodes to the GPU target over SSH. Bounded housekeeping jobs
+(subtitle and attachment extraction) stay on the Jellyfin host, avoiding SSH
+setup in the playback path. When the transport itself fails fast (target down,
+network cut), rewrites the argv to software and runs the local CPU ffmpeg
+instead, so playback degrades instead of dying.
 
 Remote ffmpeg failures are NOT retried here: the target wrapper already
 handles GPU-level failures on its own (more capable) CPU. By the time a
@@ -53,6 +55,18 @@ def run_and_wait(cmd, log):
     return returncode, state
 
 
+def local_passthrough(cfg, role, args, log, reason):
+    """Run a bounded auxiliary invocation locally without fallback rewrite."""
+    binary = cfg["local"][role]
+    log.debug("route %s locally (%s): %s", role, reason, " ".join(args))
+    proc = subprocess.Popen(
+        [binary] + list(args),
+        preexec_fn=runtime.set_pdeathsig(signal.SIGKILL),
+    )
+    runtime.forward_signals(proc, log)
+    runtime.mirror_exit(proc.wait())
+
+
 def local_fallback(cfg, role, args, log, reason):
     fb = cfg.get("fallback", {})
     binary = cfg["local"][role]
@@ -74,6 +88,10 @@ def dispatch(role, args):
     log = runtime.setup_logging("okuri")
     cfg = runtime.load_config("OKURI_CONFIG", DEFAULT_CONFIG)
     fb = cfg.get("fallback", {})
+
+    local_kind = rewrite.local_auxiliary_kind(role, args)
+    if local_kind is not None:
+        local_passthrough(cfg, role, args, log, local_kind)
 
     ssh_cmd = build_ssh_command(cfg, role, args)
     log.debug("dispatch %s to %s: %s", role, cfg["target"]["host"],

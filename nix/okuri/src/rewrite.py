@@ -85,6 +85,42 @@ SPECIAL_FLAGS = frozenset({
 def is_probe_invocation(role, args):
     return role == "ffprobe" or any(a in SPECIAL_FLAGS for a in args)
 
+
+def local_auxiliary_kind(role, args):
+    """Classify bounded Jellyfin housekeeping jobs that need no remote GPU.
+
+    Jellyfin uses ffmpeg not only for transcodes, but also to copy embedded
+    subtitle streams and extract font attachments into its persistent data
+    directory.  Sending every one of those short, often serial invocations
+    through a fresh SSH connection puts transport setup directly in the
+    playback path.  Keep the match deliberately narrow so an unfamiliar
+    encode continues to use the remote target.
+
+    Returns a short log label, or None when the invocation should retain the
+    normal remote-dispatch behaviour.
+    """
+    if role != "ffmpeg" or wants_gpu(args):
+        return None
+
+    if any(_base_flag(arg) == "-dump_attachment" for arg in args):
+        return "attachment extraction"
+
+    # Jellyfin's text-subtitle extractor disables both audio and video and
+    # selects a subtitle codec with -c:s/-codec:s (normally stream-copy).
+    # Requiring all three signals avoids mistaking an audio-only transcode or
+    # a subtitle burn-in filter for an extraction job.
+    subtitle_codec = any(
+        arg == "-scodec"
+        or (_base_flag(arg) in ("-c", "-codec")
+            and len(arg.split(":")) > 1
+            and arg.split(":", 2)[1] == "s")
+        for arg in args
+    )
+    if "-an" in args and "-vn" in args and subtitle_codec:
+        return "subtitle extraction"
+
+    return None
+
 # stderr substrings that identify a GPU-level failure (as opposed to a bad
 # input file or a genuine encode error that software would hit too). Kept
 # specific on purpose: a real NVENC open failure prints OpenEncodeSessionEx

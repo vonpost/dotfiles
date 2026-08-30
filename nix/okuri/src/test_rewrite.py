@@ -81,6 +81,40 @@ class TestWantsGpu(unittest.TestCase):
              "-c:v", "h264_nvenc", "/tmp/out.m3u8"]))
 
 
+class TestLocalAuxiliaryClassification(unittest.TestCase):
+    def test_attachment_extraction(self):
+        args = ["-dump_attachment:t", "", "-y", "-i", "in.mkv",
+                "-t", "0", "-f", "null", "null"]
+        self.assertEqual(
+            rewrite.local_auxiliary_kind("ffmpeg", args),
+            "attachment extraction",
+        )
+
+    def test_subtitle_stream_copy(self):
+        args = ["-i", "in.mkv", "-map", "0:2", "-an", "-vn",
+                "-codec:s:0", "copy", "out.ass"]
+        self.assertEqual(
+            rewrite.local_auxiliary_kind("ffmpeg", args),
+            "subtitle extraction",
+        )
+
+    def test_burn_in_and_audio_transcode_are_not_auxiliary(self):
+        self.assertIsNone(rewrite.local_auxiliary_kind(
+            "ffmpeg",
+            ["-i", "in.mkv", "-vf", "subtitles=sub.ass",
+             "-c:v", "h264_nvenc", "out.m3u8"],
+        ))
+        self.assertIsNone(rewrite.local_auxiliary_kind(
+            "ffmpeg",
+            ["-i", "in.mkv", "-vn", "-c:a", "aac", "out.m4a"],
+        ))
+
+    def test_ffprobe_is_not_reclassified(self):
+        self.assertIsNone(rewrite.local_auxiliary_kind(
+            "ffprobe", ["-show_streams", "in.mkv"]
+        ))
+
+
 class TestRewriteTrickplay(unittest.TestCase):
     def setUp(self):
         self.out, self.notes = rewrite.rewrite_to_software(TRICKPLAY)

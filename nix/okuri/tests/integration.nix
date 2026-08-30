@@ -116,6 +116,29 @@ in
         assert "h264_nvenc" in line and "cuda" in line, line
         controller.fail("test -f /tmp/local.argv")
 
+    with subtest("subtitle and attachment extraction stay local"):
+        target.succeed("rm -f /tmp/ffmpeg.argv")
+        controller.succeed("rm -f /tmp/local.argv")
+        controller.succeed(
+            f"{ffmpeg} -dump_attachment:18 /tmp/font.ttf "
+            "-i file:/tmp/in.mkv -t 0 -f null null")
+        controller.succeed(
+            f"{ffmpeg} -i file:/tmp/in.mkv -map 0:2 -an -vn "
+            "-c:s copy -flush_packets 1 /tmp/sub.ass")
+        lines = controller.succeed("cat /tmp/local.argv").strip().splitlines()
+        assert len(lines) == 2, lines
+        assert "-dump_attachment:18" in lines[0], lines
+        assert "-c:s copy" in lines[1], lines
+        target.fail("test -f /tmp/ffmpeg.argv")
+
+    with subtest("ordinary non-GPU work retains remote dispatch"):
+        controller.succeed("rm -f /tmp/local.argv")
+        controller.succeed(
+            f"{ffmpeg} -i file:/tmp/in.mkv -vn -c:a aac /tmp/out.m4a")
+        line = target.succeed("tail -1 /tmp/ffmpeg.argv")
+        assert "-c:a aac" in line, line
+        controller.fail("test -f /tmp/local.argv")
+
     with subtest("okuri check reports healthy"):
         controller.succeed(f"{okuri} check")
 
