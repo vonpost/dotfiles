@@ -3,7 +3,18 @@ let
   inherit (lib) mkOption types;
 in
 {
+  imports = [
+    (lib.mkAliasOptionModule
+      [ "my" "infra" "hostServiceMounts" "stageRoot" ]
+      [ "my" "infra" "state" "stageRoot" ])
+  ];
+
   options.my.infra.state = {
+    stageRoot = mkOption {
+      type = types.str;
+      default = "/run/microvm-staging";
+      description = "Host staging root exported through each VM's single state share.";
+    };
     paths = {
       base = mkOption {
         type = types.str;

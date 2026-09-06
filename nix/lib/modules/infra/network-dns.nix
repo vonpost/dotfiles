@@ -17,7 +17,7 @@ in
         local-zone = ''"${topology.domain}." static'';
         local-data =
           lib.mapAttrsToList
-            (name: vmCfg: ''"${name}.${topology.domain}. IN A ${topo.getIp name (lib.head vmCfg.assignedVlans)}"'')
+            (name: vmCfg: ''"${name}.${topology.domain}. IN A ${topo.getIp name (vmCfg.primaryVlan)}"'')
             topology.vms;
         hide-identity = "yes";
         hide-version = "yes";

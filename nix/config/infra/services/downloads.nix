@@ -2,7 +2,7 @@
 let
   svc = import ./lib.nix { inherit config lib; };
   vlanNames = builtins.attrNames svc.vlans;
-  primaryVlan = lib.head svc.vm.assignedVlans;
+  primaryVlan = svc.vm.primaryVlan;
   routedLabSubnets =
     map
       (vlan: {

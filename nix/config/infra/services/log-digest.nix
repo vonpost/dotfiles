@@ -3,11 +3,11 @@ let
   svc = import ./lib.nix { inherit config lib; };
   llamaCppCfg = import ./llama-cpp-config.nix;
   topology = config.my.infra.topology;
-  vmServiceMounts = config.my.infra.vmServiceMounts;
+  vms = config.my.infra.vms;
   llmVms =
     builtins.filter
-      (vmName: builtins.elem "llama-cpp" (vmServiceMounts.${vmName}.serviceMounts or [ ]))
-      (builtins.attrNames vmServiceMounts);
+      (vmName: builtins.elem "llama-cpp" (vms.${vmName}.services or [ ]))
+      (builtins.attrNames vms);
   llmVm =
     if llmVms == [ ] then null else lib.head llmVms;
   llmUrl =
@@ -32,7 +32,7 @@ in
       enable = true;
       url = llmUrl;
       model = "Qwen3.6-35B-A3B-UD-Q4_K_XL";
-      port = llamaCppCfg.port;
+      port = svc.getPort "llama_server";
 
       # Runs five minutes after the GPU window opens, so the model is resident by
       # the time the first request lands. See llama-cpp.nix for the window itself.

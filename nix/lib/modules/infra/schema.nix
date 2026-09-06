@@ -2,7 +2,7 @@
 let
   inherit (lib) mkOption types;
   infraServices = config.my.infra.services;
-  infraVmServiceMounts = config.my.infra.vmServiceMounts;
+  infraVms = config.my.infra.vms;
   infraTopology = config.my.infra.topology;
 
   secretType = types.submodule ({ ... }: {
@@ -15,24 +15,6 @@ let
         type = types.attrsOf types.anything;
         default = { };
         description = "Optional sops-nix secret overrides.";
-      };
-    };
-  });
-
-  logFileType = types.submodule ({ name, ... }: {
-    options = {
-      name = mkOption {
-        type = types.str;
-        default = name;
-      };
-      path = mkOption {
-        type = types.str;
-        description = "Absolute log file path consumed by Vector.";
-      };
-      labels = mkOption {
-        type = types.attrsOf types.str;
-        default = { };
-        description = "Static labels applied to this file source.";
       };
     };
   });
@@ -57,10 +39,6 @@ let
         default = null;
         description = "Optional Vector VRL filter condition.";
       };
-      files = mkOption {
-        type = types.listOf logFileType;
-        default = [ ];
-      };
       labels = mkOption {
         type = types.attrsOf types.str;
         default = { };
@@ -79,7 +57,8 @@ let
         default = name;
       };
       unit = mkOption {
-        type = types.str;
+        type = types.nullOr types.str;
+        description = "Systemd unit, or null for a resource-only role.";
         default = config.name;
       };
       user = mkOption {
@@ -100,10 +79,6 @@ let
       bindTarget = mkOption {
         type = types.str;
         default = config.name;
-      };
-      disableDynamicUser = mkOption {
-        type = types.bool;
-        default = true;
       };
       downloadsGroup = mkOption {
         type = types.bool;
@@ -129,11 +104,6 @@ let
         type = types.bool;
         default = true;
       };
-      perVmState = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Stage a separate backing state directory per VM for this service.";
-      };
       secrets = mkOption {
         type = types.attrsOf secretType;
         default = { };
@@ -141,7 +111,7 @@ let
       logging = mkOption {
         type = loggingTargetType;
         default = {
-          journalUnits = [ "${serviceCfg.unit}.service" ];
+          journalUnits = lib.optional (serviceCfg.unit != null) "${serviceCfg.unit}.service";
         };
         description = "Observability metadata used to derive Vector collection rules.";
       };
@@ -168,10 +138,6 @@ let
         default = { };
         description = "Native journald match groups such as { _TRANSPORT = [ \"kernel\" ]; }.";
       };
-      files = mkOption {
-        type = types.listOf logFileType;
-        default = [ ];
-      };
       labels = mkOption {
         type = types.attrsOf types.str;
         default = { };
@@ -179,13 +145,12 @@ let
     };
   });
 
-  vmServiceMountsType = types.submodule ({ ... }: {
-    options = {
-      machineId = mkOption {
-        type = types.str;
-        description = "Machine ID for the VM.";
-      };
-      serviceMounts = mkOption {
+  vmType = types.submodule ({ ... }: {
+    options = vmNetworkOptions // {
+      vcpu = mkOption { type = types.nullOr types.ints.positive; default = null; };
+      mem = mkOption { type = types.nullOr types.ints.positive; default = null; };
+      hotplugMem = mkOption { type = types.nullOr types.ints.unsigned; default = null; };
+      services = mkOption {
         type = types.listOf types.str;
         default = [ ];
       };
@@ -200,7 +165,7 @@ let
     options = {
       port = mkOption { type = types.int; };
       proto = mkOption { type = types.enum [ "tcp" "udp" ]; };
-      allowFrom = mkOption {
+      routedFrom = mkOption {
         type = types.listOf types.str;
         default = [ ];
       };
@@ -215,9 +180,12 @@ let
     };
   });
 
-  vmTopologyType = types.submodule ({ ... }: {
-    options = {
+  vmNetworkOptions = {
       id = mkOption { type = types.int; };
+      primaryVlan = mkOption {
+        type = types.str;
+        description = "Network used for the VM's DNS address, monitoring and inbound NAT.";
+      };
       assignedVlans = mkOption {
         type = types.listOf types.str;
       };
@@ -231,7 +199,8 @@ let
         default = [ ];
       };
     };
-  });
+
+  vmTopologyType = types.submodule { options = vmNetworkOptions; };
 
   vlanType = types.submodule ({ ... }: {
     options = {
@@ -254,6 +223,7 @@ let
         type = types.attrsOf natRuleType;
       };
       vms = mkOption {
+        readOnly = true;
         type = types.attrsOf vmTopologyType;
       };
       vlans = mkOption {
@@ -263,36 +233,29 @@ let
   });
 
   serviceNames = builtins.attrNames infraServices;
-  vmConfigNames = builtins.attrNames infraVmServiceMounts;
   topologyVmNames = builtins.attrNames infraTopology.vms;
   firewallRuleNames = builtins.attrNames infraTopology.firewallRules;
   natRuleNames = builtins.attrNames infraTopology.natRules;
   logProfileNames = builtins.attrNames config.my.infra.observability.logProfiles;
 
-  missingVmConfigInTopology =
-    builtins.filter (vm: !(builtins.elem vm topologyVmNames)) vmConfigNames;
-
-  missingTopologyInVmConfig =
-    builtins.filter (vm: !(builtins.elem vm vmConfigNames)) topologyVmNames;
-
   missingMountedServices =
     builtins.concatLists (
       lib.mapAttrsToList (_vm: vmCfg:
-        builtins.filter (serviceName: !(builtins.elem serviceName serviceNames)) vmCfg.serviceMounts
-      ) infraVmServiceMounts
+        builtins.filter (serviceName: !(builtins.elem serviceName serviceNames)) vmCfg.services
+      ) infraVms
     );
 
   missingLogProfiles =
     builtins.concatLists (
       lib.mapAttrsToList (_vm: vmCfg:
         builtins.filter (profileName: !(builtins.elem profileName logProfileNames)) (vmCfg.logProfiles or [ ])
-      ) infraVmServiceMounts
+      ) infraVms
     );
 
-  missingFirewallAllowFrom =
+  missingFirewallRoutedFrom =
     builtins.concatLists (
       lib.mapAttrsToList (_rule: ruleCfg:
-        builtins.filter (vm: !(builtins.elem vm topologyVmNames)) ruleCfg.allowFrom
+        builtins.filter (vm: !(builtins.elem vm topologyVmNames)) ruleCfg.routedFrom
       ) infraTopology.firewallRules
     );
 
@@ -327,10 +290,10 @@ in
       description = "Service catalog used to derive users/state mounts/credentials.";
     };
 
-    vmServiceMounts = mkOption {
-      type = types.attrsOf vmServiceMountsType;
+    vms = mkOption {
+      type = types.attrsOf vmType;
       default = { };
-      description = "Per-VM service assignments.";
+      description = "VM inventory: identity, resources, services and network membership.";
     };
 
     topology = mkOption {
@@ -365,14 +328,31 @@ in
   };
 
   config = {
+    my.infra.topology.vms = lib.mapAttrs (_: vm:
+      builtins.intersectAttrs vmNetworkOptions vm) infraVms;
     assertions = [
       {
+        assertion = builtins.all (vm: builtins.elem vm.primaryVlan vm.assignedVlans)
+          (builtins.attrValues infraVms);
+        message = "Each VM primaryVlan must be present in assignedVlans.";
+      }
+      {
+        assertion = let ids = map (vm: vm.id) (builtins.attrValues infraVms);
+          in builtins.length ids == builtins.length (lib.unique ids);
+        message = "VM IDs must be unique (they also identify vsock endpoints).";
+      }
+      {
+        assertion = builtins.all (service: service.unit != null || service.secrets == { })
+          (builtins.attrValues infraServices);
+        message = "Resource-only roles cannot receive service credentials without a systemd unit.";
+      }
+      {
         assertion = missingMountedServices == [ ];
-        message = "Unknown service names in my.infra.vmServiceMounts: ${toString (lib.unique missingMountedServices)}";
+        message = "Unknown service names in my.infra.vms: ${toString (lib.unique missingMountedServices)}";
       }
       {
         assertion = missingLogProfiles == [ ];
-        message = "Unknown log profile names in my.infra.vmServiceMounts: ${toString (lib.unique missingLogProfiles)}";
+        message = "Unknown log profile names in my.infra.vms: ${toString (lib.unique missingLogProfiles)}";
       }
       {
         assertion = infraTopology.gatewayVM == "" || builtins.elem infraTopology.gatewayVM topologyVmNames;
@@ -383,16 +363,8 @@ in
         message = "my.infra.topology.dnsVM must reference a VM in my.infra.topology.vms";
       }
       {
-        assertion = missingVmConfigInTopology == [ ];
-        message = "VMs present in my.infra.vmServiceMounts but missing from my.infra.topology.vms: ${toString (lib.unique missingVmConfigInTopology)}";
-      }
-      {
-        assertion = missingTopologyInVmConfig == [ ];
-        message = "VMs present in my.infra.topology.vms but missing from my.infra.vmServiceMounts: ${toString (lib.unique missingTopologyInVmConfig)}";
-      }
-      {
-        assertion = missingFirewallAllowFrom == [ ];
-        message = "Unknown VM names referenced by firewall allowFrom: ${toString (lib.unique missingFirewallAllowFrom)}";
+        assertion = missingFirewallRoutedFrom == [ ];
+        message = "Unknown VM names referenced by firewall routedFrom: ${toString (lib.unique missingFirewallRoutedFrom)}";
       }
       {
         assertion = missingProvidedFirewallRules == [ ];

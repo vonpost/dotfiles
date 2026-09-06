@@ -2,16 +2,15 @@
 let
   svc = import ./lib.nix { inherit config lib; };
   topology = config.my.infra.topology;
-  hostProvides = topology.vms.${svc.hostname}.provides or [ ];
-  enableJellyfinService = svc.hasService "jellyfin" && builtins.elem "jellyfin" hostProvides;
-  sshJellyfinProviders =
+  enableJellyfinService = svc.hasService "jellyfin";
+  transcodeWorkers =
     builtins.filter
-      (vmName: builtins.elem "sshJellyfin" topology.vms.${vmName}.provides)
-      (builtins.attrNames topology.vms);
+      (vmName: builtins.elem "transcode-worker" config.my.infra.vms.${vmName}.services)
+      (builtins.attrNames config.my.infra.vms);
   okuriHosts =
     map
       (vmName: "${lib.toLower vmName}.${topology.domain}")
-      (builtins.filter (vmName: vmName != svc.hostname) sshJellyfinProviders);
+      (builtins.filter (vmName: vmName != svc.hostname) transcodeWorkers);
   useOkuri = pkgs ? okuri && enableJellyfinService && okuriHosts != [ ];
   jellyfinPackage =
     if useOkuri
@@ -25,7 +24,7 @@ in
         # okuri dispatches to a single target; priority ordering across
         # several GPU nodes is not implemented (and not needed here).
         assertion = builtins.length okuriHosts <= 1;
-        message = "okuri supports exactly one sshJellyfin provider, got: ${toString okuriHosts}";
+        message = "okuri supports at most one transcode worker, got: ${toString okuriHosts}";
       }];
 
       services.jellyfin = {

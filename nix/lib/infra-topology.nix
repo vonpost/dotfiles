@@ -9,6 +9,10 @@ rec {
   getIp = name: vlan:
     "${getSubnet vlan}.${toString topology.vms.${name}.id}";
 
+  getPrimaryIp = name: getIp name topology.vms.${name}.primaryVlan;
+
+  getPort = name: topology.firewallRules.${name}.port;
+
   getMac = name: vlan:
     "02:00:00:00:${toString vlans.${vlan}.id}:${toString topology.vms.${name}.id}";
 

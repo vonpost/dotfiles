@@ -45,7 +45,7 @@ in
     services.llama-cpp = {
       enable = true;
       package = bleeding.llama-cpp.override { cudaSupport = true; };
-      port = llamaCppCfg.port;
+      port = svc.getPort "llama_server";
       host = llamaCppCfg.host;
       model = llamaCppCfg.model;
       modelsDir = llamaCppCfg.modelsDir;

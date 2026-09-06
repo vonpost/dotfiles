@@ -51,27 +51,23 @@
         infra = final.callPackage ./pkgs/infra.nix { };
       };
 
-      vmNames = [ "UCHI" "SOTO" "KAIZOKU" "DARE" "OKAMI" "MAMORU" "NIKKI" ];
-
-      # Per-VM module additions that fall outside the shared service pattern.
-      # OKAMI hosts wolf, which is not yet a pure catalog service.
-      vmExtraModules = {
-        OKAMI = [
-          quadlet-nix.nixosModules.quadlet
-          ./wolf-nix/modules/wolf-service.nix
-        ];
-      };
+      inventory = import ./config/infra/inventory.nix;
+      vmNames = let names = map (vm: vm.name) inventory;
+        in assert lib.assertMsg (builtins.length names == builtins.length (lib.unique names))
+          "Duplicate VM names in config/infra/inventory.nix"; names;
+      vms = lib.listToAttrs (map (vm: lib.nameValuePair vm.name vm) inventory);
 
       mkVm = name: nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
+          inherit quadlet-nix;
           bleeding = bleedingPkgs;
         };
         modules = [
           { nixpkgs.overlays = [ bleedingOverlay ]; }
           microvm.nixosModules.microvm
-          (./config/infra/vms + "/${name}.nix")
-        ] ++ (vmExtraModules.${name} or [ ]);
+          (import ./common/vm-common.nix { hostname = name; })
+        ] ++ (vms.${name}.modules or [ ]);
       };
     in
     {
@@ -118,7 +114,27 @@
             (final: prev: { okuri = final.callPackage ./okuri/pkgs/okuri.nix { }; })
           ];
         };
+          infraCheck = name:
+            let results = import (./tests/infra + "/${name}.nix") {
+              inherit lib;
+              inherit (self) nixosConfigurations;
+            };
+            in builtins.deepSeq results (pkgs.runCommand "infra-${name}-check" { } ''
+              echo 'Infrastructure ${name} contract passed' > "$out"
+            '');
         in {
+          infra-state = infraCheck "state";
+          infra-inventory = infraCheck "inventory";
+          infra-roles = infraCheck "roles";
+          infra-observability = infraCheck "observability";
+          infra-network = infraCheck "network";
+          infra-deploy = pkgs.runCommand "infra-deploy-check" {
+            nativeBuildInputs = [ pkgs.python3 pkgs.bash pkgs.jq pkgs.coreutils pkgs.gnugrep ];
+            INFRA_TEST_SCRIPT = ./lib/infra.sh;
+          } ''
+            python ${./tests/infra/test_deploy.py}
+            touch "$out"
+          '';
           okuri-unit = pkgs.okuri;
           okuri-integration =
             pkgs.testers.runNixOSTest (import ./okuri/tests/integration.nix);

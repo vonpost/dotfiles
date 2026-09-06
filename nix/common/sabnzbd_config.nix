@@ -1,10 +1,10 @@
-{ ... }:
+{ config, lib, ... }:
 {
-  services.sabnzbd = {
+  services.sabnzbd = lib.mkIf config.services.sabnzbd.enable {
     secretFiles = [ "/run/credentials/sabnzbd.service/sabnzbd_secret_config" ];
     settings = {
       misc = {
-        port = 1337;
+        port = config.my.infra.topology.firewallRules.sabnzbd.port;
         host = "0.0.0.0";
         # Load-bearing: sabnzbd chmods every completed job dir to this. Some of
         # its dir creation ignores the process umask, and the arrs need group

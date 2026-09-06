@@ -8,15 +8,7 @@
 { lib, config, pkgs, ... }:
 let
   infra = config.my.infra;
-  svc = import ../lib/vm-service-state.nix { inherit lib; };
-  svcMap = import ../config/infra/service-map.nix;
-  vmConfig = import ../config/infra/vm-config.nix;
-  servicesForVm =
-    map (serviceName: svcMap.${serviceName}) vmConfig.${hostname}.serviceMounts;
-  statefulServices = map
-    (service: builtins.removeAttrs service [ "managedState" "secrets" ])
-    (builtins.filter (service: service.managedState or true) servicesForVm);
-  hasStatefulServices = statefulServices != [ ];
+  vm = infra.vms.${hostname};
 in
 {
   networking.hostName = hostname;
@@ -28,8 +20,8 @@ in
     ../okuri/nixos-modules/controller.nix
     ../okuri/nixos-modules/target.nix
     ../config/infra/services
-  ] ++ lib.optional (builtins.elem "sabnzbd" vmConfig.${hostname}.serviceMounts) ./sabnzbd_config.nix
-    ++ (svc.mkMany statefulServices);
+    ./sabnzbd_config.nix
+  ];
 
   nixpkgs.overlays = lib.mkBefore [
     (final: prev: {
@@ -38,6 +30,9 @@ in
   ];
 
   my.infra = {
+    guestServiceState.enable = true;
+    networkDns.enable = hostname == infra.topology.dnsVM;
+    networkGateway.enable = hostname == infra.topology.gatewayVM;
     networkGuest = {
       enable = true;
       name = hostname;
@@ -54,6 +49,7 @@ in
 
   services.prometheus.exporters.node = {
     enable = true;
+    port = infra.topology.firewallRules.node_exporter.port;
     listenAddress = "0.0.0.0";
     enabledCollectors = [ "systemd" ];
   };
@@ -66,6 +62,9 @@ in
   ];
 
   microvm.hypervisor = lib.mkDefault "qemu";
+  microvm.vcpu = lib.mkIf (vm.vcpu != null) vm.vcpu;
+  microvm.mem = lib.mkIf (vm.mem != null) vm.mem;
+  microvm.hotplugMem = lib.mkIf (vm.hotplugMem != null) vm.hotplugMem;
   microvm.registerWithMachined = true;
   microvm.vsock.cid = infra.topology.vms.${hostname}.id;
 
@@ -76,14 +75,7 @@ in
       tag = "ro-store";
       proto = "virtiofs";
     }
-  ] ++ lib.optional hasStatefulServices (
-    {
-      proto = "virtiofs";
-      tag = "state";
-      source = "/run/microvm-staging/${hostname}";
-      mountPoint = "/state";
-    }
-  );
+  ];
 
   services.openssh.enable = lib.mkDefault true;
   services.openssh.settings = {

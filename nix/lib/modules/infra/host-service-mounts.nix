@@ -1,11 +1,12 @@
 { lib, config, ... }:
 let
-  inherit (lib) mkEnableOption mkOption mkIf types flatten mapAttrsToList optional;
+  inherit (lib) mkEnableOption mkIf flatten mapAttrsToList optional;
   cfg = config.my.infra.hostServiceMounts;
   services = config.my.infra.services;
-  vmServiceMounts = config.my.infra.vmServiceMounts;
+  vms = config.my.infra.vms;
   state = config.my.infra.state;
   statefulServices = lib.filterAttrs (_svcName: service: service.managedState) services;
+  layout = import ../../service-state-layout.nix { inherit lib; infra = config.my.infra; };
 
   mkBindMount = unit: mp: dev: {
     what = dev;
@@ -22,15 +23,10 @@ in
 {
   options.my.infra.hostServiceMounts = {
     enable = mkEnableOption "host-side tmpfiles + bind mounts for microvm service state staging";
-    stageRoot = mkOption {
-      type = types.str;
-      default = "/run/microvm-staging";
-      description = "Base staging path where per-VM bind mount trees are created.";
-    };
   };
 
   config = mkIf cfg.enable {
-    systemd.tmpfiles.rules =
+    systemd.tmpfiles.rules = lib.unique (
       [
         "d ${state.paths.base} 0755 root root -"
         "d ${state.paths.base}/${state.paths.lib} 0755 root root -"
@@ -40,13 +36,13 @@ in
       ]
       ++ flatten (
         mapAttrsToList
-          (svcName: service:
+          (_svcName: service:
             [
-              "d ${state.paths.base}/${state.paths.lib}/${svcName} 0755 ${toString service.uid} ${toString service.uid} -"
+              "d ${state.paths.base}/${state.paths.lib}/${service.name} 0755 ${toString service.uid} ${toString service.gid} -"
             ]
             ++ optional
               service.hasCacheDir
-              "d ${state.paths.base}/${state.paths.cache}/${service.name} 0755 ${toString service.uid} ${toString service.uid} -"
+              "d ${state.paths.base}/${state.paths.cache}/${service.name} 0755 ${toString service.uid} ${toString service.gid} -"
             ++ optional
               service.hasDownloadsDir
               "d ${state.paths.downloadsRoot}/${service.name} 2770 ${toString service.uid} ${toString state.gids.downloads} -"
@@ -55,60 +51,20 @@ in
               "d ${state.paths.mediaRoot}/${service.name} 2750 ${toString service.uid} ${toString state.gids.media} -"
           )
           statefulServices
-      );
+      ));
 
     systemd.mounts =
       flatten (
         mapAttrsToList
-          (vmName: vmCfg:
+          (vmName: _vmCfg:
             let
               unit = "microvm@${vmName}.service";
-              vmStateServices =
-                builtins.filter
-                  (service: service.managedState)
-                  (map (serviceName: services.${serviceName}) vmCfg.serviceMounts);
-
-              perServiceMounts =
-                flatten (
-                  map
-                    (service:
-                      map
-                        (pth:
-                          let
-                            mp = "${cfg.stageRoot}/${vmName}/${pth}";
-                            dev = "${state.paths.base}/${pth}";
-                          in
-                          mkBindMount unit mp dev
-                        )
-                        (
-                          [ "${state.paths.lib}/${service.name}" ]
-                          ++ lib.optional service.hasCacheDir "${state.paths.cache}/${service.name}"
-                        )
-                    )
-                    vmStateServices
-                );
-
-              sharedMounts =
-                map
-                  (pth:
-                    let
-                      pPath = "${pth}";
-                      pRoot = "${pth}Root";
-                      mp = "${cfg.stageRoot}/${vmName}/${state.paths.${pPath}}";
-                      dev = state.paths.${pRoot};
-                    in
-                    mkBindMount unit mp dev
-                  )
-                  (
-                    builtins.filter
-                      (p: builtins.any (service: service."${p}Group") vmStateServices)
-                      [ "downloads" "media" ]
-                  );
-
+              vm = layout.forVm vmName;
             in
-            perServiceMounts ++ sharedMounts
+            map (mount: mkBindMount unit
+              "${vm.stagePath}/${mount.relativePath}" mount.source) vm.mounts
           )
-          vmServiceMounts
+          vms
       );
   };
 }

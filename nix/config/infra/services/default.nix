@@ -2,6 +2,7 @@
 {
   imports = [
     ./jelly-media.nix
+    ./transcode-worker.nix
     ./arr.nix
     ./downloads.nix
     ./nginx.nix

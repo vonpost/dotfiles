@@ -1,12 +1,12 @@
 { config, lib, pkgs, ... }:
 let
-  vmConfig = config.my.infra.vmServiceMounts;
+  vmConfig = config.my.infra.vms;
   svcMap = config.my.infra.services;
 
   enabledServiceNames =
     lib.unique (
       lib.concatLists (
-        lib.mapAttrsToList (_vmName: vmCfg: vmCfg.serviceMounts) vmConfig
+        lib.mapAttrsToList (_vmName: vmCfg: vmCfg.services) vmConfig
       )
     );
 

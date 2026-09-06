@@ -14,7 +14,7 @@ in
     enable = mkEnableOption "guest networking config from my.infra.topology";
     name = mkOption {
       type = types.str;
-      default = "MAMORU";
+      default = config.networking.hostName;
       description = "VM name key in my.infra.topology.vms.";
     };
   };

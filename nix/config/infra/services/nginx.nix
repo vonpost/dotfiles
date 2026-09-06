@@ -67,7 +67,7 @@ in
         };
 
         locations."/" = {
-          proxyPass = "http://${jellyfin_host}:8096";
+          proxyPass = "http://${jellyfin_host}:${toString (svc.getPort "jellyfin")}";
           proxyWebsockets = true;
           extraConfig = extraCfg;
         };

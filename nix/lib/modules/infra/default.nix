@@ -4,6 +4,7 @@
     ../../../config/infra/site-defaults.nix
     ./schema.nix
     ./service-state.nix
+    ./guest-service-state.nix
     ./service-secrets.nix
     ./host-service-mounts.nix
     ./logging-agent.nix

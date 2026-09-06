@@ -11,13 +11,13 @@ let
       lokiVm = config.my.infra.observability.lokiVM;
     in
     if lokiVm != "" && topology.domain != ""
-    then "http://${lib.toLower lokiVm}.${topology.domain}:3100"
+    then "http://${lib.toLower lokiVm}.${topology.domain}:${toString topology.firewallRules.loki_http.port}"
     else "http://nikki.lan:3100";
 
   # Which services live on which VM. Handed to the model so it can reason about
   # blast radius: two services failing together on one VM is a different story
   # from the same two failing across VMs.
-  vmTopology = lib.mapAttrs (_vm: vmCfg: vmCfg.serviceMounts) config.my.infra.vmServiceMounts;
+  vmTopology = lib.mapAttrs (_vm: vmCfg: vmCfg.services) config.my.infra.vms;
 
   configFile = pkgs.writeText "log-digest-config.json" (builtins.toJSON {
     inherit digestVm;

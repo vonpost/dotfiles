@@ -5,20 +5,20 @@ let
   infra = config.my.infra;
   observability = infra.observability;
   services = infra.services;
-  vmServiceMounts = infra.vmServiceMounts;
+  vms = infra.vms;
   topology = infra.topology;
 
   sanitize =
     name:
     lib.replaceStrings [ "-" "." " " "/" ] [ "_" "_" "_" "_" ] name;
 
-  hostnameConfig = vmServiceMounts.${cfg.hostname} or { serviceMounts = [ ]; logProfiles = [ ]; };
-  assignedServices = map (serviceName: services.${serviceName} // { _serviceKey = serviceName; }) hostnameConfig.serviceMounts;
+  hostnameConfig = vms.${cfg.hostname} or { services = [ ]; logProfiles = [ ]; };
+  assignedServices = map (serviceName: services.${serviceName} // { _serviceKey = serviceName; }) hostnameConfig.services;
   loggedServices = builtins.filter (service: service.logging.enable) assignedServices;
   assignedProfiles = map (profileName: observability.logProfiles.${profileName} // { _profileKey = profileName; }) (hostnameConfig.logProfiles or [ ]);
 
   lowerLokiVm = lib.toLower observability.lokiVM;
-  lokiEndpoint = "http://${lowerLokiVm}.${topology.domain}:3100";
+  lokiEndpoint = "http://${lowerLokiVm}.${topology.domain}:${toString topology.firewallRules.loki_http.port}";
 
   normalizeCondition =
     condition:
@@ -58,45 +58,13 @@ let
       })
       assignedProfiles;
 
-  serviceFileTargets =
-    builtins.concatLists (
-      map
-        (service:
-          lib.imap0
-            (idx: fileTarget: {
-              name = "${service._serviceKey}_file_${toString idx}";
-              service = service._serviceKey;
-              path = fileTarget.path;
-              labels = service.logging.labels // fileTarget.labels;
-            })
-            service.logging.files)
-        loggedServices
-    );
-
-  profileFileTargets =
-    builtins.concatLists (
-      map
-        (profile:
-          lib.imap0
-            (idx: fileTarget: {
-              name = "${profile._profileKey}_file_${toString idx}";
-              service = profile._profileKey;
-              path = fileTarget.path;
-              labels = profile.labels // fileTarget.labels;
-            })
-            profile.files)
-        assignedProfiles
-    );
-
   journalTargets = serviceJournalTargets ++ profileJournalTargets;
-  fileTargets = serviceFileTargets ++ profileFileTargets;
   hasJournalTargets = journalTargets != [ ];
-  hasAnyTargets = journalTargets != [ ] || fileTargets != [ ];
 
   extraLabelKeys =
     lib.unique (
       builtins.concatLists (
-        map (target: builtins.attrNames target.labels) (journalTargets ++ fileTargets)
+        map (target: builtins.attrNames target.labels) journalTargets
       )
     );
 
@@ -171,47 +139,7 @@ let
       )
     );
 
-  fileSources =
-    listToAttrs (
-      map
-        (target:
-          nameValuePair
-            "log_${sanitize target.name}_file"
-            {
-              type = "file";
-              include = [ target.path ];
-              read_from = "beginning";
-            })
-        fileTargets
-    );
-
-  fileTransforms =
-    listToAttrs (
-      builtins.concatLists (
-        map
-          (target:
-            let
-              sourceName = "log_${sanitize target.name}_file";
-              remapName = "log_${sanitize target.name}_file_labels";
-            in
-            [
-              (nameValuePair remapName {
-                type = "remap";
-                inputs = [ sourceName ];
-                source = mkLabelScript {
-                  serviceName = target.service;
-                  sourceType = "file";
-                  labels = target.labels;
-                };
-              })
-            ])
-          fileTargets
-      )
-    );
-
-  sinkInputs =
-    map (target: "log_${sanitize target.name}_journal_labels") journalTargets
-    ++ map (target: "log_${sanitize target.name}_file_labels") fileTargets;
+  sinkInputs = map (target: "log_${sanitize target.name}_journal_labels") journalTargets;
 
   sinkLabels =
     {
@@ -231,21 +159,26 @@ in
     enable = mkEnableOption "Vector agent derived from infra service/log profile declarations";
     hostname = mkOption {
       type = types.str;
-      default = "MAMORU";
-      description = "VM hostname key in my.infra.vmServiceMounts.";
+      default = config.networking.hostName;
+      description = "VM hostname key in my.infra.vms.";
     };
     stateDir = mkOption {
       type = types.str;
       default = "/var/lib/vector";
-      description = "Mounted state directory used by Vector for checkpoints.";
+      description = "Vector checkpoint directory; ephemeral on the current guests.";
     };
   };
 
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion = builtins.hasAttr cfg.hostname vmServiceMounts;
-        message = "my.infra.loggingAgent.hostname '${cfg.hostname}' does not exist in my.infra.vmServiceMounts";
+        assertion = builtins.all (service: service.unit != null
+          || service.logging.journalUnits != [ ] || service.logging.journalMatches != { }) loggedServices;
+        message = "Logged resource-only roles must name explicit journal units or matches.";
+      }
+      {
+        assertion = builtins.hasAttr cfg.hostname vms;
+        message = "my.infra.loggingAgent.hostname '${cfg.hostname}' does not exist in my.infra.vms";
       }
       {
         assertion = observability.lokiVM == "" || builtins.hasAttr observability.lokiVM topology.vms;
@@ -253,15 +186,13 @@ in
       }
     ];
 
-    services.vector = mkIf hasAnyTargets {
+    services.vector = mkIf hasJournalTargets {
       enable = true;
       journaldAccess = hasJournalTargets;
       settings = {
         data_dir = cfg.stateDir;
-        sources =
-          journalSources
-          // fileSources;
-        transforms = journalTransforms // fileTransforms;
+        sources = journalSources;
+        transforms = journalTransforms;
         sinks.loki = {
           type = "loki";
           inputs = sinkInputs;

@@ -63,11 +63,11 @@ in
                     map
                       (src:
                         let
-                          vlanSrc = lib.head topology.vms.${src}.assignedVlans;
+                          vlanSrc = topology.vms.${src}.primaryVlan;
                         in
                         "iifname ${vlanSrc} ip saddr ${topo.getIp src vlanSrc} ip daddr ${topo.getIp topology.gatewayVM vlanSrc} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} ct state new accept"
                       )
-                      firewallRules.${rule}.allowFrom
+                      firewallRules.${rule}.routedFrom
                   )
                   topology.vms.${topology.gatewayVM}.provides
               )
@@ -103,15 +103,15 @@ in
                               (src:
                                 let
                                   intersectedVlan = lib.intersectLists vmCfg.assignedVlans topology.vms.${src}.assignedVlans;
-                                  vlanSrc = if intersectedVlan == [ ] then lib.head topology.vms.${src}.assignedVlans else lib.head intersectedVlan;
-                                  vlanDest = if intersectedVlan == [ ] then lib.head vmCfg.assignedVlans else lib.head intersectedVlan;
+                                  vlanSrc = if intersectedVlan == [ ] then topology.vms.${src}.primaryVlan else lib.head intersectedVlan;
+                                  vlanDest = if intersectedVlan == [ ] then vmCfg.primaryVlan else lib.head intersectedVlan;
                                 in
                                 if intersectedVlan == [ ] then
                                   "iifname ${vlanSrc} oifname ${vlanDest} ip saddr ${topo.getIp src vlanSrc} ip daddr ${topo.getIp name vlanDest} ${firewallRules.${rule}.proto} dport ${toString firewallRules.${rule}.port} ct state new accept"
                                 else
                                   ""
                               )
-                              firewallRules.${rule}.allowFrom
+                              firewallRules.${rule}.routedFrom
                           )
                       )
                       vmCfg.provides
@@ -134,7 +134,7 @@ in
                   (name: vmCfg:
                     map
                       (rule:
-                        "iifname wan oifname ${lib.head vmCfg.assignedVlans} ip daddr ${topo.getIp name (lib.head vmCfg.assignedVlans)} ${natRules.${rule}.proto} dport ${toString natRules.${rule}.port} ct state new accept"
+                        "iifname wan oifname ${vmCfg.primaryVlan} ip daddr ${topo.getIp name (vmCfg.primaryVlan)} ${natRules.${rule}.proto} dport ${toString natRules.${rule}.port} ct state new accept"
                       )
                       vmCfg.portForward
                   )
@@ -149,7 +149,7 @@ in
                   (name: vmCfg:
                     map
                       (rule:
-                        "iifname wan ${natRules.${rule}.proto} dport ${toString natRules.${rule}.externalPort} dnat to ${topo.getIp name (lib.head vmCfg.assignedVlans)}:${toString natRules.${rule}.port}"
+                        "iifname wan ${natRules.${rule}.proto} dport ${toString natRules.${rule}.externalPort} dnat to ${topo.getIp name (vmCfg.primaryVlan)}:${toString natRules.${rule}.port}"
                       )
                       vmCfg.portForward
                   )
@@ -195,8 +195,8 @@ in
               iifname "dmz" oifname "wan" udp dport {53,123} ct state new accept
               iifname "dmz" oifname "wan" tcp dport {53} ct state new accept
               #WIREGUARD egress/ingress
-              iifname "mgmt" oifname "wan" ip daddr ${topology.hostIp} udp dport 51820 ct state new accept
-              iifname "wan" oifname "mgmt" ip daddr ${topology.hostIp} udp dport 51820 ct state new accept
+              iifname "mgmt" oifname "wan" ip daddr ${topology.hostIp} udp dport ${toString natRules.wireguard.port} ct state new accept
+              iifname "wan" oifname "mgmt" ip daddr ${topology.hostIp} udp dport ${toString natRules.wireguard.port} ct state new accept
               ${mgmtRules}
               ${fwRules}
               ${fwRulesExt}
@@ -206,7 +206,7 @@ in
           table ip nat {
             chain prerouting {
               type nat hook prerouting priority dstnat;
-              iifname wan udp dport 51822 dnat to ${topology.hostIp}:51820
+              iifname wan udp dport ${toString natRules.wireguard.externalPort} dnat to ${topology.hostIp}:${toString natRules.wireguard.port}
               ${redirectRules}
               ${natDnats}
             }

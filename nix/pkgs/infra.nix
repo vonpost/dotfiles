@@ -3,7 +3,6 @@
 , jq
 , nix
 , openssh
-, rsync
 , writeShellApplication
 }:
 
@@ -16,7 +15,6 @@ writeShellApplication {
     jq
     nix
     openssh
-    rsync
   ];
 
   text = builtins.readFile ../lib/infra.sh;

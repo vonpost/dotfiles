@@ -7,10 +7,8 @@ let
   br0Mac = "70:88:88:88:6c:e1";
   infra = config.my.infra;
   topology = infra.topology;
-  vlans = topology.vlans;
-  getSubnet = vlan: "10.10.${toString vlans.${vlan}.id}";
-  getIp = name: vlan: "${getSubnet vlan}.${toString topology.vms.${name}.id}";
-  dnsIp = getIp topology.dnsVM "srv";
+  topo = import ../lib/infra-topology.nix { inherit topology; };
+  dnsIp = topo.getDns;
 in
 {
   imports =

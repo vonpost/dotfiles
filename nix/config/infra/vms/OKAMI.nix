@@ -1,10 +1,6 @@
-{ self, config, pkgs, lib, microvm, bleeding, wolf, ... }:
+{ config, pkgs, lib, quadlet-nix, ... }:
 let
   hostname = "OKAMI";
-  topology = config.my.infra.topology;
-  sotoVm = topology.vms.SOTO;
-  sotoPrimaryVlan = lib.head sotoVm.assignedVlans;
-  sotoIp = "10.10.${toString topology.vlans.${sotoPrimaryVlan}.id}.${toString sotoVm.id}";
   wolfImagePackages = pkgs.callPackage ../../../wolf-nix/packages/images.nix { };
   # wolf-native = import ../../../common/wolf.nix {inherit pkgs config lib;};
 
@@ -33,15 +29,13 @@ in
   };
 
   imports = [
-    (import ../../../common/vm-common.nix { hostname = hostname; })
+    quadlet-nix.nixosModules.quadlet
+    ../../../wolf-nix/modules/wolf-service.nix
   ];
 
   ## ─────────────────────────────────────────────
   ## microvm basics
   ## ─────────────────────────────────────────────
-
-  microvm.vcpu = 12;
-  microvm.mem  = 22000;
 
   microvm.devices = [
     { bus = "pci"; path = "0000:09:00.0"; } # GPU
@@ -89,17 +83,6 @@ in
     "net.ipv4.conf.all.forwarding" = 1;
   };
   services.xserver.videoDrivers = ["nvidia"];
-
-  ## ─────────────────────────────────────────────
-  ## Remote transcode target (okuri)
-  ## ─────────────────────────────────────────────
-
-  services.okuri-target = {
-    enable = true;
-    authorizedKeys = [
-      "from=\"${sotoIp}\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAzH2Gt2Xs7mNeSpqNCJy2lwT19XC3OiSBNWBHK6zrzF dcol@TERRA"
-    ];
-  };
 
   ## ─────────────────────────────────────────────
   ## Admin & debugging

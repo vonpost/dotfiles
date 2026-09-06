@@ -1,8 +1,9 @@
-{ ... }:
+{ lib, ... }:
 {
   config.my.infra = {
     services = import ./service-map.nix;
-    vmServiceMounts = import ./vm-config.nix;
+    vms = lib.listToAttrs (map (vm: lib.nameValuePair vm.name
+      (builtins.removeAttrs vm [ "name" "modules" ])) (import ./inventory.nix));
     topology = import ./topology.nix;
     observability = {
       lokiVM = "NIKKI";

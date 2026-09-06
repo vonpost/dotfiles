@@ -3,7 +3,7 @@ let
   inherit (lib) mkEnableOption mkOption mkIf types;
   cfg = config.my.infra.serviceSecrets;
   services = config.my.infra.services;
-  vmServiceMounts = config.my.infra.vmServiceMounts;
+  vms = config.my.infra.vms;
 
   servicesForHost =
     map
@@ -11,7 +11,7 @@ let
         let service = services.${serviceName};
         in service // { _secretUnit = service.unit; }
       )
-      (vmServiceMounts.${cfg.hostname}.serviceMounts or [ ]);
+      (vms.${cfg.hostname}.services or [ ]);
 
   secretEntries =
     lib.concatLists (
@@ -56,16 +56,16 @@ in
     enable = mkEnableOption "microvm credentialFiles + LoadCredential wiring for service secrets";
     hostname = mkOption {
       type = types.str;
-      default = "MAMORU";
-      description = "VM hostname key in my.infra.vmServiceMounts.";
+      default = config.networking.hostName;
+      description = "VM hostname key in my.infra.vms.";
     };
   };
 
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion = builtins.hasAttr cfg.hostname vmServiceMounts;
-        message = "my.infra.serviceSecrets.hostname '${cfg.hostname}' does not exist in my.infra.vmServiceMounts";
+        assertion = builtins.hasAttr cfg.hostname vms;
+        message = "my.infra.serviceSecrets.hostname '${cfg.hostname}' does not exist in my.infra.vms";
       }
     ];
 
