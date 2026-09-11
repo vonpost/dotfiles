@@ -50,7 +50,7 @@ builtins.mapAttrs (_: system:
       mem = c.microvm.mem or null;
       hotplugMem = c.microvm.hotplugMem or null;
       vsockCid = c.microvm.vsock.cid or null;
-      shares = map (s: { inherit (s) source mountPoint tag proto; }) (c.microvm.shares or []);
+      shares = map (s: { inherit (s) source mountPoint tag proto cache; }) (c.microvm.shares or []);
       interfaces = map (i: { inherit (i) type id mac; }) (c.microvm.interfaces or []);
     };
   }

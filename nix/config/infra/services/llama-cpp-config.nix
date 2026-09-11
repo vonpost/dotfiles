@@ -8,9 +8,12 @@ in
   # Bounded GPU window. llama-cpp serves nothing but logDigest, so it is started
   # on a timer and stopped unconditionally rather than left running. The digest
   # starts five minutes after the window opens, which covers model load.
-  gpuWindowOpen = "03:25";
-  gpuWindowStart = "03:30";
-  gpuWindowMaxSec = "25min";
+  gpuWindowOpen = [ "01:25" "04:25" ];
+  gpuWindowStart = [ "01:30" "04:30" ];
+  gpuWindowClose = [ "02:00" "05:00" ];
+  gpuWindowSeconds = 35 * 60;
+  # Normal exit releases the model; this is a fallback for a stuck main process.
+  gpuWindowMaxSec = "35min 5s";
   model = null;
   modelsDir = "/var/lib/llama-cpp/models/";
   extraFlags = [

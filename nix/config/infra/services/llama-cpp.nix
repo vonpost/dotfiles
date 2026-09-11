@@ -56,15 +56,45 @@ in
     # logDigest. So it never auto-starts: a timer opens a window, and
     # RuntimeMaxSec closes it whether or not the digest finished.
     systemd.services.llama-cpp.wantedBy = lib.mkForce [ ];
+    # Requisite refuses starts outside an active window without opening one.
+    # PartOf also stops watchdog-restarted workers when that window closes.
+    systemd.services.llama-cpp.requisite = [ "llama-cpp-window.service" ];
+    systemd.services.llama-cpp.after = [ "llama-cpp-window.service" ];
+    systemd.services.llama-cpp.partOf = [ "llama-cpp-window.service" ];
+    systemd.services.llama-cpp.serviceConfig.TimeoutStopSec = "15s";
 
     systemd.services.llama-cpp-window = {
       description = "Bounded GPU window for llama-cpp";
       serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        ExecStart = "${pkgs.systemd}/bin/systemctl start llama-cpp.service";
-        ExecStop = "${pkgs.systemd}/bin/systemctl stop llama-cpp.service";
+        # RuntimeMaxSec does not bound a oneshot unit. Keep a real main process
+        # alive, and queue server startup only after this unit becomes active.
+        Type = "exec";
+        ExecStart = "${pkgs.coreutils}/bin/sleep ${toString llamaCppCfg.gpuWindowSeconds}";
+        ExecStartPost = "${pkgs.systemd}/bin/systemctl --no-block start llama-cpp.service";
+        ExecStopPost = "${pkgs.systemd}/bin/systemctl --no-block stop llama-cpp.service";
         RuntimeMaxSec = llamaCppCfg.gpuWindowMaxSec;
+        TimeoutStartSec = "30s";
+        TimeoutStopSec = "20s";
+        Restart = "no";
+      };
+    };
+
+    # Absolute close times also cover a delayed opening; the runtime limit is
+    # a second independent backstop. Neither timer catches up after boot.
+    systemd.services.llama-cpp-window-close = {
+      description = "Close the overnight llama-cpp GPU window";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${pkgs.systemd}/bin/systemctl stop llama-cpp-window.service llama-cpp.service";
+        TimeoutStartSec = "45s";
+      };
+    };
+    systemd.timers.llama-cpp-window-close = {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = llamaCppCfg.gpuWindowClose;
+        Persistent = false;
+        AccuracySec = "1s";
       };
     };
 

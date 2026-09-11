@@ -92,6 +92,15 @@ let
         type = types.bool;
         default = false;
       };
+      uncachedCacheDirectories = mkOption {
+        type = types.listOf (types.strMatching "[a-zA-Z0-9_-]+");
+        default = [ ];
+        description = ''
+          Immediate cache subdirectories exported through separate uncached
+          VirtioFS shares. Use only for files that another VM modifies while
+          this VM reads them; the rest of the service state keeps its cache.
+        '';
+      };
       hasDownloadsDir = mkOption {
         type = types.bool;
         default = false;
@@ -345,6 +354,11 @@ in
         assertion = builtins.all (service: service.unit != null || service.secrets == { })
           (builtins.attrValues infraServices);
         message = "Resource-only roles cannot receive service credentials without a systemd unit.";
+      }
+      {
+        assertion = builtins.all (service: service.uncachedCacheDirectories == [ ]
+          || (service.managedState && service.hasCacheDir)) (builtins.attrValues infraServices);
+        message = "Uncached cache directories require managedState and hasCacheDir.";
       }
       {
         assertion = missingMountedServices == [ ];

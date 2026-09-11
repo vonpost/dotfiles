@@ -28,7 +28,7 @@
           refId = "A";
         }
       ];
-      title = "Daily Digests";
+      title = "Overnight Digests and Investigation Follow-ups";
       type = "logs";
     }
     {

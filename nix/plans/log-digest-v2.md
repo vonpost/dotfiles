@@ -1,5 +1,8 @@
 # logDigest v2 — grounded evidence, real tool-calling, bounded GPU window
 
+> The September 2026 [overnight investigation rework](log-digest-overnight.md)
+> supersedes the schedule, budgets, sandbox and memory behavior below.
+
 > **Status: implemented and verified end-to-end against the live fleet on 2026-07-25.**
 > See "What the build changed about this plan" at the end — several conclusions here
 > were contradicted by measurement and the code follows the measurements, not this doc.

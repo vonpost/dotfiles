@@ -1,5 +1,17 @@
 # Infrastructure checks
 
+Log-digest behavior and safety tests run offline, without contacting the fleet:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 tests/infra/test_log_digest.py -v
+```
+
+They are also exposed as `checks.x86_64-linux.infra-log-digest`. The observability
+suite includes the overnight schedules, GPU window dependencies and all three
+agent sandbox contracts. Python cases cover malformed model plans, backend syntax
+errors and correction, CPU-only execution, trigger transitions, quotas and durable
+evidence. See [overnight operation](../../plans/log-digest-overnight.md).
+
 These checks evaluate the real NixOS modules without activating a system. Use a
 `path:` flake reference for local checks so unrelated dotfiles Git submodules
 are not fetched. Include untracked new Nix files when reviewing the change;
@@ -15,12 +27,12 @@ nix --extra-experimental-features 'nix-command flakes' eval \
   --option allow-import-from-derivation false --option builders '' \
   --json "path:$(pwd)#checks.x86_64-linux" \
   --apply 'checks: builtins.mapAttrs (_: check: check.drvPath) (builtins.intersectAttrs {
-    infra-state=null; infra-inventory=null; infra-roles=null;
+    infra-state=null; infra-cache-shares=null; infra-inventory=null; infra-roles=null;
     infra-observability=null; infra-network=null;
   } checks)'
 ```
 
-Evaluation forces 40 contracts across five suites; their returned derivations
+Evaluation forces the contracts across six suites; their returned derivations
 only write success markers. The nine state checks cover share count/order,
 host/guest bind agreement, service assignment and state-path overrides,
 independent UID/GID overrides, tmpfiles ownership, stateless guests, the legacy
@@ -31,6 +43,27 @@ roles and credential assignment; dashboards and journal collection; primary
 network ordering, endpoint overrides and generated network policy.
 
 The fixtures extend actual configurations. They are never deployment targets.
+
+## Transcode share regression
+
+The ten `infra-cache-shares` contracts check the dedicated uncached exports,
+cached database storage, mount ordering, host provisioning, service/path/owner
+overrides, and moving the Jellyfin role to another VM.
+
+The runtime check boots a disposable VM with the real SOTO mount definitions
+and four independent VirtioFS connections to scratch data. It first reproduces
+stale zero-byte metadata with the original state share's cache policy, then verifies
+immediate visibility through the two uncached connections, SQLite WAL on the
+cached database mount, and real FFmpeg fMP4 initialization at segment readiness.
+
+```sh
+nix --extra-experimental-features 'nix-command flakes' build \
+  --no-link --no-write-lock-file --option builders '' --max-jobs 2 --cores 2 \
+  "path:$(pwd)#checks.x86_64-linux.infra-cache-shares-runtime"
+```
+
+This uses local resources and supports QEMU TCG when KVM is unavailable. It does
+not contact MOTHER or test the production GPU, HTTP server, or affected browser.
 
 ## Deployment and packet tests
 

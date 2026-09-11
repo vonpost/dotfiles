@@ -43,6 +43,9 @@ in
             ++ optional
               service.hasCacheDir
               "d ${state.paths.base}/${state.paths.cache}/${service.name} 0755 ${toString service.uid} ${toString service.gid} -"
+            ++ map (share:
+              "d ${share.source} 0755 ${toString service.uid} ${toString service.gid} -"
+            ) (layout.uncachedCacheShares service)
             ++ optional
               service.hasDownloadsDir
               "d ${state.paths.downloadsRoot}/${service.name} 2770 ${toString service.uid} ${toString state.gids.downloads} -"
@@ -52,6 +55,17 @@ in
           )
           statefulServices
       ));
+
+    # Direct cache exports must exist on the backing filesystem before the
+    # guest runner starts its daemons. This is independent of the state bind
+    # mounts, which continue to be owned by microvm@<name> as before.
+    systemd.services = lib.mapAttrs' (name: vm:
+      lib.nameValuePair "microvm-virtiofsd@${name}" {
+        after = [ "systemd-tmpfiles-setup.service" ];
+        unitConfig.RequiresMountsFor = map (share: share.source) vm.cacheShares;
+      }
+    ) (lib.filterAttrs (_: vm: vm.cacheShares != [ ])
+      (lib.mapAttrs (name: _: layout.forVm name) vms));
 
     systemd.mounts =
       flatten (

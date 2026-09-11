@@ -74,6 +74,7 @@ let
       in builtins.length shares == (if stateful then 1 else 0)
         && map (share: share.tag) c.microvm.shares ==
           [ "ro-store" ] ++ lib.optional stateful "state"
+            ++ lib.optional (builtins.elem name [ "SOTO" "OKAMI" ]) "jellyfin-transcodes"
         && builtins.all (share: share.proto == "virtiofs"
           && share.mountPoint == "/state"
           && share.source == "/run/microvm-staging/${name}") shares

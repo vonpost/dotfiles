@@ -36,6 +36,7 @@
       uid = 2104;
       mediaGroup = true;
       hasCacheDir = true;
+      uncachedCacheDirectories = [ "transcodes" ];
       logging.enable = true;
       secrets = {
         jellyfin_transcode_ssh_key = {
@@ -51,6 +52,7 @@
       unit = null;
       mediaGroup = true;
       hasCacheDir = true;
+      uncachedCacheDirectories = [ "transcodes" ];
     };
     seerr = { uid = 2105; mediaGroup = true; logging.enable = true; };
     sabnzbd = {
@@ -88,7 +90,7 @@
       uid = 2110;
       logging = {
         enable = true;
-        journalUnits = [ "logDigest.service" "logDigest-collect.service" ];
+        journalUnits = [ "logDigest.service" "logDigest-collect.service" "logDigest-observe.service" ];
       };
     };
     acme = { uid = 2111; unit = "acme-setup"; logging.enable = true; };

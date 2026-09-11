@@ -124,6 +124,9 @@
             '');
         in {
           infra-state = infraCheck "state";
+          infra-cache-shares = infraCheck "cache-shares";
+          infra-cache-shares-runtime = pkgs.testers.runNixOSTest
+            (import ./tests/infra/cache-shares-runtime.nix { inherit (self) nixosConfigurations; });
           infra-inventory = infraCheck "inventory";
           infra-roles = infraCheck "roles";
           infra-observability = infraCheck "observability";
@@ -133,6 +136,14 @@
             INFRA_TEST_SCRIPT = ./lib/infra.sh;
           } ''
             python ${./tests/infra/test_deploy.py}
+            touch "$out"
+          '';
+          infra-log-digest = pkgs.runCommand "infra-log-digest-check" {
+            nativeBuildInputs = [ pkgs.python3 ];
+            LOG_DIGEST_AGENT = ./lib/log-digest-agent.py;
+          } ''
+            export PYTHONDONTWRITEBYTECODE=1
+            python ${./tests/infra/test_log_digest.py} -v
             touch "$out"
           '';
           okuri-unit = pkgs.okuri;

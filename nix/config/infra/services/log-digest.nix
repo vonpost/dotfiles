@@ -3,6 +3,7 @@ let
   svc = import ./lib.nix { inherit config lib; };
   llamaCppCfg = import ./llama-cpp-config.nix;
   topology = config.my.infra.topology;
+  topo = import ../../../lib/infra-topology.nix { inherit topology; };
   vms = config.my.infra.vms;
   llmVms =
     builtins.filter
@@ -11,9 +12,9 @@ let
   llmVm =
     if llmVms == [ ] then null else lib.head llmVms;
   llmUrl =
-    if llmVm == null || topology.domain == ""
+    if llmVm == null
     then "http://127.0.0.1"
-    else "http://${lib.toLower llmVm}.${topology.domain}";
+    else "http://${topo.getPrimaryIp llmVm}";
 in
 {
   imports = [
@@ -33,16 +34,22 @@ in
       url = llmUrl;
       model = "Qwen3.6-35B-A3B-UD-Q4_K_XL";
       port = svc.getPort "llama_server";
+      lokiUrl = "http://${topo.getPrimaryIp config.my.infra.observability.lokiVM}:${toString (svc.getPort "loki_http")}";
+      allowedIPAddresses = [ "127.0.0.1/32" "::1/128"
+        (topo.getPrimaryIp config.my.infra.observability.lokiVM)
+      ] ++ lib.optional (llmVm != null) (topo.getPrimaryIp llmVm);
+      observeAllowedIPAddresses = [ "127.0.0.1/32" "::1/128"
+        (topo.getPrimaryIp config.my.infra.observability.lokiVM)
+      ];
 
       # Runs five minutes after the GPU window opens, so the model is resident by
       # the time the first request lands. See llama-cpp.nix for the window itself.
       reasonOnCalendar = llamaCppCfg.gpuWindowStart;
 
-      # Measured on this hardware: prefill ~220 tok/s, decode ~15-30 tok/s. The
-      # old design burned ~380s per run, over half of it on planner output that
-      # was then discarded. This budget is deliberately below that.
-      gpuBudgetSeconds = 240;
-      synthesisReserveSeconds = 90;
+      # Two sessions share a durable notebook. At most 40 minutes of target
+      # compute per night, split three hours apart; unused allowance is not spent.
+      gpuBudgetSeconds = 1200;
+      synthesisReserveSeconds = 360;
 
       # Internet background radiation and Loki's own housekeeping. Both are high
       # volume and carry no operational signal, so they are counted but never

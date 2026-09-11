@@ -40,7 +40,7 @@ let
           UMask = lib.mkIf service.mediaGroup (lib.mkForce "0027");
         };
         unitConfig.RequiresMountsFor = map (mount: mount.mountPoint)
-          (layout.serviceMounts service);
+          (layout.serviceMounts service ++ layout.uncachedCacheShares service);
       };
     };
 
@@ -62,15 +62,20 @@ in
     users.users = lib.mkMerge (map (service: service.users.users) serviceConfigs);
     users.groups = lib.mkMerge (map (service: service.users.groups) serviceConfigs);
     systemd.services = lib.mkMerge (map (service: service.systemd.services) serviceConfigs);
-    fileSystems = lib.mkMerge (map (service: service.fileSystems) serviceConfigs);
-    # One state share per VM is intentional: many concurrent VirtioFS
-    # shares previously caused failures on MOTHER. Keep host staging and
-    # guest bind mounts; do not replace them with per-service shares.
-    microvm.shares = lib.mkAfter (lib.optional (vm.services != [ ]) {
+    fileSystems = lib.mkMerge ((map (service: service.fileSystems) serviceConfigs) ++ [
+      (builtins.listToAttrs (map (share: lib.nameValuePair share.mountPoint {
+        # Mount over the cache subdirectory only after its parent bind mount.
+        depends = [ (builtins.dirOf share.mountPoint) ];
+      }) vm.cacheShares))
+    ]);
+    # Keep one cached state share: many per-service shares previously caused
+    # host failures. Only explicitly declared, concurrently modified cache
+    # subdirectories get an extra share; databases retain mmap-capable storage.
+    microvm.shares = lib.mkAfter ((lib.optional (vm.services != [ ]) {
       proto = "virtiofs";
       tag = "state";
       source = vm.stagePath;
       mountPoint = "/state";
-    });
+    }) ++ vm.cacheShares);
   };
 }

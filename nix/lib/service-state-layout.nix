@@ -1,5 +1,5 @@
-# The host and guests must agree on the tree exported through the single state
-# share. Keep the relative staging path separate from the application's path.
+# The host and guests must agree on the state tree and its few uncached cache
+# exports. Keep the relative staging path separate from the application's path.
 { lib, infra }:
 let
   state = infra.state;
@@ -21,6 +21,14 @@ let
 
   sharedMount = kind:
     mkMount state.paths.${kind} state.paths."${kind}Root" "/data/${kind}";
+
+  uncachedCacheShares = service: map (directory: {
+    tag = "${service.name}-${directory}";
+    source = "${state.paths.base}/${state.paths.cache}/${service.name}/${directory}";
+    mountPoint = "/var/cache/${service.bindTarget}/${directory}";
+    proto = "virtiofs";
+    cache = "never";
+  }) service.uncachedCacheDirectories;
 in
 {
   forVm = hostname:
@@ -35,7 +43,8 @@ in
       inherit services;
       stagePath = "${state.stageRoot}/${hostname}";
       mounts = lib.concatMap serviceMounts services ++ map sharedMount sharedKinds;
+      cacheShares = lib.unique (lib.concatMap uncachedCacheShares services);
     };
 
-  inherit serviceMounts sharedMount;
+  inherit serviceMounts sharedMount uncachedCacheShares;
 }

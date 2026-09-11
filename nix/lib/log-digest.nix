@@ -19,7 +19,7 @@ let
   # from the same two failing across VMs.
   vmTopology = lib.mapAttrs (_vm: vmCfg: vmCfg.services) config.my.infra.vms;
 
-  configFile = pkgs.writeText "log-digest-config.json" (builtins.toJSON {
+  configData = {
     inherit digestVm;
     topology = vmTopology;
 
@@ -43,6 +43,11 @@ let
     synthesisMaxTokens = cfg.synthesisMaxTokens;
     synthesisTemperature = cfg.synthesisTemperature;
     thinkingForSynthesis = cfg.thinkingForSynthesis;
+    inherit (cfg) sessionWallSeconds queryMaxLookbackHours queryMaxPoints
+      maxFollowups followupsPerSession followupMaxAttempts followupMaxAgeDays;
+    inherit (cfg) observeEnable observeMaxPlans observeMaxQueriesPerRun
+      observeDailyQueryBudget observeDailyCaptureBudget observeWallSeconds
+      observeKeepDays observeMaxStorageMiB observeStandardWatchers;
 
     baselineDays = cfg.baselineDays;
     collectIntervalSeconds = cfg.collectIntervalSeconds;
@@ -55,7 +60,12 @@ let
     packMaxAgeHours = cfg.packMaxAgeHours;
     keepDigestDays = cfg.keepDigestDays;
     alwaysBuildPack = false;
-  });
+  };
+  configFile = pkgs.writeText "log-digest-config.json" (builtins.toJSON configData);
+  # The daytime executable receives no inference endpoint configuration.
+  observerConfig = pkgs.writeText "log-digest-observer.json" (builtins.toJSON
+    (builtins.removeAttrs configData [ "url" "port" "endpoint" "model"
+      "temperature" "llamaRequestTimeoutSeconds" ]));
 
   program = pkgs.writeShellApplication {
     name = "log-digest";
@@ -63,6 +73,41 @@ let
     text = ''
       exec ${pkgs.python3}/bin/python ${./log-digest-agent.py} --config ${configFile} "$@"
     '';
+  };
+
+  sandbox = {
+    User = "logDigest";
+    Group = "logDigest";
+    UMask = "0077";
+    NoNewPrivileges = true;
+    CapabilityBoundingSet = "";
+    ProtectSystem = "strict";
+    ProtectHome = true;
+    ReadWritePaths = [ cfg.stateDir ];
+    PrivateTmp = true;
+    PrivateDevices = true;
+    ProtectKernelTunables = true;
+    ProtectKernelModules = true;
+    ProtectKernelLogs = true;
+    ProtectControlGroups = true;
+    ProtectClock = true;
+    ProtectHostname = true;
+    ProtectProc = "invisible";
+    RestrictSUIDSGID = true;
+    RestrictRealtime = true;
+    RestrictNamespaces = true;
+    LockPersonality = true;
+    MemoryDenyWriteExecute = true;
+    # No Unix sockets: in particular no systemd, Docker, or Nix daemon control.
+    RestrictAddressFamilies = [ "AF_INET" "AF_INET6" ];
+    SystemCallFilter = [ "@system-service" "~@privileged" "~@resources" ];
+    SystemCallArchitectures = "native";
+    IPAddressDeny = "any";
+    IPAddressAllow = cfg.allowedIPAddresses;
+    TasksMax = 16;
+    MemoryMax = "512M";
+    CPUQuota = "50%";
+    TimeoutStopSec = "10s";
   };
 in
 {
@@ -93,9 +138,60 @@ in
     };
 
     queryTimeoutSeconds = lib.mkOption {
-      type = lib.types.int;
-      default = 90;
+      type = lib.types.ints.positive;
+      default = 30;
       description = "HTTP timeout for Loki and Prometheus queries.";
+    };
+
+    observeEnable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Execute typed read-only observation plans all day without model inference.";
+    };
+    observeAllowedIPAddresses = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "127.0.0.1/32" "::1/128" ];
+      description = "Observer network allowlist: only Loki and Prometheus addresses, never the inference server.";
+    };
+    observeStandardWatchers = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Always watch failed systemd units and unavailable Prometheus targets.";
+    };
+    observeMaxPlans = lib.mkOption {
+      type = lib.types.ints.between 1 20;
+      default = 20;
+      description = "Maximum durable model-created observation plans.";
+    };
+    observeMaxQueriesPerRun = lib.mkOption {
+      type = lib.types.ints.between 1 32;
+      default = 16;
+      description = "Maximum API reads per five-minute observer tick.";
+    };
+    observeDailyQueryBudget = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 2000;
+      description = "Maximum observer API reads per UTC day, including failures.";
+    };
+    observeDailyCaptureBudget = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 96;
+      description = "Maximum observation snapshots per UTC day.";
+    };
+    observeWallSeconds = lib.mkOption {
+      type = lib.types.ints.between 10 120;
+      default = 120;
+      description = "Observer execution deadline; the service also has a three-minute hard timeout.";
+    };
+    observeKeepDays = lib.mkOption {
+      type = lib.types.ints.between 1 30;
+      default = 7;
+      description = "Maximum age of observation snapshots.";
+    };
+    observeMaxStorageMiB = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 128;
+      description = "Snapshot storage cap after each tick; also limited to 512 snapshots.";
     };
 
     url = lib.mkOption {
@@ -137,26 +233,21 @@ in
     # -- GPU budget ------------------------------------------------------
 
     gpuBudgetSeconds = lib.mkOption {
-      type = lib.types.int;
-      default = 900;
+      type = lib.types.ints.positive;
+      default = 1200;
       description = ''
-        Total GPU compute budget for one digest run, in seconds.
+        Target GPU compute allowance per session, in seconds.
 
-        Enforced against the prompt_ms and predicted_ms that llama-server reports
-        per response, so it measures actual compute rather than wall clock. Time
-        spent waiting on Loki does not count against it, and prefill skipped
-        because the KV cache already held the prefix does not either.
-
-        Sized to fill the GPU window rather than to be as small as possible: the
-        window is a fixed daily cost once opened, so leaving two thirds of it
-        idle buys nothing. Must stay below reasonRuntimeMaxSec with room for
-        collection and Loki round trips.
+        Accounts for prompt_ms and predicted_ms after every response, with
+        conservative token/timeout admission for each request including retries.
+        Actual compute is known only after a request completes, so the hard
+        ceiling is the separate service timeout and GPU window.
       '';
     };
 
     synthesisReserveSeconds = lib.mkOption {
-      type = lib.types.int;
-      default = 300;
+      type = lib.types.ints.positive;
+      default = 360;
       description = ''
         Portion of gpuBudgetSeconds held back for the final synthesis call, so a
         truncated investigation still produces a digest rather than nothing.
@@ -167,25 +258,23 @@ in
     };
 
     maxToolCalls = lib.mkOption {
-      type = lib.types.int;
-      default = 20;
+      type = lib.types.ints.positive;
+      default = 48;
       description = ''
-        Backstop on tool calls per run. The GPU budget is the real limit.
-
-        Kept low deliberately: given a large allowance the model keeps querying
-        past the point of diminishing returns instead of concluding.
+        Strict maximum per session, including notebook operations and failed
+        calls. Parallel calls emitted by the model cannot bypass this limit.
       '';
     };
 
     toolResultMaxChars = lib.mkOption {
       type = lib.types.int;
-      default = 2400;
+      default = 4000;
       description = "Cap on a single tool result. Truncation is reported to the model so it can narrow instead of guessing.";
     };
 
     investigatorMaxTokens = lib.mkOption {
       type = lib.types.int;
-      default = 900;
+      default = 1400;
       description = ''
         Token cap per investigation turn. Kept modest because a tool call is only
         60-100 tokens and decode is the expensive axis, roughly 20 tok/s against
@@ -234,6 +323,54 @@ in
     };
 
     # -- collection ------------------------------------------------------
+
+    sessionWallSeconds = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 1500;
+      description = "Reasoning wall-clock allowance after pack preparation; HTTP calls are capped to time remaining.";
+    };
+
+    allowedIPAddresses = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "127.0.0.1/32" "::1/128" ];
+      description = "systemd network allowlist: only observability/model servers and DNS if names are used. Prefer literal IP endpoints.";
+    };
+
+    queryMaxLookbackHours = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 168;
+      description = "Maximum lookback for investigation queries; matches seven-day raw data retention.";
+    };
+
+    queryMaxPoints = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 169;
+      description = "Maximum evaluation timestamps per range query, with a minimum 60-second step.";
+    };
+
+    maxFollowups = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 24;
+      description = "Maximum durable investigation tasks. Only resolved tasks can be evicted when full.";
+    };
+
+    followupsPerSession = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 6;
+      description = "Number of due tasks highlighted per session, ordered by priority then oldest check.";
+    };
+
+    followupMaxAttempts = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 6;
+      description = "Revisits before an unresolved task is marked needs_human; at most one attempt counted per session.";
+    };
+
+    followupMaxAgeDays = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 14;
+      description = "Age at which an open task requires human review instead of automatic investigation.";
+    };
 
     baselineDays = lib.mkOption {
       type = lib.types.int;
@@ -316,8 +453,8 @@ in
     };
 
     reasonOnCalendar = lib.mkOption {
-      type = lib.types.str;
-      default = "03:30";
+      type = lib.types.either lib.types.str (lib.types.listOf lib.types.str);
+      default = [ "01:30" "04:30" ];
       description = ''
         systemd OnCalendar for the reasoning run. Local time, so it tracks the host
         timezone across DST. Must fall inside the llama-cpp GPU window.
@@ -326,12 +463,23 @@ in
 
     reasonRuntimeMaxSec = lib.mkOption {
       type = lib.types.str;
-      default = "18min";
-      description = "Hard ceiling on the reasoning run, so it can never outlive the GPU window.";
+      default = "28min";
+      description = "Hard wall-clock ceiling including pack preparation; applied as TimeoutStartSec for the oneshot service.";
     };
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.synthesisReserveSeconds < cfg.gpuBudgetSeconds
+          && cfg.gpuBudgetSeconds < cfg.sessionWallSeconds;
+        message = "logDigest requires synthesisReserveSeconds < gpuBudgetSeconds < sessionWallSeconds.";
+      }
+      {
+        assertion = cfg.followupsPerSession <= cfg.maxFollowups;
+        message = "logDigest followupsPerSession must not exceed maxFollowups.";
+      }
+    ];
     users.groups.logDigest.gid = lib.mkDefault serviceDef.uid;
     users.users.logDigest = {
       uid = lib.mkDefault serviceDef.uid;
@@ -341,20 +489,46 @@ in
 
     systemd.tmpfiles.rules = [
       "d ${cfg.stateDir} 0750 logDigest logDigest -"
+      "d ${cfg.stateDir}/observations 0750 logDigest logDigest -"
     ];
+
+    systemd.services.logDigest-observe = lib.mkIf cfg.observeEnable {
+      description = "logDigest observation plans (CPU only, no inference)";
+      unitConfig.RequiresMountsFor = [ cfg.stateDir ];
+      serviceConfig = sandbox // {
+        Type = "oneshot";
+        ExecStart = "${pkgs.python3}/bin/python ${./log-digest-agent.py} --config ${observerConfig} observe";
+        ReadWritePaths = [ "${cfg.stateDir}/observations" ];
+        IPAddressAllow = cfg.observeAllowedIPAddresses;
+        CPUQuota = "25%";
+        Nice = 10;
+        TimeoutStartSec = "3min";
+        Restart = "no";
+      };
+    };
+
+    systemd.timers.logDigest-observe = lib.mkIf cfg.observeEnable {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = "*-*-* *:00/5:00";
+        Persistent = false;
+        AccuracySec = "1s";
+        RandomizedDelaySec = "20s";
+      };
+    };
 
     # Phase A: no GPU. Builds the baseline and signature catalog that make
     # "new", "escalating" and "went silent" statements factual.
     systemd.services.logDigest-collect = {
       description = "logDigest collector (no GPU)";
       unitConfig.RequiresMountsFor = [ cfg.stateDir ];
-      serviceConfig = {
+      serviceConfig = sandbox // {
         Type = "oneshot";
         User = "logDigest";
         Group = "logDigest";
         ExecStart = "${program}/bin/log-digest collect";
         Restart = "no";
-        RuntimeMaxSec = "10min";
+        TimeoutStartSec = "10min";
       };
     };
 
@@ -367,22 +541,22 @@ in
       };
     };
 
-    # Phase B: the GPU window. A fresh collection plus evidence pack runs first,
-    # so the model always reasons over data minutes old rather than hours.
+    # Phase B: a fresh pack uses the hourly catalog plus current API readings.
+    # Do not collect another overlapping hour: that inflates catalog/baseline
+    # counts twice every night. The agent can query the latest logs directly.
     systemd.services.logDigest = {
       description = "logDigest reasoning run (GPU window)";
       unitConfig.RequiresMountsFor = [ cfg.stateDir ];
-      serviceConfig = {
+      serviceConfig = sandbox // {
         Type = "oneshot";
         User = "logDigest";
         Group = "logDigest";
-        ExecStartPre = "${program}/bin/log-digest collect --build-pack";
-        ExecStart = "${program}/bin/log-digest reason";
+        ExecStart = "${program}/bin/log-digest reason --refresh";
         # Deliberately no restart. A retry loop against a GPU that is only
         # available inside a fixed window either wastes the window or fires
-        # outside it. If a run fails, the next day's run is the retry.
+        # outside it. If a run fails, the next scheduled session is the retry.
         Restart = "no";
-        RuntimeMaxSec = cfg.reasonRuntimeMaxSec;
+        TimeoutStartSec = cfg.reasonRuntimeMaxSec;
       };
     };
 
