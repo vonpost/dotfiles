@@ -167,8 +167,8 @@ proof against kernel/API bugs.
 
 ## Verification and rollout
 
-Run `PYTHONDONTWRITEBYTECODE=1 python3 tests/infra/test_log_digest.py -v` for offline
-behavior tests. The suite is also `checks.x86_64-linux.infra-log-digest`.
+Run `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/infra -p 'test_log_digest*.py' -v`
+for all offline behavior tests. The suite is also `checks.x86_64-linux.infra-log-digest`.
 Observability contracts cover schedules, catch-up behavior, timeouts, server window
 dependencies and all three sandboxes. See [test instructions](../tests/infra/README.md).
 
@@ -269,3 +269,165 @@ when it first uses the new tools.
 NIKKI's rollback timer is disarmed after health checks, with the previous runner
 retained. OKAMI and MOTHER were not redeployed for the daytime worker. Final
 rollout evidence is `/tmp/log-digest-observer-{deploy,health,final-rollout,deployed-unit}.log`.
+
+## Report quality revision — 2026-10-01
+
+Read-only review of eight recent NIKKI traces found repeated broad 24h queries,
+duplicate/stale notebook questions, invalid regex escaping, rejected observation
+plans and one failed synthesis. The latest pack also classified healthy FFmpeg
+command announcements as incidents because their arguments contained `-loglevel
+warning`, `-loglevel error`, or alarming media filenames.
+
+The revised collector ignores those command arguments when classifying the event,
+including entries already in the catalog. It preserves collection gaps, requires
+material count differences as well as z-scores, and distinguishes recent boots,
+historical failed units and current observations. Missing metrics do not establish
+recovery. Volume comparisons exclude generated digests.
+
+The investigator now sees bounded recent report history and a compact notebook,
+chooses up to three useful questions, compares timing and competing explanations,
+and checks actual downstream consequences. Log tools and observation plans accept
+`contains` and `regex` arguments, with quoting performed by the runner. Log samples
+are marked as samples and their Loki timestamps explicitly marked UTC. Bare model
+prose without citations cannot become a confirmed note.
+
+Validated reports carry stable issue IDs and evidence anchors. Unchanged issues
+that were checked again appear as short ongoing items; verified recovery or relapse
+surfaces as a change. Prior report references never become current evidence. Task
+identity cannot be repurposed; duplicate questions in the same scope reuse the task,
+while conflicting hosts/services stay separate and ambiguous scope is rejected.
+Unchanged blockers no longer reopen automatically. Legacy duplicate records remain
+on disk for history and still count toward notebook storage capacity.
+
+The runner derives urgency from validated findings, rather than trusting the
+model's report state. Warning requires original impact evidence; critical also
+requires a distinct current check, ongoing outage/data loss and high confidence.
+Recovery requires positive recent evidence. Exporter `up`, counts, catalog novelty,
+resource usage, empty results and incomplete queries cannot satisfy those impact
+requirements. These are evidence prerequisites, not proof of the prose's causal
+interpretation. Current status and material changes are displayed explicitly.
+Default synthesis uses no thinking and temperature 0.2; malformed-output retries
+request one concise finding. Traces retain the original synthesis proposal for
+auditing any changes made by validation.
+
+Observer captures now detect newly affected and individually cleared targets during
+an existing cooldown, prioritize new targets within the capture limit, and retry
+partial captures after backoff. Exhausted plans are visibly paused instead of
+silently appearing active. Existing query, capture and GPU budgets remain in force.
+
+Validation: all 121 Python regression tests and Nix observability/check derivation
+evaluation passed. The initial packaged check was mistakenly invoked with `--offline`,
+disabling binary-cache substitution and attempting to build the compiler bootstrap
+chain. A TinyCC source download returned an HTML anti-bot page, which Nix correctly
+rejected. Removing `--offline` resolves the build detour without any package, pin or
+checksum changes; final packaged validation is recorded below.
+A read-only run of the candidate against the same live
+23:30 UTC evidence window reduced new signatures from 11 to 4, escalating signatures
+from 12 to 5, recurring candidates from 42 to 40, and volume anomalies from 2 to 1,
+with no collection warnings. The safe regex path also succeeded against live Loki.
+
+At this validation stage the revision had not been deployed or tested with live model
+inference; the subsequent deployment is recorded below. Review the
+next scheduled model traces after deployment for investigation depth, issue matching,
+severity calibration and concise reporting; historical replay cannot establish model
+quality. Local diagnostic artifacts are under `/tmp/logdigest-review/`.
+
+## Measured investigations — 2026-10-01
+
+The next revision adds two higher-level investigation tools. `compare_logs` performs
+up to five bounded reads in one model turn: matching counts in adjacent windows,
+total service log counts in those same windows, and a small original-message sample.
+It reports exact UTC boundaries, count/rate changes and each match count's share of
+overall log volume. That share is not a request failure rate. Missing counts, unknown
+ingestion coverage and zero denominators remain explicit, and zero matches never
+establish recovery. Each child query retains its own evidence reference, consumes
+the ordinary query budget and respects the synthesis deadline. Identical successful
+reads within the fixed-time session can be reused.
+
+`test_hypothesis` asks for competing explanations, a specific predicted observation
+and an expected numerical predicate before executing an instant metric or log count.
+The runner saves the prediction first and calculates whether the measurement matched,
+did not match, or was inconclusive. A numerical match does not certify the proposed
+cause. Missing, ambiguous, truncated and failed reads cannot become a successful test.
+Predictions attached to an already-read query are marked retrospective. Tests use
+the same typed read-only capabilities as observation plans, without new endpoints,
+credentials or model/GPU budget.
+
+`investigations.json` retains up to 16 cases and six tests per case. Scope and competing
+explanations are immutable within a case; continuing it requires current evidence.
+Pending writes survive interruption, completed records are pruned first, and malformed
+history is rejected without resetting it. The prompt includes a bounded historical
+view, never current evidence. Saved query limits let older results remain readable
+after policy tightening; every new read must still satisfy the current policy.
+
+Reports contain a runner-generated **What we checked** section independent of model
+prose. It preserves contradictory/inconclusive results, names actual query times and
+log windows, and retains useful measurements even when synthesis fails. Failed runs
+still report failure. Structured reports and traces include test outcomes, prospective
+test counts, comparison counts and query errors, so future runs can be reviewed for
+actual investigative work rather than tool-call volume.
+
+Live read-only replay exposed a further grounding bug: a `429` filter matched digits
+in journald's `__REALTIME_TIMESTAMP`. For UCHI/sonarr in the six hours ending
+2026-09-30 23:30 UTC, a raw-envelope filter found 81 lines, while message-only filtering
+found zero; the preceding six hours contained four matching messages. Structured
+`contains`/`regex` filters now target `MESSAGE`, `message` or `msg`, with raw-text
+fallback, and preserve the original envelope for samples. Explicit LogQL pipelines
+remain available for deliberate metadata queries.
+
+Pre-deployment live validation used GET-only historical queries
+and in-memory case history, with no model inference or publication. Offline tests
+cover durable writes and failure handling; actual model adoption and report quality
+still need assessment from scheduled traces after rollout.
+
+Validation: all 193 Python tests pass. The exact candidate completed eight historical
+Loki/Prometheus reads with zero query errors, including message-only counts, original
+samples and plain-text fallback. The Sonarr failed-state metric was zero at 23:30 UTC,
+contradicting the declared prediction that its systemd unit remained failed; the
+runner recorded that contradiction without promoting it to proof of recovery.
+Both packaged checks now build successfully; the digest check passes all 193 tests
+in the Nix sandbox. An online
+build plan needed only six cached paths (1.3 MiB download) and the test derivation;
+the equivalent offline plan attempted 821 derivations. Binary-cache access resolves
+the earlier failure; the source archive and its expected hash need no local change.
+Replay and test artifacts are in `/tmp/logdigest-review/next-live-replay.json` and
+`/tmp/logdigest-review/next-tests.log`; packaged results are in
+`/tmp/logdigest-review/packaged-check.log` and `packaged-checks-final.log`.
+
+## Quality revision deployment — 2026-10-01
+
+Deployed to NIKKI and verified at 03:03 CEST. The release was staged from its
+previously deployed immutable source, applying only the logDigest implementation,
+module defaults, tests and accompanying notes. Unrelated workspace networking and
+infrastructure edits were excluded; package pins were unchanged.
+
+- Source: `/nix/store/mf5mcvp2d6xfrbvcrczcpiqgf49qza46-source`.
+- NIKKI runner: `/nix/store/rvxnzc5jqmppi58krk4v4vzm1pmzswgh-microvm-qemu-NIKKI`.
+- System: `/nix/store/6sbm49scs15lqlcj2kd2z1ahg9j47qrv-nixos-system-NIKKI-26.11.20260606.a799d3e`.
+
+Both packaged checks passed on MOTHER before activation. Comparison with the running
+generation verified identical kernel, initrd, kernel parameters, fstab, hosts,
+firewall and networking units. Only the three logDigest service units changed.
+MOTHER and OKAMI were not redeployed.
+
+Grafana, Loki, Prometheus and Vector passed health checks; Loki's initial readiness
+delay cleared. There are no failed units. The exact deployed agent ran as UID 2110
+inside the candidate's systemd sandbox, loaded 15 follow-ups and 20 observation
+plans, rendered an existing-pack dry run, and built fresh evidence without collection
+warnings. The probe prohibited persistent writes, POSTs and model inference.
+Synthesis defaults are temperature 0.2 and thinking disabled.
+
+A CPU observer tick completed successfully with zero recorded query errors. One
+existing indexer observation plan (`plan:18a07133c2bb`) is now visibly quota-paused:
+its 12/12 captures and last capture time match the pre-deployment backup. The plan
+expires at 04:30 CEST. Its warning reflects exhausted work, not a failed deployment.
+The notebook, observation-plan file and latest report retained their exact hashes.
+A private state backup is at
+`/var/lib/logDigest/.deployment-backups/pre-20261001-quality.tar.gz` on NIKKI.
+
+All three timers are active. The first reasoning run using this revision is scheduled
+for 04:30 CEST; report quality and use of the new investigation tools still need that
+live model run. No extra hourly collection was forced, avoiding overlapping baseline
+counts. The rollback timer was disarmed after verification, with the previous runner
+retained at `/nix/var/nix/gcroots/infra-deadman-NIKKI` on MOTHER. Deployment evidence is
+under `/tmp/logdigest-review/deploy-*` on the operator machine.

@@ -93,6 +93,12 @@ DARE supplies DNS and deploys separately, with rollback enabled by default.
 - Unused machine IDs/options, alternate network implementations, VM wrappers
   and the unreferenced rffmpeg subflake were removed. Active flake locks and
   package pins remain unchanged; the removed subflake's lock is removed too.
+  Correction (September 11): the WireGuard client module was mistakenly included
+  in that removal. TERRA imports it through the private secrets submodule,
+  outside the eight-system fleet checks. It has been restored unchanged, and
+  the topology helper again supports the laptop's raw-topology caller using
+  the canonical inventory. Shared-module changes also need the separate laptop
+  evaluation documented in `tests/infra/README.md`.
 
 ### Local evidence
 
