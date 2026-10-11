@@ -5,9 +5,20 @@ let
   okami = nixosConfigurations.OKAMI.config.services.vector.settings;
   configs = builtins.attrValues (builtins.removeAttrs nixosConfigurations [ "MOTHER" ]);
   digest = nixosConfigurations.NIKKI.config;
+  host = nixosConfigurations.MOTHER.config;
   llm = nixosConfigurations.OKAMI.config;
   window = import ../../config/infra/services/llama-cpp-config.nix;
   checks = {
+    grafanaCredentialDelivered =
+      digest.microvm.credentialFiles.grafana_secret_key == host.sops.secrets."grafana/secret_key".path
+      && host.sops.secrets."grafana/secret_key".key == "grafana/secret_key"
+      && builtins.elem "grafana_secret_key" digest.systemd.services.grafana.serviceConfig.LoadCredential
+      && digest.services.grafana.settings.security.secret_key ==
+        "$__file{/run/credentials/grafana.service/grafana_secret_key}";
+    grafanaCredentialScoped = builtins.all (system:
+      (system.config.microvm.credentialFiles ? grafana_secret_key)
+        == system.config.services.grafana.enable
+    ) configs;
     allDigestUnits = nikki.sources.log_logDigest_journal.include_units ==
       [ "logDigest.service" "logDigest-collect.service" "logDigest-observe.service" ];
     firewallNativeMatch = mamoru.sources.log_firewall_journal.include_matches == {

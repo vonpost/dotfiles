@@ -107,8 +107,7 @@ in
             domain = grafanaHost;
           };
           security = {
-            # Bootstrap-only default. Replace with a file-provider-backed secret.
-            secret_key = "grafana-bootstrap-secret-key-change-me";
+            secret_key = "$__file{/run/credentials/grafana.service/grafana_secret_key}";
           };
           users = {
             allow_sign_up = false;

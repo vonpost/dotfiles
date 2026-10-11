@@ -136,6 +136,7 @@
     grafana = {
       uid = 2114;
       logging.enable = true;
+      secrets.grafana_secret_key.source = "/run/secrets/grafana/secret_key";
     };
     vector = {
       uid = 2117;
