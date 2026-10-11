@@ -310,7 +310,9 @@ deploy_terra() {
   if [ "$(id -u)" -eq 0 ]; then
     nixos-rebuild switch --flake "$(terra_flakeref)#TERRA"
   else
-    sudo nixos-rebuild switch --flake "$(terra_flakeref)#TERRA"
+    # Fetch private submodules with the caller's SSH credentials and Nix cache.
+    # nixos-rebuild elevates only the profile update and activation commands.
+    nixos-rebuild switch --sudo --flake "$(terra_flakeref)#TERRA"
   fi
 }
 

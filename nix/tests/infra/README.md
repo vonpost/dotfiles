@@ -3,7 +3,7 @@
 Log-digest behavior and safety tests run offline, without contacting the fleet:
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 python3 tests/infra/test_log_digest.py -v
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests/infra -p 'test_log_digest*.py' -v
 ```
 
 They are also exposed as `checks.x86_64-linux.infra-log-digest`. The observability
@@ -11,6 +11,18 @@ suite includes the overnight schedules, GPU window dependencies and all three
 agent sandbox contracts. Python cases cover malformed model plans, backend syntax
 errors and correction, CPU-only execution, trigger transitions, quotas and durable
 evidence. See [overnight operation](../../plans/log-digest-overnight.md).
+
+The evidence, notebook, investigation and reporting suites additionally cover
+FFmpeg command noise, incomplete collection, material volume changes, historical
+report continuity, calibrated urgency/recovery, query quoting and duplicate tasks.
+The comparison and hypothesis-test suites cover adjacent-window normalization,
+predictions saved before reads, numerical verdicts, bounded case history, interrupted
+tests, historical query timestamps and useful results surviving failed synthesis.
+Use discovery as above so these separate regression files also run locally.
+
+Keep binary-cache access enabled when building the packaged checks. Carrying
+`--offline` from an evaluation command into `nix build` can force a full compiler
+bootstrap when the build environment is not already in the local store.
 
 These checks evaluate the real NixOS modules without activating a system. Use a
 `path:` flake reference for local checks so unrelated dotfiles Git submodules
@@ -74,10 +86,11 @@ nix --extra-experimental-features 'nix-command flakes' build \
   "path:$(pwd)#packages.x86_64-linux.infra"
 ```
 
-The 16 deployment tests run the real shell script with inert Nix/SSH commands.
+The 18 deployment tests run the real shell script with inert Nix/SSH commands.
 They cover exact candidate activation, source archiving, validation before
 transfer, failures before/after arming, preserving recovery, vsock health
-checks, separating DNS/router rollout and scoped pin updates. The package
+checks, separating DNS/router rollout, scoped pin updates, and fetching laptop
+inputs as the calling user while elevating only activation. The package
 build additionally runs ShellCheck. These are orchestration tests; they do not
 constitute a real reboot or timed rollback drill.
 
@@ -101,6 +114,26 @@ SSH, permitted/denied DMZ egress and IPv6 egress/inter-segment policy.
 Guest firewalls, actual DNS responses and physical WAN routing remain separate
 runtime checks. This test
 runs outside the Nix build sandbox, whose namespace policy varies by host.
+
+## Laptop checks
+
+The fleet flake does not include TERRA. Changes to shared modules or laptop
+deployment must also evaluate the separate laptop configuration. In particular,
+`secrets/TERRA_wg_settings.nix` imports `common/wg_client_systemd.nix`; an import
+search that excludes submodules cannot establish that a shared module is unused.
+
+Run as the normal user, whose SSH credentials can fetch the private submodule:
+
+```sh
+nix --extra-experimental-features 'nix-command flakes' eval \
+  --raw --no-write-lock-file --option builders '' \
+  --option allow-import-from-derivation false \
+  "git+file://$(git rev-parse --show-toplevel)?dir=nix/laptop#nixosConfigurations.TERRA.config.system.build.toplevel.drvPath"
+```
+
+This evaluates the complete configuration without building or activating it.
+`infra deploy terra` similarly keeps fetching and building as the caller, using
+`nixos-rebuild --sudo` for the privileged activation steps.
 
 ## Before/after comparison
 

@@ -5,6 +5,9 @@ resources, service/role assignments, network membership, an explicit primary
 network and any hardware-specific modules. `my.infra.vms` is its evaluated
 module representation; override that option when testing alternative setups.
 `my.infra.topology.vms` is a read-only network projection of the inventory.
+The topology helper uses that evaluated projection when provided. Standalone
+consumers, including TERRA's WireGuard settings, can pass the raw `topology.nix`;
+the helper then derives VM identities directly from `inventory.nix`.
 
 Service assignments enable application modules and select catalog metadata for
 state, credentials and logging. A resource-only role has `unit = null`: it can

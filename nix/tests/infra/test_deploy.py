@@ -29,6 +29,9 @@ def run(cmd, remote=False):
     s["events"].append(["remote" if remote else "local", *cmd])
     tool, a = cmd[0], cmd[1:]
     if tool == "uname": return "TERRA", 0
+    if tool == "id": return os.environ.get("FAKE_UID", "1000"), 0
+    if tool == "sudo": return run(a, remote)
+    if tool == "nixos-rebuild": return "", 0
     if tool == "sleep": return "", 0
     if tool == "git": return (" M file.nix" if fail("DIRTY") else ""), 0
     if tool == "ssh":
@@ -105,7 +108,7 @@ class DeploymentTests(unittest.TestCase):
             }}))
             bindir = work / "bin"
             bindir.mkdir()
-            for tool in ["nix", "ssh", "git", "uname", "sleep"]:
+            for tool in ["nix", "ssh", "git", "uname", "sleep", "id", "sudo", "nixos-rebuild"]:
                 path = bindir / tool
                 path.write_text(f"#!{sys.executable}\n" + FAKE)
                 path.chmod(0o755)
@@ -121,6 +124,27 @@ class DeploymentTests(unittest.TestCase):
                 env=env, text=True, capture_output=True, timeout=20,
             )
             return result, json.loads(state.read_text())
+
+    def test_laptop_fetches_as_user_and_elevates_only_activation(self):
+        result, state = self.invoke("deploy", "terra")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        events = state["events"]
+        rebuild = next(e for e in events if e[:2] == ["local", "nixos-rebuild"])
+        self.assertIn("--sudo", rebuild)
+        self.assertEqual(rebuild[2], "switch")
+        flake = rebuild[rebuild.index("--flake") + 1]
+        self.assertTrue(flake.startswith("git+file://"), flake)
+        self.assertTrue(flake.endswith("?dir=nix/laptop#TERRA"), flake)
+        self.assertFalse(any(e[1] == "sudo" for e in events))
+        self.assertFalse(any(e[0] == "remote" or "archive" in e for e in events))
+
+    def test_laptop_already_root_does_not_need_sudo(self):
+        result, state = self.invoke("deploy", "terra", FAKE_UID=0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        events = state["events"]
+        rebuild = next(e for e in events if e[:2] == ["local", "nixos-rebuild"])
+        self.assertNotIn("--sudo", rebuild)
+        self.assertFalse(any(e[1] == "sudo" for e in events))
 
     def test_mother_activates_exact_prebuilt_candidate(self):
         result, state = self.invoke("deploy", "mother")

@@ -8,6 +8,13 @@ let
     modules = [{ my.infra.vms.MAMORU.assignedVlans = lib.mkForce [ "dmz" "srv" "mgmt" ]; }];
   }).config;
   topo = import ../../lib/infra-topology.nix { topology = reordered.my.infra.topology; };
+  standaloneTopo = import ../../lib/infra-topology.nix {
+    topology = import ../../config/infra/topology.nix;
+  };
+  changedDns = (nixosConfigurations.DARE.extendModules {
+    modules = [{ my.infra.vms.DARE.id = lib.mkForce 54; }];
+  }).config;
+  changedDnsTopo = import ../../lib/infra-topology.nix { topology = changedDns.my.infra.topology; };
   changedPorts = { lib, ... }: {
     my.infra.topology = {
       firewallRules.sabnzbd.port = lib.mkForce 1447;
@@ -19,6 +26,12 @@ let
   digest = (nixosConfigurations.NIKKI.extendModules { modules = [ changedPorts ]; }).config;
   changedGateway = (nixosConfigurations.MAMORU.extendModules { modules = [ changedPorts ]; }).config;
   checks = {
+    standaloneTopologyUsesInventory = standaloneTopo.getDns == "10.10.20.53"
+      && standaloneTopo.getGateway "mgmt" == "10.10.10.10"
+      && builtins.all (vm: standaloneTopo.getPrimaryIp vm == topo.getPrimaryIp vm
+        && standaloneTopo.getMac vm "srv" == topo.getMac vm "srv")
+        (builtins.attrNames gateway.my.infra.vms);
+    evaluatedTopologyKeepsVmOverrides = changedDnsTopo.getDns == "10.10.20.54";
     primaryIndependentOfOrder = topo.getPrimaryIp "MAMORU" == "10.10.10.10";
     routedSonarrAllowed = lib.hasInfix
       "iifname dmz oifname srv ip saddr 10.10.30.25 ip daddr 10.10.20.20 tcp dport 8989 ct state new accept" rules;
