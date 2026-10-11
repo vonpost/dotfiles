@@ -487,6 +487,119 @@ class ObserverTests(unittest.TestCase):
         self.assertEqual(self.prom.instant.call_count, calls)
         self.assertEqual(len(self.captures()), 1)
 
+    def test_new_failed_target_is_captured_during_another_targets_cooldown(self):
+        plan = self.plan(trigger=self.trigger())
+        plan["captures"] = [{"tool": "logs_sample", "arguments": {"selector": '{vm={{vm}}}', "window": "15m"}}]
+        self.book.update(plan, self.pack["refs"])
+        self.tick()
+        self.prom.instant.return_value = [({"vm": "TEST"}, 1), ({"vm": "NEW"}, 1)]
+        self.tick(5)
+        capture = self.captures()[-1]
+        self.assertEqual(len(self.captures()), 2)
+        self.assertEqual(capture["event"], "contexts_changed")
+        self.assertEqual(capture["added_contexts"], [{"vm": "NEW"}])
+        self.assertEqual(capture["queries"][1]["arguments"]["selector"], '{vm="NEW"}')
+
+    def test_one_target_clearing_is_captured_while_another_stays_failed(self):
+        plan = self.plan(trigger=self.trigger())
+        plan["captures"] = [{"tool": "logs_sample", "arguments": {"selector": '{vm={{vm}}}', "window": "15m"}}]
+        self.book.update(plan, self.pack["refs"])
+        self.prom.instant.return_value = [({"vm": "TEST"}, 1), ({"vm": "OTHER"}, 1)]
+        self.tick()
+        self.prom.instant.return_value = [({"vm": "OTHER"}, 1)]
+        state = self.tick(5)
+        capture = self.captures()[-1]
+        self.assertEqual(capture["event"], "contexts_changed")
+        self.assertEqual(capture["cleared_contexts"], [{"vm": "TEST"}])
+        self.assertEqual(capture["queries"][1]["arguments"]["selector"], '{vm="TEST"}')
+        self.assertTrue(state["plans"][self.book.plans[0]["id"]]["condition"])
+
+    def test_new_fourth_target_gets_capture_priority_over_persistent_failures(self):
+        plan = self.plan(trigger=self.trigger())
+        plan["captures"] = [{"tool": "logs_sample", "arguments": {"selector": '{vm={{vm}}}', "window": "15m"}}]
+        self.book.update(plan, self.pack["refs"])
+        self.prom.instant.return_value = [({"vm": str(n)}, 1) for n in range(3)]
+        self.tick()
+        self.prom.instant.return_value = [({"vm": str(n)}, 1) for n in range(4)]
+        self.tick(5)
+        capture = self.captures()[-1]
+        self.assertEqual(capture["queries"][1]["arguments"]["selector"], '{vm="3"}')
+        self.assertEqual(len(capture["queries"]), 2)
+
+    def test_partial_clear_is_not_inferred_from_a_truncated_probe(self):
+        plan = self.plan(trigger=self.trigger())
+        plan["captures"] = [{"tool": "logs_sample", "arguments": {"selector": '{vm={{vm}}}', "window": "15m"}}]
+        self.book.update(plan, self.pack["refs"])
+        self.prom.instant.return_value = [({"vm": str(n)}, 1) for n in range(40)]
+        self.tick()
+        self.prom.instant.return_value = [({"vm": str(n)}, 1) for n in range(1, 42)]
+        self.tick(5)
+        capture = self.captures()[-1]
+        self.assertEqual(capture["cleared_contexts"], [])
+        self.assertEqual(capture["added_contexts"], [{"vm": "40"}])
+
+    def test_failed_context_capture_is_retried_after_backoff_before_cooldown(self):
+        plan = self.plan(trigger=self.trigger())
+        plan["captures"] = [{"tool": "logs_sample", "arguments": {"selector": '{vm={{vm}}}', "window": "15m"}}]
+        self.book.update(plan, self.pack["refs"])
+        self.loki.streams.side_effect = [agent.QueryError("temporary timeout"), []]
+        self.tick()
+        self.tick(5)
+        self.assertEqual(self.loki.streams.call_count, 1)
+        state = self.tick(10)
+        self.assertEqual(self.loki.streams.call_count, 2)
+        self.assertEqual(len(self.captures()), 2)
+        self.assertEqual(self.captures()[-1]["warnings"], [])
+        self.assertIsNone(state["plans"][self.book.plans[0]["id"]]["last_error"])
+
+    def test_exhausted_plan_is_reported_and_builtin_cap_resets_daily(self):
+        self.cfg["observeStandardWatchers"] = True
+        self.prom.instant.return_value = []
+        state = self.tick()
+        for previous in state["plans"].values():
+            previous["captures"] = 48
+        agent.write_json(os.path.join(self.temp.name, "observations/runtime.json"), state)
+        exhausted = self.tick(5)
+        self.assertEqual(self.prom.instant.call_count, 2)
+        self.assertEqual(len(exhausted["warnings"]), 2)
+        self.assertTrue(all("capture limit reached" in warning for warning in exhausted["warnings"]))
+        restored = self.tick(1440)
+        self.assertEqual(self.prom.instant.call_count, 4)
+        self.assertEqual(restored["warnings"], [])
+
+    def test_plan_render_shows_exhaustion_and_bounds_inactive_history_without_writes(self):
+        for index in range(10):
+            plan = dict(self.plan(), question=f"OLD HYPOTHESIS {index}")
+            plan["captures"][0]["arguments"]["expr"] = "old_query_should_be_omitted"
+            self.book.update(plan, self.pack["refs"])
+        self.book.now = NOW + timedelta(days=2)
+        self.book.update(dict(self.plan(max_captures=1), question="Exhausted current investigation"), self.pack["refs"])
+        plan = self.book.plans[-1]
+        directory = Path(self.temp.name, "observations")
+        directory.mkdir(exist_ok=True)
+        agent.write_json(str(directory / "runtime.json"), {"plans": {
+            plan["id"]: {"revision": plan["revision"], "captures": 1}
+        }})
+        plan_before, runtime_before = Path(self.book.path).read_text(), (directory / "runtime.json").read_text()
+        rendered = self.book.render()
+        self.assertIn("capture limit reached; checks paused", rendered)
+        self.assertIn("1/1", rendered)
+        self.assertIn("2 older inactive plans omitted", rendered)
+        self.assertNotIn("OLD HYPOTHESIS", rendered)
+        self.assertNotIn("old_query_should_be_omitted", rendered)
+        self.assertNotIn("Current query definitions", rendered)
+        self.assertEqual(Path(self.book.path).read_text(), plan_before)
+        self.assertEqual((directory / "runtime.json").read_text(), runtime_before)
+
+    def test_plan_render_does_not_apply_exhaustion_from_a_previous_revision(self):
+        plan_id = self.schedule(max_captures=1)
+        self.tick()
+        self.assertIn("capture limit reached", self.book.render())
+        self.book.now = NOW + timedelta(minutes=5)
+        self.book.update(self.plan(id=plan_id, max_captures=1), self.pack["refs"])
+        self.assertIn("scheduled", self.book.render())
+        self.assertIn("0/1", self.book.render())
+
     def test_failed_capture_is_saved_with_warning_and_backoff(self):
         plan_id = self.schedule()
         self.prom.instant.side_effect = agent.QueryError("invalid syntax")

@@ -143,7 +143,7 @@
             LOG_DIGEST_AGENT = ./lib/log-digest-agent.py;
           } ''
             export PYTHONDONTWRITEBYTECODE=1
-            python ${./tests/infra/test_log_digest.py} -v
+            python -m unittest discover -s ${./tests/infra} -p 'test_log_digest*.py' -v
             touch "$out"
           '';
           okuri-unit = pkgs.okuri;

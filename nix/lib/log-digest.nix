@@ -293,32 +293,25 @@ in
       description = ''
         Token cap for the final digest.
 
-        Must be large enough to hold a reasoning block AND the JSON that follows
-        it. Sized at 2600 the reasoning block consumed the entire allowance and
-        the run emitted no digest at all.
+        Allows up to three findings with explicit impact and current-state refs.
+        If thinkingForSynthesis is enabled, this also includes the reasoning block.
       '';
     };
 
     synthesisTemperature = lib.mkOption {
       type = lib.types.float;
-      default = 0.4;
-      description = "Sampling temperature for synthesis. Slightly above the tool-turn value, for readable prose.";
+      default = 0.2;
+      description = "Sampling temperature for factual digest synthesis.";
     };
 
     thinkingForSynthesis = lib.mkOption {
       type = lib.types.bool;
-      default = true;
+      default = false;
       description = ''
-        Enable the model's reasoning mode for the single synthesis call.
-
-        Tool-selection turns stay non-thinking because they are mechanical.
-        Ranking findings by consequence, and spotting that several signatures are
-        one causal chain rather than several incidents, is where reasoning pays.
-
-        Needs synthesisMaxTokens large enough for the reasoning block plus the
-        digest; undersized, the reasoning consumes everything and nothing is
-        emitted. The run always retries without thinking, so this degrades rather
-        than fails.
+        Enable reasoning mode on the first synthesis attempt. Disabled by default
+        because reasoning can consume the entire output allowance without a digest.
+        Investigation and fallback attempts use no thinking. Retries share the
+        existing GPU and wall-clock budgets and may be skipped when those run out.
       '';
     };
 
