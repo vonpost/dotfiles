@@ -181,7 +181,7 @@ class NotebookTests(unittest.TestCase):
         self.assertNotIn("a measured current observation", rendered)
         self.assertIn("other tasks omitted", rendered)
 
-    def test_render_contains_only_compact_recent_blocked_and_resolved_context(self):
+    def test_render_keeps_older_blocked_and_resolved_conclusions_visible(self):
         self.book.update(self.proposal(), self.refs, "first")
         for index in range(12):
             self.book.update(self.proposal(
@@ -191,11 +191,19 @@ class NotebookTests(unittest.TestCase):
             ), self.refs, "first")
         rendered = self.book.render()
         self.assertIn(self.proposal()["question"], rendered)
-        self.assertEqual(rendered.count("Previously checked issue"), 4)
+        self.assertEqual(rendered.count("Previously checked issue"), 12)
+        self.assertLessEqual(len(rendered), self.book.PROMPT_MAX_CHARS)
         self.assertNotIn("UNNEEDED NEXT CHECK", rendered)
         self.assertNotIn("o" * 500, rendered)
         self.assertIn('"resolved": 6', rendered)
         self.assertIn('"needs_human": 6', rendered)
+
+    def test_recording_a_changed_blocker_is_not_an_automatic_revisit(self):
+        self.book.update(self.proposal(status="needs_human", outcome="Access denied"), self.refs, "first")
+        self.book.update(self.proposal(outcome="Access denied; credential expired"), self.refs, "second")
+        self.assertEqual(self.book.tasks[0]["attempts"], 0)
+        self.assertEqual(self.book.tasks[0]["last_run"], "second")
+        self.assertEqual(self.book.due(), [])
 
 
 if __name__ == "__main__":

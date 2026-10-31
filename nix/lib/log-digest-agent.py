@@ -461,8 +461,18 @@ MEDIA_COMMAND_FAILURE = re.compile(
     r"|\berror\s+(?:initializing|opening|processing|while)\b)"
 )
 EXPLICIT_LOG_LEVEL = re.compile(
-    r"(?i)\[(TRACE|DEBUG|INF|INFO|WRN|WARN|WARNING|ERR|ERROR|FATAL|CRIT|CRITICAL)\]"
-    r"|\blevel=(trace|debug|info|warn|warning|error|fatal|critical)\b"
+    r"(?i)^(?:(?:\[?\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}"
+    r"(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?\]?"
+    r"|\[?\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\]?)\s+)?"
+    r"\[(TRACE|DEBUG|INF|INFO|WRN|WARN|WARNING|ERR|ERROR|FATAL|CRIT|CRITICAL)\]"
+    r"|^(?:(?!(?:msg|message)=)[\w.:-]+=(?:\"[^\"]*\"|[^\s\"]+)\s+)*"
+    r"level=(trace|debug|info|warn|warning|error|fatal|critical)\b"
+)
+# Some wrappers report a real subprocess failure at INFO. Keep that evidence,
+# while avoiding incidental words inside media titles and ordinary playback logs.
+INFO_MEDIA_FAILURE = re.compile(
+    r"(?i)^\s*(?:\[\d+\]\s+)?(?:[\w.]+:\s+)?"
+    r"ff(?:mpeg|probe)(?:\s+image extraction)?\s+(?:failed|crashed)\b"
 )
 
 
@@ -482,11 +492,12 @@ def signature_of(message: str) -> str:
 
 
 def severity_of(message: str, priority) -> str:
-    """Content-first severity.
+    """Application severity, with a keyword fallback for unstructured output.
 
     journald PRIORITY is nearly useless on this fleet - the media stack logs
-    everything at 6 and writes severity into the message - so the message text is
-    the primary signal and PRIORITY only escalates.
+    everything at 6 and writes severity into the message. Native informational
+    prefixes prevent titles and command arguments becoming incidents; PRIORITY
+    still escalates when journald supplies a stronger signal.
     """
     text = severity_text(message)
     level = "info"
@@ -495,18 +506,20 @@ def severity_of(message: str, priority) -> str:
             if pattern.search(text):
                 level = name
                 break
-    marker = EXPLICIT_LOG_LEVEL.search(text[:160])
+    marker = EXPLICIT_LOG_LEVEL.match(text[:240])
     if marker:
         explicit = next(group.lower() for group in marker.groups() if group)
         native = {"trace": "info", "debug": "info", "inf": "info", "info": "info",
                   "wrn": "warn", "warn": "warn", "warning": "warn", "err": "error",
                   "error": "error", "fatal": "critical", "crit": "critical", "critical": "critical"}[explicit]
-        if SEVERITY_ORDER[native] < SEVERITY_ORDER[level]:
+        if native == "info":
+            media_failure = INFO_MEDIA_FAILURE.match(text[marker.end():]) or (
+                MEDIA_COMMAND_ECHO.search(text) and MEDIA_COMMAND_FAILURE.search(text)
+            )
+            if explicit in ("trace", "debug") or not media_failure:
+                level = "info"
+        elif SEVERITY_ORDER[native] < SEVERITY_ORDER[level]:
             level = native
-    # An explicit DEBUG/TRACE marker is unambiguous: whatever keyword appeared,
-    # the emitting service did not consider this worth an operator's attention.
-    if level in ("error", "warn") and re.search(r"(?i)\b(debug|trace)\b", text[:60]):
-        level = "info"
     try:
         priority_num = int(priority)
     except (TypeError, ValueError):
@@ -522,6 +535,7 @@ def severity_of(message: str, priority) -> str:
 
 
 SEVERITY_ORDER = {"critical": 0, "error": 1, "warn": 2, "info": 3}
+SEVERITY_CLASSIFIER_VERSION = 2
 
 
 def message_of(payload: dict, raw_line: str) -> str:
@@ -645,6 +659,14 @@ class Catalog:
         entry["example"] = clip(example, 400) or entry.get("example")
         if SEVERITY_ORDER.get(severity, 3) < SEVERITY_ORDER.get(entry.get("severity", "info"), 3):
             entry["severity"] = severity
+        # Keep the strongest classification made by this parser separately from
+        # legacy historical severity. It includes journald priority, which cannot
+        # be recovered by reclassifying a stored example alone. Old observations
+        # and their counters remain intact, but cannot contaminate this value.
+        if (entry.get("severity_classifier_version") != SEVERITY_CLASSIFIER_VERSION
+                or SEVERITY_ORDER.get(severity, 3) < SEVERITY_ORDER.get(entry.get("classified_severity"), 4)):
+            entry["classified_severity"] = severity
+        entry["severity_classifier_version"] = SEVERITY_CLASSIFIER_VERSION
         days = entry.setdefault("days", {})
         days[day] = int(days.get(day, 0)) + int(count)
 
@@ -1079,15 +1101,23 @@ def build_evidence_pack(cfg, loki, prom, catalog, now: datetime):
     persistent = []
 
     for sig_id, entry in catalog.signatures.items():
-        # Older catalogs include healthy media commands classified from flags or
-        # filenames. Reclassify those examples now, without waiting for retention
-        # or rewriting historical observations. Genuine failure messages remain.
+        # Older catalogs include healthy commands and native INFO messages
+        # classified from flags or media titles. Reclassify those examples now,
+        # without waiting for retention or rewriting historical observations.
         example = entry.get("example") or ""
-        if severity_text(example) != squeeze(ANSI_ESCAPE.sub("", example)):
-            corrected = severity_of(example, None)
+        clean_example = squeeze(ANSI_ESCAPE.sub("", example))
+        if (entry.get("severity_classifier_version") == SEVERITY_CLASSIFIER_VERSION
+                and entry.get("classified_severity") in SEVERITY_ORDER):
+            entry = dict(entry, severity=entry["classified_severity"])
+        elif severity_text(example) != clean_example or EXPLICIT_LOG_LEVEL.match(clean_example[:240]):
+            # Legacy catalogs normally did not retain journal priority: this is
+            # a best-effort migration, not a substitute for new classifications.
+            corrected = severity_of(example, entry.get("priority"))
             if corrected == "info":
                 continue
             entry = dict(entry, severity=corrected)
+        if entry.get("severity") == "info":
+            continue
         observed = int(current_window["signatures"].get(sig_id, 0))
         history = [window["signatures"].get(sig_id, 0.0) for window in signature_history]
         age = catalog.age_days(sig_id, now)
@@ -1461,6 +1491,51 @@ def build_scrape_rows(prom, now, refs, guard):
 # pack rendering
 # --------------------------------------------------------------------------
 
+def investigation_leads(pack, limit=3):
+    """Prioritize unreviewed log events and give their collection window.
+
+    This is a shortlist, not a finding or a suppression rule: all evidence stays
+    available below it. One noisy service must not occupy every suggested slot.
+    """
+    now = parse_iso(pack.get("generated_at"))
+    if not now or not now.tzinfo:
+        return []
+    covered = {}
+    for previous in pack.get("report_history") or []:
+        at = parse_iso(previous.get("last_reported"))
+        if at and at.tzinfo:
+            for ref in previous.get("anchors") or []:
+                if isinstance(ref, str) and ref.startswith("sig:"):
+                    covered[ref] = max(covered.get(ref, at), at)
+    candidates = []
+    for key in ("escalating", "new_signatures"):
+        for row in pack.get(key) or []:
+            at = parse_iso(row.get("last_seen"))
+            if (not at or not at.tzinfo or at > now or at < now - timedelta(hours=24)
+                    or row.get("severity") not in ("critical", "error", "warn")
+                    or not row.get("vm") or not row.get("service")
+                    or covered.get(row.get("ref"), at - timedelta(seconds=1)) >= at):
+                continue
+            candidates.append((row, at, key))
+    candidates.sort(key=lambda item: (SEVERITY_ORDER[item[0]["severity"]],
+                                     0 if item[2] == "escalating" else 1,
+                                     -item[1].timestamp(), -item[0].get("today", 0)))
+    leads, scopes = [], set()
+    for row, at, kind in candidates:
+        scope = (row["vm"], row["service"])
+        if scope in scopes:
+            continue
+        scopes.add(scope)
+        shift = max(0, int((now - at).total_seconds()) - 300)
+        leads.append({"ref": row["ref"], "vm": row["vm"], "service": row["service"],
+                      "reason": kind, "last_captured_utc": iso(at),
+                      "sample_query": {"selector": "{vm=%s,service=%s}" % tuple(map(json.dumps, scope)),
+                                       "window": "2h", "end_ago": f"{shift}s", "limit": 6}})
+        if len(leads) >= limit:
+            break
+    return leads
+
+
 def render_pack(pack, cfg) -> str:
     """The pack as compact text.
 
@@ -1562,8 +1637,17 @@ def render_pack(pack, cfg) -> str:
             ),
         )
 
+    leads = investigation_leads(pack)
+    if leads:
+        section("LOG INVESTIGATION SHORTLIST (leads, not confirmed incidents)",
+                "Sample the event window first; an empty last hour cannot explain a daytime failure. "
+                "Check a consequence or competing explanation before another count. "
+                "Catalog times are collection times, not exact event times. Queries below cover that "
+                "collection interval; select a precise message filter if needed.\n"
+                + json.dumps(leads, ensure_ascii=False))
+
     def signature_table(rows, extra_headers=(), extra_keys=()):
-        headers = ["ref", "vm", "service", "log_level", "captured_24h", "days_seen"] + list(extra_headers)
+        headers = ["ref", "vm", "service", "log_level", "captured_24h", "days_seen", "last_captured_UTC"] + list(extra_headers)
         body = []
         for row in rows:
             body.append(
@@ -1574,6 +1658,7 @@ def render_pack(pack, cfg) -> str:
                     row["severity"],
                     row["today"],
                     row["days_seen"],
+                    row.get("last_seen", "unknown"),
                 ]
                 + [row.get(key) for key in extra_keys]
             )
@@ -2115,14 +2200,14 @@ class Followups:
         for task in due_tasks:
             if not append_task(task, True):
                 break
-        # Keep recent blockers and resolutions visible to prevent rediscovery,
-        # without letting a backlog displace tonight's actual investigations.
+        # Keep every blocker/resolution visible when the bounded view permits:
+        # hiding all but two made older conclusions get rediscovered nightly.
         context = []
         for status in ("needs_human", "resolved", "open"):
             context.extend(sorted(
                 [t for t in tasks if t["status"] == status and t["id"] not in due_ids],
                 key=lambda t: t.get("updated_at", ""), reverse=True,
-            )[:2])
+            ))
         for task in context:
             if not append_task(task, False):
                 break
@@ -2208,7 +2293,7 @@ class Followups:
                 self.tasks.remove(min(resolved, key=lambda t: t["updated_at"]))
             existing = {"id": task_id, "created_at": iso(self.now), "attempts": 0}
             self.tasks.append(existing)
-        elif existing.get("last_run") != run_id:
+        elif existing.get("last_run") != run_id and existing.get("status") == "open":
             existing["attempts"] += 1
             existing["last_checked_at"] = iso(self.now)
         if status == "open" and existing["attempts"] >= int(self.cfg.get("followupMaxAttempts", 6)):
@@ -2247,6 +2332,7 @@ class GpuBudget:
         self.completion_tokens = 0
         self.cached_tokens = 0
         self.calls = 0
+        self.requests = []
 
     def allowance(self, cap, *, synthesis=False):
         remaining = self.total_ms - self.spent_ms - (0 if synthesis else self.reserve_ms)
@@ -2257,7 +2343,7 @@ class GpuBudget:
             raise BudgetExhausted("insufficient GPU budget for another model request")
         return tokens, max(1, remaining / 1000)
 
-    def record(self, response) -> None:
+    def record(self, response, *, phase=None, wall_seconds=None, token_cap=None) -> None:
         self.calls += 1
         timings = response.get("timings") or {}
         prompt_ms = safe_float(timings.get("prompt_ms"))
@@ -2274,6 +2360,25 @@ class GpuBudget:
         if predicted_ms is None:
             predicted_ms = completion_tokens / 20.0 * 1000.0
         self.spent_ms += max(0, prompt_ms) + max(0, predicted_ms)
+        self.requests.append({
+            "phase": phase, "status": "complete", "wall_seconds": wall_seconds,
+            "gpu_seconds": round((max(0, prompt_ms) + max(0, predicted_ms)) / 1000, 3),
+            "prompt_ms": prompt_ms, "predicted_ms": predicted_ms,
+            "timings_estimated": any(safe_float(timings.get(key)) is None
+                                     for key in ("prompt_ms", "predicted_ms")),
+            "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
+            "cached_tokens": int(cached.get("cached_tokens") or 0),
+            "token_cap": token_cap,
+            "finish_reason": (response.get("choices") or [{}])[0].get("finish_reason"),
+        })
+
+    def record_failure(self, phase, error, wall_seconds, token_cap=None):
+        # A failed HTTP call may already have used GPU time; charge its full
+        # latency conservatively, retaining the distinction from measured work.
+        self.spent_ms += wall_seconds * 1000
+        self.requests.append({"phase": phase, "status": "failed", "wall_seconds": wall_seconds,
+                              "gpu_seconds": wall_seconds, "timings_estimated": True,
+                              "token_cap": token_cap, "error": clip(str(error), 400)})
 
     @property
     def spent_seconds(self) -> float:
@@ -2419,6 +2524,10 @@ class Tools:
         self.max_chars = int(cfg["toolResultMaxChars"])
         self.notes = []
         self.calls = []
+        self.model_tool_actions = []
+        self.investigation_stop_reason = None
+        self.investigation_wrapup_reason = None
+        self.query_call_limit = int(cfg.get("maxToolCalls", 48))
         self.seen = set()
         self.seen_refs = {}
         self.notebook = notebook
@@ -2688,6 +2797,9 @@ class Tools:
                 raise ValueError("arguments must be an object of at most 8000 characters")
             if len(self.calls) >= int(self.cfg.get("maxToolCalls", 48)):
                 raise ValueError("session tool call limit reached")
+            if (name not in {"note", "followup", "done"}
+                    and len(self.calls) >= self.query_call_limit):
+                raise ValueError("query allowance reached; reserved calls are for notes, followups and done")
             if time.monotonic() >= self.deadline:
                 raise ValueError("session deadline reached")
             if name in self.QUERY_TOOLS:
@@ -2780,7 +2892,7 @@ class Tools:
                 and isinstance(entry.get("result"), str)
                 and not entry["result"].startswith("error:")):
             return f"evidence_ref: {ref}\n{entry['result']}", ref
-        if len(self.calls) + 2 > int(self.cfg.get("maxToolCalls", 48)):
+        if len(self.calls) + 2 > min(self.query_call_limit, int(self.cfg.get("maxToolCalls", 48))):
             return "error: insufficient tool allowance; one call is reserved for this investigation", None
         result = self.call(name, arguments)
         return result, self.calls[-1].get("ref")
@@ -2853,12 +2965,15 @@ class Tools:
         if all(result[name]["log_share"] is not None for name, _ in windows):
             result["log_share_delta"] = result["current"]["log_share"] - result["previous"]["log_share"]
 
+        sample_part, sample_query = ("previous", previous) if current == 0 and prior else ("current", base)
         if current is None:
             result["sample"] = {"status": "skipped", "reason": "current count is unavailable"}
-        elif current == 0:
-            result["sample"] = {"status": "skipped", "reason": "zero matching lines in current window"}
+        elif current == 0 and not prior:
+            result["sample"] = {"status": "skipped", "reason": "zero matching lines in available windows"}
         else:
-            output, ref = self._call_evidence("logs_sample", dict(base, **filters, limit=6))
+            # A quiet newer window must not hide the original failure. Keep the
+            # historical timestamp explicit so this is never current evidence.
+            output, ref = self._call_evidence("logs_sample", dict(sample_query, **filters, limit=6))
             if ref is None:
                 result["sample"] = {"status": "unavailable", "error": clip(output, 200)}
             else:
@@ -2867,7 +2982,8 @@ class Tools:
                 # the child ref; this compact view is bounded for small models.
                 body = saved.split("\n\n", 1)[1] if "\n\n" in saved else ""
                 lines = [clip(line, 280) for line in body.splitlines()[:6]]
-                result["sample"] = {"status": "ok" if lines else "empty", "ref": ref, "latest_lines": lines}
+                result["sample"] = {"status": "ok" if lines else "empty", "ref": ref,
+                                    "window": sample_part, "latest_lines": lines}
         result["status"] = "complete" if all(
             result[name][kind]["status"] == "ok" for name, _ in windows for kind in ("matches", "total_logs")
         ) and result["sample"]["status"] not in ("unavailable", "empty") else "partial"
@@ -3148,7 +3264,7 @@ class Tools:
                 queries.insert(0, {k: plan["trigger"][k] for k in ("tool", "arguments")})
             # Actual read endpoints are the syntax authority. Reserve one call
             # for this enclosing operation; never save half-tested plans.
-            if len(self.calls) + len(queries) + 1 > int(self.cfg.get("maxToolCalls", 48)):
+            if len(self.calls) + len(queries) + 1 > min(self.query_call_limit, int(self.cfg.get("maxToolCalls", 48))):
                 raise ValueError("not enough query allowance to validate this plan")
             for query in queries:
                 rendered = observation_query(query, self.cfg, self.now, template=True)
@@ -3748,9 +3864,15 @@ WORKFLOW
    Reuse issue_id and task ids. Old reports identify already-covered topics; their
    diagnoses are fallible and their refs are NOT current evidence. Do not re-investigate
    every blocked task or repeat the same 24h counts in both nightly sessions.
-2. Start a log question with `compare_logs`: it computes adjacent windows, exact
-   count changes, total service log volume, log shares, UTC boundaries and a small
-   original sample. Give a bare stream selector and contains/regex separately.
+2. Read original messages around the event's last_captured_UTC, using the LOG
+   INVESTIGATION SHORTLIST when available. Most failures happen during daytime;
+   do not start every question with the last two quiet overnight hours. Use
+   `compare_logs` when a count comparison will distinguish explanations, with
+   end_ago/window around the event and a bare selector plus contains/regex.
+   After one comparison, check a different kind of evidence (operation result,
+   failed unit, resource trend, downstream service), rather than recounting the
+   same symptom through several overlapping windows. Save the conclusion before
+   starting the next question; do not spend every tool call on counts.
    A rise in error count with unchanged log share may simply reflect more activity;
    log share is NOT request failure rate. Narrow the window around the event.
 3. When two explanations predict different measurable results, use `test_hypothesis`:
@@ -3779,6 +3901,8 @@ EVIDENCE RULES
   be assumed to belong to Wolf. Dispatching ffmpeg does not imply Wolf must log it.
 - Same-time errors establish correlation, not a root cause. An external URL in a log
   is not proof of misconfiguration; do not invent a correct hostname/port/config path.
+  Do not inherit such a diagnosis from an old report or blocked task. Repeated
+  speculation in the notebook is still speculation, not corroborating evidence.
 - HTTP 429 from one indexer does not establish failed acquisition if fallback works.
   Optional thumbnail/plugin failures do not establish broken playback. An expired
   auth session does not establish failed dashboard availability. Check consequences.
@@ -3841,6 +3965,9 @@ checked it; the runner puts it in a compact ongoing list. Reuse its issue_id. An
 count of known errors or a different title is not a material change. Never silently
 claim an unmentioned earlier issue recovered. Do not fill space with routine noise,
 log-volume changes, topology, speculative user impact or generic monitoring advice.
+For a measured count change, change_refs must cite BOTH equal adjacent window
+counts for the same filtered symptom. A different overnight window with zero
+errors is not another improvement. An already reported recovery is unchanged.
 
 SEVERITY CONTRACT (enforced by the runner)
 - critical: confirmed ONGOING outage/data loss requiring intervention now, high
@@ -3853,6 +3980,8 @@ SEVERITY CONTRACT (enforced by the runner)
   degradation. Most informational noise should be omitted entirely.
 - recovered requires recovery_refs showing a positive recent healthy operation/state;
   zero errors or absent metrics do not qualify. Say unknown if not checked.
+  The successful operation must be the one that failed. An active systemd unit
+  cannot establish recovery of an indexer request, plugin sync, or media operation.
 Every supporting ref must also be in refs. All refs must resolve. The evidence gate
 checks structure and source type, not truth: you remain responsible for what each
 query actually demonstrates. Do not cite unrelated data just to pass validation.
@@ -3886,10 +4015,29 @@ def investigate(cfg, llama, tools, budget, pack_text):
     used = 0
     nudged = False
     depth_nudged = False
+    # Composite tools charge their child reads as well as the outer action.
+    # Leave room to preserve conclusions even when one model turn batches many
+    # such tools. Keep tiny configured caps useful for a single read.
+    reserve_calls = 4 if max_calls >= 8 else 0
+    tools.query_call_limit = max_calls - reserve_calls
+    wrapup_tools = {"note", "followup", "done"}
+    wrapup = False
+    tools.investigation_stop_reason = "tool_call_limit"
 
-    while used < max_calls:
+    while used < max_calls or (reserve_calls and not wrapup and len(tools.calls) < max_calls):
+        if reserve_calls and (used >= tools.query_call_limit or len(tools.calls) >= tools.query_call_limit):
+            wrapup = True
+            tools.investigation_wrapup_reason = "query_call_limit"
+            tools.investigation_stop_reason = "query_call_limit"
+            schema = [entry for entry in schema if entry["function"]["name"] in wrapup_tools]
+            messages.append({"role": "user", "content": (
+                f"The read allowance is finished. You have {max_calls - len(tools.calls)} tool slots "
+                "reserved for this final note-only turn. Save concise conclusions with current refs "
+                "using note, preserve a useful unresolved question with followup, then call done. "
+                "No more reads or observation plans are permitted. Record uncertainty; do not invent findings."
+            )})
         queries = [call for call in tools.calls if call.get("ref")]
-        if not depth_nudged and len(queries) >= 6 and not any(
+        if not wrapup and not depth_nudged and len(queries) >= 6 and not any(
             call["arguments"].get("end_ago") or call["arguments"].get("step")
             or call["tool"] == "metrics_range" for call in queries
         ):
@@ -3903,7 +4051,7 @@ def investigate(cfg, llama, tools, budget, pack_text):
             )})
         # Left alone the model investigates until it hits the call cap and records
         # nothing. One reminder at the halfway mark converts queries into notes.
-        if not nudged and (used >= max_calls // 2 or budget.spent_ms >= budget.total_ms * 0.4):
+        if not wrapup and not nudged and (used >= max_calls // 2 or budget.spent_ms >= budget.total_ms * 0.4):
             nudged = True
             messages.append(
                 {
@@ -3921,6 +4069,8 @@ def investigate(cfg, llama, tools, budget, pack_text):
             )
 
         if budget.tools_exhausted() or llama.deadline - time.monotonic() <= budget.reserve_ms / 1000:
+            tools.investigation_stop_reason = ("gpu_budget_reserve" if budget.tools_exhausted()
+                                               else "synthesis_wall_reserve")
             log_info("investigation: GPU budget reserve reached, moving to synthesis")
             messages.append(
                 {
@@ -3931,6 +4081,7 @@ def investigate(cfg, llama, tools, budget, pack_text):
             break
 
         started = time.monotonic()
+        token_cap = None
         try:
             token_cap, timeout = budget.allowance(int(cfg["investigatorMaxTokens"]))
             timeout = min(timeout, llama.deadline - time.monotonic() - budget.reserve_ms / 1000)
@@ -3942,10 +4093,14 @@ def investigate(cfg, llama, tools, budget, pack_text):
                 timeout=timeout,
             )
         except RuntimeError as exc:
-            budget.spent_ms += (time.monotonic() - started) * 1000
+            tools.investigation_stop_reason = "gpu_budget_admission" if isinstance(exc, BudgetExhausted) else "model_error"
+            if token_cap is not None:
+                budget.record_failure("investigation_wrapup" if wrapup else "investigation", exc,
+                                      time.monotonic() - started, token_cap)
             log_info(f"investigation: llama call failed: {exc}")
             break
-        budget.record(response)
+        budget.record(response, phase="investigation_wrapup" if wrapup else "investigation",
+                      wall_seconds=time.monotonic() - started, token_cap=token_cap)
         message, finish_reason = response_message(response)
         tool_calls = message.get("tool_calls") or []
         if not isinstance(tool_calls, list):
@@ -3994,21 +4149,31 @@ def investigate(cfg, llama, tools, budget, pack_text):
 
         if not tool_calls:
             text = message_text(message)
+            if not wrapup:
+                tools.investigation_stop_reason = "model_no_tool_calls"
             log_info(f"investigation: model stopped without a tool call ({finish_reason}); {budget.summary()}")
             break
 
         stop = False
         for call, arguments in zip(tool_calls, parsed_arguments):
             name = (call.get("function") or {}).get("name") or ""
-            if stop or used >= max_calls:
+            before_calls = len(tools.calls)
+            executed = False
+            if stop or len(tools.calls) >= max_calls or (used >= max_calls and not wrapup):
                 result = "error: tool not executed; session stopped or call limit reached"
+            elif (wrapup or len(tools.calls) >= tools.query_call_limit) and name not in wrapup_tools:
+                result = "error: no more reads; reserved calls are for note, followup and done"
             elif finish_reason == "length" and not arguments:
                 result = (
                     "error: your previous turn was cut off by the token limit before the "
                     "arguments were complete. Reissue it with a shorter, more specific query."
                 )
             else:
+                executed = True
                 result = tools.call(name, arguments)
+            tools.model_tool_actions.append({"tool": name, "executed": executed,
+                                            "recorded_calls": len(tools.calls) - before_calls,
+                                            "error": result.startswith("error:")})
             used = max(used + 1, len(tools.calls))
             log_info(f"investigation: tool {name} -> {len(result)} chars ({budget.summary()})")
             messages.append(
@@ -4017,8 +4182,12 @@ def investigate(cfg, llama, tools, budget, pack_text):
             if name == "done" and result == "ok":
                 stop = True
         if stop:
+            if not wrapup:
+                tools.investigation_stop_reason = "done"
             log_info("investigation: model called done")
             break
+        if wrapup:
+            break  # One bounded final turn; synthesis retains the full transcript.
 
     return messages
 
@@ -4068,6 +4237,7 @@ def synthesize(cfg, llama, tools, budget, messages, pack_text):
     last_error = None
     for index, (label, messages_for_attempt, thinking) in enumerate(attempts):
         started = time.monotonic()
+        token_cap = None
         if last_error:
             messages_for_attempt = [*messages_for_attempt, {"role": "user", "content": (
                 "The previous synthesis could not be used: " + clip(last_error, 250) +
@@ -4088,11 +4258,12 @@ def synthesize(cfg, llama, tools, budget, messages, pack_text):
             last_error = str(exc)
             break
         except RuntimeError as exc:
-            budget.spent_ms += (time.monotonic() - started) * 1000
+            budget.record_failure("synthesis: " + label, exc, time.monotonic() - started, token_cap)
             last_error = str(exc)
             log_info(f"synthesis attempt {index + 1} ({label}) failed: {clip(last_error, 200)}")
             continue
-        budget.record(response)
+        budget.record(response, phase="synthesis: " + label,
+                      wall_seconds=time.monotonic() - started, token_cap=token_cap)
         message, finish_reason = response_message(response)
         text = message_text(message)
         if text:
@@ -4161,6 +4332,7 @@ def report_history(cfg, now):
             row = {"issue_id": identifier, "title": clip(squeeze(finding.get("title")), 180),
                          "what": clip(squeeze(finding.get("what")), 240), "anchors": anchors,
                          "severity": finding.get("severity", "info"),
+                         "change_measurements": finding.get("change_measurements", []),
                          "status": finding.get("status", "unknown"), "last_reported": iso(at)}
             rows.append(row)
             seen[identifier] = row
@@ -4202,7 +4374,18 @@ def investigation_results(tools):
 def investigation_audit(tools):
     results = investigation_results(tools)
     reads = [call for call in tools.calls if call["tool"] in tools.QUERY_TOOLS]
+    backend_reads = [call for call in reads if call["tool"] in
+                     {"logs_count", "logs_sample", "logs_labels", "metrics_query", "metrics_range"}]
     return {
+        "stop_reason": tools.investigation_stop_reason,
+        "wrapup_reason": tools.investigation_wrapup_reason,
+        "model_tool_actions": len(tools.model_tool_actions),
+        "model_tool_action_errors": sum(action["error"] for action in tools.model_tool_actions),
+        "recorded_tool_calls": len(tools.calls),
+        "tool_errors": sum(call["result"].startswith("error:") for call in tools.calls),
+        "query_call_limit": tools.query_call_limit,
+        "backend_query_calls": len(backend_reads),
+        "backend_query_errors": sum(call["ref"] is None for call in backend_reads),
         "query_calls": len(reads),
         "query_errors": sum(call["ref"] is None for call in reads),
         "comparisons": sum(call["tool"] == "compare_logs" and not call["result"].startswith("error:")
@@ -4321,6 +4504,132 @@ def checked_evidence(ref, refs, *, current=False, recovery=False):
     return True
 
 
+def recovery_in_scope(ref, refs_index, anchors, previous):
+    """A running process or unrelated housekeeping cannot resolve an operation."""
+    entry = refs_index[ref]
+    args = entry.get("arguments") or {}
+    if entry.get("tool") == "logs_sample":
+        # A successful database maintenance task in an unfiltered service sample
+        # says nothing about a plugin, indexer or transcoding operation. Require
+        # a deliberately targeted read; semantic relevance still needs judgement.
+        selector = args.get("selector", "")
+        return bool(args.get("contains") or args.get("regex") or "|=" in selector or "|~" in selector)
+    if entry.get("tool") == "metrics_query" and "node_systemd_unit_state" in args.get("expr", ""):
+        expr = args["expr"]
+        name = re.search(r'\bname\s*=\s*"([^"\\]+)"', expr)
+        vm = re.search(r'\bvm\s*=\s*"([^"\\]+)"', expr)
+        samples = (entry.get("measurements") or {}).get("samples") or []
+        hosts = {row.get("labels", {}).get("vm") for row in samples}
+        if vm:
+            hosts = {vm.group(1)}
+        unit_refs = set(anchors) | set((previous or {}).get("anchors") or [])
+        return bool(name and any(host and f"unit:{host}:{name.group(1)}" in unit_refs for host in hosts))
+    return True
+
+
+def change_measurements(refs, refs_index):
+    """Keep comparable numeric observations, independently of the model's prose.
+
+    A fresh zero is not a change by itself. Filtered event counts can establish
+    frequency changes; unfiltered service log volume cannot establish an issue's
+    improvement. Samples, aggregates and incomplete results are not measurements.
+    """
+    measurements = []
+    for ref in refs:
+        entry = refs_index.get(ref, {})
+        args = entry.get("arguments") or {}
+        data = entry.get("measurements") or {}
+        samples = data.get("samples") or []
+        if (entry.get("kind") != "tool_result" or data.get("truncated")
+            or len(samples) != 1 or args.get("step")
+            or re.search(r"(?m)^error:|^\.\.\. .*omitted|^\.\.\. TRUNCATED", entry.get("result", ""))):
+            continue
+        if isinstance(samples[0].get("value"), bool):
+            continue
+        value = safe_float(samples[0].get("value"))
+        observed = parse_iso(entry.get("observed_at"))
+        if value is None or not math.isfinite(value) or observed is None or observed.tzinfo is None:
+            continue
+        tool = entry.get("tool")
+        if tool == "logs_count":
+            selector = args.get("selector", "")
+            if not (args.get("contains") or args.get("regex") or "|=" in selector or "|~" in selector):
+                continue
+            if value < 0 or int(value) != value:
+                continue
+            window = duration_seconds(args.get("window") or "24h")
+        elif tool == "metrics_query":
+            # Only direct service health/state gauges have an unambiguous
+            # boolean transition; counters and resource ratios need analysis.
+            expr = args.get("expr", "")
+            if not re.fullmatch(r'\s*(?:node_systemd_unit_state|[a-zA-Z_:][a-zA-Z0-9_:]*(?:_health|_healthy|_ready|_success))(?:\{[^{}]*\})?\s*', expr):
+                continue
+            if value not in (0, 1):
+                continue
+            window = 0
+        else:
+            continue
+        identity = {key: val for key, val in args.items() if key not in ("end_ago", "window", "limit")}
+        # Window spelling must not change the identity (60m == 1h).
+        key = json.dumps([tool, identity, window, samples[0].get("labels", {})], sort_keys=True)
+        at = observed - timedelta(seconds=duration_seconds(args.get("end_ago") or "0s"))
+        measurements.append({"key": key, "tool": tool, "value": value, "window_seconds": window,
+                             "higher_is_better": tool == "metrics_query" and not re.search(
+                                 r'state\s*=\s*"(?:failed|inactive|dead)"', args.get("expr", "")),
+                             "at": iso(at), "ref": ref})
+    return measurements[:12]
+
+
+def material_change(change, measurements, previous):
+    """Require comparable observations, and do not announce the same change twice."""
+    historical = previous.get("change_measurements") or []
+    for current in measurements:
+        current_at = parse_iso(current["at"])
+        if any(row["key"] == current["key"] and row["at"] > current["at"] for row in measurements):
+            continue
+        old_values = [row for row in historical if isinstance(row, dict) and row.get("key") == current["key"]]
+        latest = max(old_values, key=lambda row: row.get("at", ""), default=None)
+        # Already reported the same numerical state. Re-reading the same two
+        # windows, or repeating a daily fall to zero, is not a fresh improvement.
+        if latest is not None:
+            latest_at = parse_iso(latest.get("at"))
+            if latest.get("value") == current["value"] or latest_at and latest_at.tzinfo and current_at <= latest_at:
+                continue
+        for before in [*measurements, *old_values]:
+            if before.get("key") != current["key"]:
+                continue
+            before_at = parse_iso(before.get("at"))
+            if before_at is None or before_at.tzinfo is None or before_at >= current_at:
+                continue
+            if current["tool"] == "logs_count":
+                separation = (current_at - before_at).total_seconds()
+                adjacent = separation == current["window_seconds"]
+                # Historical nightly runs can compare the same hour on earlier
+                # days, allowing timer jitter. An arbitrary daytime window
+                # versus a quiet overnight window is not a useful comparison.
+                same_hour = (before in old_values and separation >= current["window_seconds"]
+                             and separation >= 86340 and min(separation % 86400, 86400 - separation % 86400) <= 60)
+                if not (adjacent or same_hour):
+                    continue
+            old = safe_float(before.get("value"))
+            if old is None or not math.isfinite(old):
+                continue
+            delta = current["value"] - old
+            if current["tool"] == "logs_count":
+                if abs(delta) < max(5, abs(old) * 0.5):
+                    continue
+                if change == "improved" and delta >= 0 or change == "worsened" and delta <= 0:
+                    continue
+            elif not delta:
+                continue
+            elif change in ("improved", "worsened"):
+                improvement = delta > 0 if current["higher_is_better"] else delta < 0
+                if improvement != (change == "improved"):
+                    continue
+            return True
+    return False
+
+
 def validate_digest(raw, pack):
     """Validate evidence, calibrate urgency and collapse re-reported issues."""
     refs_index = pack.get("refs") or {}
@@ -4345,6 +4654,8 @@ def validate_digest(raw, pack):
         if not valid or any(ref not in known_refs for ref in valid):
             dropped.append(title)
             continue
+        anchors = evidence_anchors(dict(item, anchors=[]), refs_index)
+        previous = match_previous(item, anchors, history)
         severity = squeeze(item.get("severity")).lower()
         if severity not in ("critical", "warning", "info"):
             severity = "info"
@@ -4363,7 +4674,9 @@ def validate_digest(raw, pack):
                     and checked_evidence(ref, refs_index, current=current, recovery=recovery)] if isinstance(values, list) else []
         impact_refs = supporting("impact_refs")
         current_refs = supporting("current_refs", current=True)
-        recovery_refs = supporting("recovery_refs", current=True, recovery=True)
+        recovery_refs = [ref for ref in supporting("recovery_refs", current=True, recovery=True)
+                         if recovery_in_scope(ref, refs_index, anchors, previous)]
+        recovery_unverified = False
         original_severity = severity
         if status == "ongoing" and not current_refs:
             status = "unknown"
@@ -4380,11 +4693,10 @@ def validate_digest(raw, pack):
                 severity = "info"
             else:
                 status = "unknown"
+                recovery_unverified = True
                 adjustments.append(f"{title}: recovery was not verified by a current positive check")
         if severity != original_severity:
             adjustments.append(f"{title}: {original_severity} limited to {severity}; impact/current evidence requirements not met")
-        anchors = evidence_anchors(dict(item, anchors=[]), refs_index)
-        previous = match_previous(item, anchors, history)
         identifier = previous["issue_id"] if previous else issue_id(dict(item, anchors=anchors))
         if identifier in emitted:
             continue
@@ -4393,6 +4705,8 @@ def validate_digest(raw, pack):
         change_refs = [ref for ref in item.get("change_refs", []) if isinstance(ref, str) and ref in valid
                        and refs_index[ref].get("kind") == "tool_result"] if isinstance(item.get("change_refs", []), list) else []
         change_summary = clip(squeeze(item.get("change_summary")), 300)
+        measurements = change_measurements(valid, refs_index)
+        changed_measurements = change_measurements(change_refs, refs_index)
         # A verified relapse or recovery is material even if the model omitted
         # change metadata. Never bury either transition as an unchanged issue.
         if previous and previous.get("status") == "recovered" and status == "ongoing" and current_refs and impact_refs:
@@ -4401,8 +4715,16 @@ def validate_digest(raw, pack):
         elif previous and previous.get("status") != "recovered" and status == "recovered" and recovery_refs:
             change, change_refs = "resolved", recovery_refs
             change_summary = change_summary or "A current positive check now supports recovery."
-        changed = previous is None or (change in ("worsened", "improved", "resolved", "changed")
-                   and change_refs and change_summary)
+        verified_transition = bool(previous and (
+            previous.get("status") == "recovered" and status == "ongoing" and current_refs and impact_refs
+            or previous.get("status") != "recovered" and status == "recovered" and recovery_refs))
+        changed = previous is None or verified_transition or (
+            change in ("worsened", "improved", "changed") and change_refs and change_summary
+            and material_change(change, changed_measurements, previous))
+        if previous and previous.get("status") == status == "recovered":
+            changed = False
+        if previous and not changed and change in ("worsened", "improved", "changed", "resolved"):
+            adjustments.append(f"{title}: no new material change established by comparable measurements")
         if change == "resolved" and (status != "recovered" or not recovery_refs):
             changed = False
         finding = {
@@ -4415,10 +4737,25 @@ def validate_digest(raw, pack):
                 "refs": valid,
                 "suggested_action": squeeze(item.get("suggested_action")),
                 "issue_id": identifier, "anchors": anchors, "status": status, "impact": impact,
+                "change_measurements": measurements,
                 "impact_refs": impact_refs, "current_refs": current_refs, "recovery_refs": recovery_refs,
                 "change": change if changed else "unchanged", "change_refs": change_refs,
                 "change_summary": change_summary if changed else "",
             }
+        # Changing only the status badge leaves claims such as "errors resolved"
+        # in titles and paragraphs. Preserve the rejected proposal in the trace,
+        # but make the published finding consistently state the evidence limit.
+        recovery_claim = re.compile(r"(?i)\b(?:resolved|recovered|cleared|restored)\b")
+        if recovery_unverified or (status == "unknown" and any(
+            recovery_claim.search(finding[field]) for field in ("title", "what", "why_it_matters", "change_summary")
+        )):
+            finding["title"] = recovery_claim.sub("recovery unverified", title)
+            finding["what"] = "Recent checks do not establish recovery of this issue. Its operational state remains unknown."
+            finding["why_it_matters"] = "Fewer errors or a quiet log window do not establish that the affected operation succeeded."
+            finding["evidence"] = "Current evidence is retained under: " + ", ".join(valid[:4]) + "."
+            finding["suggested_action"] = ""
+            if finding["change_summary"]:
+                finding["change_summary"] = "A material change in measured frequency was observed; functional recovery remains unverified."
         if previous and not changed and severity != "critical":
             ongoing.append(finding)
         else:
@@ -4428,8 +4765,11 @@ def validate_digest(raw, pack):
     findings.sort(key=lambda item: rank.get(item["severity"], 2))
     findings = findings[:3]
 
+    operational_ongoing = any(f["severity"] in ("critical", "warning")
+                              and f["impact"] in ("outage", "data_loss", "degraded")
+                              and f["status"] != "recovered" for f in ongoing)
     state = "needs_attention" if any(f["severity"] == "critical" for f in findings) else (
-        "notable" if findings or ongoing else "quiet"
+        "notable" if findings or operational_ongoing else "quiet"
     )
     incomplete = not findings and (dropped or pack.get("warnings"))
     if incomplete:
@@ -4446,6 +4786,49 @@ def validate_digest(raw, pack):
         "dropped_unsupported": dropped,
         "evidence_limits": adjustments,
     }
+
+
+def comparison_results(tools):
+    """Summarize measured comparisons even when they establish no new finding."""
+    rows = {}
+    for call in tools.calls:
+        if call.get("tool") != "compare_logs" or call.get("result", "").startswith("error:"):
+            continue
+        try:
+            result = json.loads(call["result"])
+            current, previous = result["current"], result["previous"]
+            if current["matches"]["status"] != "ok" or previous["matches"]["status"] != "ok":
+                continue
+            args = call["arguments"]
+            key = json.dumps([args.get("selector"), args.get("contains"), args.get("regex")])
+            row = {"selector": args.get("selector"), "pattern": args.get("contains") or args.get("regex") or "all log lines",
+                   "current": current["matches"]["count"], "previous": previous["matches"]["count"],
+                   "current_start": current["start_exclusive"], "current_end": current["end_inclusive"],
+                   "previous_start": previous["start_exclusive"], "previous_end": previous["end_inclusive"],
+                   "refs": [current["matches"]["ref"], previous["matches"]["ref"]],
+                   "window_seconds": result["window_seconds"], "status": result.get("status", "partial")}
+            # Prefer a broader event window over another tiny overnight zero.
+            if key not in rows or row["window_seconds"] > rows[key]["window_seconds"]:
+                rows[key] = row
+        except (KeyError, TypeError, ValueError):
+            continue
+    return sorted(rows.values(), key=lambda row: (
+        row["pattern"] == "all log lines", not bool(row["current"] or row["previous"]),
+        row["current"] == row["previous"], -row["window_seconds"], row["selector"], row["pattern"]))
+
+
+def render_comparisons(rows, title="What we checked"):
+    if not rows:
+        return ""
+    lines = [f"## {title}", ""]
+    for row in rows:
+        lines.append(f"- `{clip(row['selector'], 180)}` — `{clip(row['pattern'], 100)}`: "
+                     f"{row['current']} matching lines in ({row['current_start']}, {row['current_end']}], "
+                     f"versus {row['previous']} in ({row['previous_start']}, {row['previous_end']}].")
+        if row["status"] != "complete":
+            lines.append("  Counts succeeded; additional comparison evidence was incomplete.")
+    lines.extend(["", "These are log counts, not failed-request rates or proof of recovery.", ""])
+    return "\n".join(lines)
 
 
 def render_digest(digest, pack, budget, tools, now) -> str:
@@ -4508,14 +4891,23 @@ def render_digest(digest, pack, budget, tools, now) -> str:
         lines.append("")
 
     if digest.get("ongoing"):
-        lines.extend(["## Previously reported, checked again", ""])
-        for finding in digest["ongoing"]:
+        operational = [finding for finding in digest["ongoing"]
+                       if finding["severity"] in ("critical", "warning") and finding["status"] != "recovered"]
+        if operational:
+            lines.extend(["## Previously reported, checked again", ""])
+        for finding in operational:
             lines.append(f"- {finding['title']} — {finding['status']}; no material change established.")
+        quiet_count = len(digest["ongoing"]) - len(operational)
+        if quiet_count:
+            lines.append(f"{quiet_count} previously reported informational issue(s) checked without a material change; details retained in the structured report.")
         lines.append("")
 
     experiments_text = render_investigations(digest.get("investigation_results") or [])
     if experiments_text:
         lines.extend([experiments_text, ""])
+    comparisons = comparison_results(tools)[:max(0, 3 - len(digest.get("investigation_results") or []))]
+    if comparisons:
+        lines.extend([render_comparisons(comparisons, "Compared log evidence" if experiments_text else "What we checked"), ""])
 
     if tools.notebook:
         active = [t for t in tools.notebook.tasks if t["status"] != "resolved"
@@ -4563,7 +4955,18 @@ def render_digest(digest, pack, budget, tools, now) -> str:
         lines.append("Collection warnings: " + "; ".join(pack["warnings"][:3]) + ".")
 
     if digest.get("evidence_limits"):
-        lines.append("Evidence limits: " + "; ".join(digest["evidence_limits"][:3]) + ".")
+        limits = defaultdict(int)
+        for limit in digest["evidence_limits"]:
+            if "recovery was not verified" in limit:
+                label = "recovery claims lacked a relevant positive check"
+            elif "no new material change" in limit:
+                label = "repeat change claims lacked new comparable measurements"
+            elif "current state was not checked" in limit:
+                label = "current-state claims were unverified"
+            else:
+                label = "severity claims were limited by their evidence"
+            limits[label] += 1
+        lines.append("Evidence limits: " + "; ".join(f"{count} {label}" for label, count in limits.items()) + ".")
 
     lines.append(
         "Run: %s; tool calls: %d; generated %s."
@@ -4612,7 +5015,11 @@ def reason(cfg, args) -> int:
     tools.cases = InvestigationCases(cfg, now)
     pack["report_history"] = report_history(cfg, now)
     observation_text = load_observations(cfg, now, pack) if cfg.get("observeEnable", False) else ""
-    history_text = "PREVIOUS REPORTS (fallible historical context, NOT current evidence):\n" + json.dumps(pack["report_history"], sort_keys=True)
+    # Numeric continuity is used by validation; repeating full query identities
+    # in the prompt would spend context on bookkeeping rather than evidence.
+    prompt_history = [{key: value for key, value in row.items() if key != "change_measurements"}
+                      for row in pack["report_history"]]
+    history_text = "PREVIOUS REPORTS (fallible historical context, NOT current evidence):\n" + json.dumps(prompt_history, sort_keys=True)
     pack_text = render_pack(pack, cfg) + "\n\n" + history_text + "\n\n" + tools.cases.render() + "\n\n" + notebook.render() + "\n\n" + tools.plans.render() + "\n\n" + observation_text
     log_info(f"evidence pack rendered to {len(pack_text)} chars (~{len(pack_text)//4} tokens)")
 
@@ -4637,9 +5044,12 @@ def reason(cfg, args) -> int:
                     "budget_seconds": float(cfg["gpuBudgetSeconds"]), "calls": budget.calls,
                     "prompt_tokens": budget.prompt_tokens, "cached_tokens": budget.cached_tokens,
                     "completion_tokens": budget.completion_tokens},
+            "model_requests": budget.requests,
+            "model_tool_actions": tools.model_tool_actions,
             "tool_calls": tools.calls, "notes": tools.notes, "followups": notebook.tasks,
             "synthesis_proposal": synthesis_proposal,
             "investigation_results": investigation_results(tools),
+            "comparison_results": comparison_results(tools),
             "investigation_audit": investigation_audit(tools),
         })
 
@@ -4661,6 +5071,7 @@ def reason(cfg, args) -> int:
             f"Evidence and completed queries are at {evidence_path}.\n"
             f"{budget.summary()}\n"
             + "\n" + render_investigations(investigation_results(tools))
+            + "\n" + render_comparisons(comparison_results(tools)[:3], "Compared log evidence")
         )
         checkpoint("failed", str(exc))
         write_text(os.path.join(state_dir, f"digest-{run_id}.md"), failure)
@@ -4668,6 +5079,7 @@ def reason(cfg, args) -> int:
         failure_report = {
             "state": "failed", "run_id": run_id, "error": str(exc), "followups": notebook.tasks,
             "generated_at": iso(now), "investigation_results": investigation_results(tools),
+            "comparison_results": comparison_results(tools),
             "investigation_audit": investigation_audit(tools),
         }
         write_json(os.path.join(state_dir, "digest-latest.json"), failure_report)
@@ -4689,7 +5101,8 @@ def reason(cfg, args) -> int:
             log_info(f"discarded invalid followup: {exc}")
     digest = validate_digest(raw, pack)
     digest.update(run_id=run_id, generated_at=iso(now), followups=notebook.tasks)
-    digest.update(investigation_results=investigation_results(tools), investigation_audit=investigation_audit(tools))
+    digest.update(investigation_results=investigation_results(tools), investigation_audit=investigation_audit(tools),
+                  comparison_results=comparison_results(tools))
     if digest["dropped_unsupported"]:
         log_info(
             "dropped %d unsupported finding(s): %s"

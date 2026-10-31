@@ -127,6 +127,21 @@ class ComparisonTests(unittest.TestCase):
         self.assertIsNone(result["rate_ratio"])
         self.assertIn("undefined", result["rate_ratio_unavailable"])
 
+    def test_quiet_current_window_still_samples_the_previous_failure(self):
+        self.counts(0, 12, 3, 100)
+        self.loki.streams.return_value = [
+            ({"vm": "TEST", "service": "app"}, agent.to_ns(NOW - timedelta(minutes=80)),
+             {"MESSAGE": "Failed to open database"}, "")]
+        result = json.loads(self.compare(contains="Failed"))
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["sample"]["window"], "previous")
+        self.assertIn("Failed to open database", result["sample"]["latest_lines"][0])
+        entry = self.pack["refs"][result["sample"]["ref"]]
+        self.assertEqual(entry["arguments"]["end_ago"], "3600s")
+        self.assertEqual(self.loki.streams.call_args.args[1:3],
+                         (NOW - timedelta(hours=2), NOW - timedelta(hours=1)))
+        self.assertFalse(agent.checked_evidence(result["sample"]["ref"], self.pack["refs"], recovery=True))
+
     def test_read_failure_does_not_become_zero_or_recovery(self):
         self.counts(agent.QueryError("timeout"), 7, 30, 25)
         result = json.loads(self.compare(contains="Failed"))
@@ -258,6 +273,25 @@ class ComparisonTests(unittest.TestCase):
         self.cfg["observationMode"] = True
         self.assertIn("only permits observability", self.compare())
         self.loki.instant.assert_not_called()
+
+    def test_failed_synthesis_preserves_measured_comparisons_in_report_and_trace(self):
+        self.counts(0, 0, 10, 10)
+        llama = fixtures.FakeLlama([
+            fixtures.completion([("compare_logs", {"selector": '{service="app"}', "contains": "Failed"})]),
+            fixtures.completion([("done", {})]),
+            RuntimeError("model offline"), RuntimeError("model offline"),
+        ])
+        self.assertEqual(fixtures.DigestTests.run_reason(self, llama), 1)
+        from pathlib import Path
+        path = Path(self.temp.name)
+        report = json.loads((path / "digest-latest.json").read_text())
+        trace = json.loads(next(path.glob("trace-*.json")).read_text())
+        self.assertEqual(report["state"], "failed")
+        self.assertEqual(report["comparison_results"][0]["current"], 0)
+        self.assertEqual(report["comparison_results"], trace["comparison_results"])
+        text = (path / "digest-latest.md").read_text()
+        self.assertIn("Compared log evidence", text)
+        self.assertIn("not failed-request rates or proof of recovery", text)
 
 
 if __name__ == "__main__":

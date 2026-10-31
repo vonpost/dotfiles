@@ -172,6 +172,37 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(agent.severity_of('[ERR] encoder terminated unexpectedly', 6), "error")
         self.assertEqual(agent.severity_of('[WRN] indexer is slow', 6), "warn")
 
+    def test_native_information_levels_do_not_promote_media_titles_to_incidents(self):
+        messages = [
+            "[22:08:02] [INF] [7] Jellyfin.Plugin.JellyfinEnhanced: [Auto-Season-Request] "
+            "Episode 'Panic! The Secret Bible!!' - PlayedToCompletion: True, Completion: 100.0%",
+            "[22:08:02] [INF] [88] Emby.Server.Implementations.Session.SessionManager: "
+            "Playback stopped reported by app Infuse-Direct 8.5.6 playing Panic! The Secret Bible!!.",
+            '[INFO] Playing "Critical Error"',
+            '[DEBUG] Checking error state',
+            '[TRACE] Fatal exception handler registered',
+            '2026-10-12T22:25:00.040Z [info][Library]: Indexed "Failure"',
+            'logger=library t=2026-10-12T22:25:00.040Z level=info msg="Indexed Panic!"',
+        ]
+        for message in messages:
+            with self.subTest(message=message):
+                self.assertEqual(agent.severity_of(message, 6), "info")
+        self.assertEqual(agent.severity_of(messages[0], 2), "critical")
+
+    def test_native_levels_must_be_prefixes_and_unstructured_failures_survive(self):
+        messages = [
+            'Failed to play "[INFO] Panic!"',
+            'Error opening file "level=info"',
+            'msg="level=info" error opening file',
+            'Failed to load debug symbols',
+            'Trace failed: connection refused',
+            'System.Net.Http.HttpRequestException: request failed',
+            '[03:00:10] [INF] [93] MediaEncoder: ffmpeg image extraction failed for /bin/ffmpeg',
+        ]
+        for message in messages:
+            with self.subTest(message=message):
+                self.assertIn(agent.severity_of(message, 6), ("error", "critical"))
+
     def test_old_command_signatures_are_removed_from_every_pack_classification(self):
         entry = self.catalog.signatures["sig:test"]
         entry["example"] = '[03:00:00] [INF] MediaEncoder: Trickplay generation: /bin/ffmpeg -loglevel error'
@@ -194,6 +225,53 @@ class EvidenceTests(unittest.TestCase):
         pack = self.pack()
         self.assertEqual(pack["ongoing"][0]["severity"], "error")
         self.assertEqual(pack["refs"]["sig:test"]["severity"], "error")
+
+    def test_old_informational_title_signatures_are_not_candidates_or_recoveries(self):
+        entry = self.catalog.signatures["sig:test"]
+        entry["example"] = "[22:08:02] [INF] [7] Jellyfin: Episode 'Panic!' completed"
+        entry["severity"] = "critical"
+        for age_days, count in ((0.1, 10), (5, 100), (5, 10), (5, 0)):
+            with self.subTest(age_days=age_days, count=count):
+                entry["first_seen"] = agent.iso(NOW - timedelta(days=age_days))
+                for row in self.rows[:24]:
+                    row["severity_counts"]["sig:test"] = count
+                pack = self.pack()
+                for section in ("new_signatures", "escalating", "ongoing", "went_silent"):
+                    self.assertEqual(pack[section], [])
+                self.assertNotIn("sig:test", pack["refs"])
+        self.assertEqual(entry["severity"], "critical")
+
+    def test_new_classifications_preserve_journal_priority_in_catalog_and_pack(self):
+        for message in ('[INF] Media player stopped', '[ERR] Media player stopped'):
+            with self.subTest(message=message):
+                self.catalog.observe(
+                    "sig:test", vm="TEST", service="app", unit="app.service",
+                    severity=agent.severity_of(message, 2), signature=message,
+                    example=message, count=1, day="2026-10-01", now=NOW,
+                )
+                pack = self.pack()
+                self.assertEqual(pack["ongoing"][0]["severity"], "critical")
+                self.assertEqual(pack["refs"]["sig:test"]["severity"], "critical")
+
+    def test_new_classification_does_not_inherit_legacy_catalog_severity(self):
+        entry = self.catalog.signatures["sig:test"]
+        entry["severity"] = "critical"
+        old_total = entry["total"]
+        message = '[ERR] Media player stopped'
+        self.catalog.observe(
+            "sig:test", vm="TEST", service="app", unit="app.service",
+            severity=agent.severity_of(message, 6), signature=message,
+            example=message, count=1, day="2026-10-01", now=NOW,
+        )
+        self.assertEqual(self.pack()["ongoing"][0]["severity"], "error")
+        self.assertEqual(entry["severity"], "critical")
+        self.assertEqual(entry["total"], old_total + 1)
+        self.assertEqual(entry["days"]["2026-09-30"], 240)
+
+    def test_legacy_catalog_priority_is_preserved_when_available(self):
+        entry = self.catalog.signatures["sig:test"]
+        entry.update(example='[INF] Media player stopped', priority=2, severity="critical")
+        self.assertEqual(self.pack()["ongoing"][0]["severity"], "critical")
 
 
 if __name__ == "__main__":

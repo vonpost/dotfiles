@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 
 SOURCE = Path(os.environ.get("LOG_DIGEST_AGENT", Path(__file__).parents[2] / "lib/log-digest-agent.py"))
@@ -66,6 +67,150 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(report["findings"], [])
         self.assertEqual(len(report["ongoing"]), 1)
 
+    def count(self, name, value, *, window="1h", end_ago="0s", selector='{service="app"}', contains="request failed"):
+        entry = {"kind": "tool_result", "tool": "logs_count", "observed_at": agent.iso(NOW),
+                 "arguments": {"selector": selector, "window": window, "end_ago": end_ago},
+                 "result": f"count: {value}", "measurements": {
+                     "samples": [{"labels": {}, "value": value}], "truncated": False}}
+        if contains:
+            entry["arguments"]["contains"] = contains
+        self.pack["refs"][name] = entry
+        return name
+
+    def count_change(self, before=20, after=0, **updates):
+        earlier = self.count("tool:before", before, end_ago="1h")
+        current = self.count("tool:after", after)
+        return self.finding(refs=["sig:app", earlier, current], change="improved",
+                            change_summary="Fewer failed requests were logged.",
+                            change_refs=[earlier, current], **updates)
+
+    def test_current_zero_without_comparison_cannot_promote_improvement(self):
+        self.previous()
+        ref = self.count("tool:zero", 0)
+        report = self.validate(self.finding(refs=["sig:app", ref], change="improved",
+                                            change_refs=[ref], change_summary="Errors dropped to zero."))
+        self.assertEqual(report["findings"], [])
+        self.assertEqual(report["ongoing"][0]["change"], "unchanged")
+
+    def test_material_equal_window_change_remains_visible_without_claiming_recovery(self):
+        self.previous()
+        report = self.validate(self.count_change())
+        finding = report["findings"][0]
+        self.assertEqual((finding["change"], finding["status"]), ("improved", "unknown"))
+        self.assertEqual(len(finding["change_measurements"]), 2)
+
+    def test_small_unequal_unfiltered_or_incomplete_counts_cannot_promote_repeat(self):
+        for mode in ("small", "unequal", "overlap", "distant", "unfiltered", "truncated", "wrong_direction"):
+            with self.subTest(mode=mode):
+                self.previous()
+                finding = self.count_change(3 if mode == "small" else 20, 0)
+                before = self.pack["refs"]["tool:before"]
+                after = self.pack["refs"]["tool:after"]
+                if mode == "unequal":
+                    before["arguments"]["window"] = "24h"
+                elif mode == "overlap":
+                    before["arguments"]["end_ago"] = "30m"
+                elif mode == "distant":
+                    before["arguments"]["end_ago"] = "12h"
+                elif mode == "unfiltered":
+                    for entry in (before, after):
+                        entry["arguments"].pop("contains")
+                elif mode == "truncated":
+                    before["measurements"]["truncated"] = True
+                elif mode == "wrong_direction":
+                    finding["change"] = "worsened"
+                self.assertEqual(self.validate(finding)["findings"], [])
+
+    def test_new_measurement_can_be_compared_with_preceding_report(self):
+        before = self.count("tool:older", 20, end_ago="1d")
+        measurements = agent.change_measurements([before], self.pack["refs"])
+        self.previous(change_measurements=measurements)
+        current = self.count("tool:current_count", 0)
+        report = self.validate(self.finding(refs=["sig:app", current], change="improved",
+                                            change_refs=[current], change_summary="Failed request frequency decreased."))
+        self.assertEqual(report["findings"][0]["change"], "improved")
+
+    def test_same_count_state_cannot_be_announced_as_improved_every_night(self):
+        before = self.count("tool:older", 0, end_ago="1d")
+        self.previous(change_measurements=agent.change_measurements([before], self.pack["refs"]))
+        report = self.validate(self.count_change(20, 0))
+        self.assertEqual(report["findings"], [])
+
+    def test_old_comparison_cannot_reannounce_a_change(self):
+        finding = self.count_change()
+        measurements = agent.change_measurements(finding["refs"], self.pack["refs"])
+        self.previous(change_measurements=measurements)
+        self.assertEqual(self.validate(finding)["findings"], [])
+
+    def test_already_recovered_issue_is_not_resolved_again(self):
+        for change in ("resolved", "improved", "changed"):
+            with self.subTest(change=change):
+                self.previous(status="recovered", anchors=["sig:app", "unit:TEST:app.service"])
+                report = self.validate(self.finding(status="recovered", change=change,
+                    refs=["sig:app", "tool:healthy"], recovery_refs=["tool:healthy"],
+                    change_refs=["tool:healthy"], change_summary="It has recovered again."))
+                self.assertEqual(report["findings"], [])
+                self.assertEqual(report["ongoing"][0]["status"], "recovered")
+
+    def test_rejected_recovery_is_removed_from_published_prose(self):
+        self.previous()
+        ref = self.count("tool:zero", 0)
+        report = self.validate(self.finding(title="App requests recovered", what="Errors have cleared.",
+            why_it_matters="Functionality is restored.", evidence="Errors resolved.",
+            status="recovered", refs=["sig:app", ref], recovery_refs=[ref], change="improved",
+            change_refs=[ref], change_summary="The service recovered.", suggested_action="Restart app."))
+        finding = report["ongoing"][0]
+        self.assertEqual(finding["status"], "unknown")
+        self.assertIn("recovery unverified", finding["title"])
+        self.assertIn("do not establish recovery", finding["what"])
+        self.assertEqual(finding["suggested_action"], "")
+        self.assertNotIn("Errors resolved", finding["evidence"])
+
+    def test_direct_service_state_comparison_can_establish_material_change(self):
+        self.previous()
+        expr = 'node_systemd_unit_state{name="app.service",state="failed"}'
+        for ref, value, shift in (("tool:before", 0, "1h"), ("tool:after", 1, "0s")):
+            self.pack["refs"][ref] = dict(self.metric(expr, value, end_ago=shift), observed_at=agent.iso(NOW))
+        report = self.validate(self.finding(change="worsened", change_refs=["tool:before", "tool:after"],
+            refs=["sig:app", "tool:before", "tool:after", "tool:impact"],
+            current_refs=["tool:after"], change_summary="Unit changed from not failed to failed."))
+        self.assertEqual(report["findings"][0]["change"], "worsened")
+
+    def test_unchanged_info_is_quiet_but_operational_degradation_stays_notable(self):
+        self.previous()
+        quiet = self.validate(self.finding(severity="info", impact="none"))
+        self.assertEqual(quiet["state"], "quiet")
+        degraded = self.validate(self.finding())
+        self.assertEqual(degraded["state"], "notable")
+
+    def test_comparisons_survive_quiet_report_without_repeating_info_titles(self):
+        self.previous()
+        report = self.validate(self.finding(title="Routine known noise", severity="info", impact="none"))
+        current = {"start_exclusive": "2026-10-01T00:30:00+00:00", "end_inclusive": agent.iso(NOW),
+                   "matches": {"status": "ok", "count": 0, "ref": "tool:now"}}
+        previous = {"start_exclusive": "2026-09-30T23:30:00+00:00", "end_inclusive": current["start_exclusive"],
+                    "matches": {"status": "ok", "count": 2, "ref": "tool:before"}}
+        call = {"tool": "compare_logs", "arguments": {"selector": '{service="app"}', "contains": "failed"},
+                "result": json.dumps({"current": current, "previous": previous,
+                                      "window_seconds": 3600, "status": "complete"})}
+        tools = SimpleNamespace(calls=[call], notebook=None)
+        budget = SimpleNamespace(summary=lambda: "gpu=10s")
+        rendered = agent.render_digest(report, self.pack, budget, tools, NOW)
+        self.assertIn("## What we checked", rendered)
+        self.assertIn("0 matching lines", rendered)
+        self.assertIn("versus 2", rendered)
+        self.assertIn(current["start_exclusive"], rendered)
+        self.assertIn("not failed-request rates or proof of recovery", rendered)
+        self.assertNotIn("Routine known noise", rendered)
+
+    def test_report_history_retains_numeric_continuity(self):
+        self.previous()
+        report = self.validate(self.count_change())
+        report["generated_at"] = agent.iso(NOW - timedelta(minutes=1))
+        Path(self.temp.name, "digest-2026-10-01T012900000000Z.json").write_text(json.dumps(report))
+        history = agent.report_history(self.cfg, NOW)
+        self.assertEqual(history[0]["change_measurements"], report["findings"][0]["change_measurements"])
+
     def test_verified_relapse_after_recovery_is_an_update_without_model_change_fields(self):
         self.previous(status="recovered")
         report = self.validate(self.finding())
@@ -74,12 +219,37 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(report["findings"][0]["issue_id"], "issue:existing")
 
     def test_verified_recovery_is_an_update_without_model_change_fields(self):
-        self.previous()
+        self.previous(anchors=["sig:app", "unit:TEST:app.service"])
         report = self.validate(self.finding(status="recovered", refs=["sig:app", "tool:healthy"],
                                             recovery_refs=["tool:healthy"]))
         self.assertEqual(report["ongoing"], [])
         finding = report["findings"][0]
         self.assertEqual((finding["status"], finding["change"], finding["severity"]), ("recovered", "resolved", "info"))
+
+    def test_active_process_does_not_resolve_an_application_operation(self):
+        self.previous()
+        report = self.validate(self.finding(status="recovered", refs=["sig:app", "tool:healthy"],
+                                            recovery_refs=["tool:healthy"]))
+        self.assertEqual(report["findings"], [])
+        self.assertEqual(report["ongoing"][0]["status"], "unknown")
+
+    def test_unrelated_successful_housekeeping_does_not_resolve_plugin_failure(self):
+        self.previous()
+        self.pack["refs"]["tool:housekeeping"] = dict(self.pack["refs"]["tool:impact"],
+            result='query: {service="app"}\n10-01 01:29 TEST/app Database optimization completed successfully')
+        finding = self.finding(status="recovered", refs=["sig:app", "tool:housekeeping"],
+                               recovery_refs=["tool:housekeeping"])
+        self.assertEqual(self.validate(finding)["ongoing"][0]["status"], "unknown")
+        entry = self.pack["refs"]["tool:housekeeping"]
+        entry["arguments"] = dict(entry["arguments"], contains="plugin request")
+        entry["result"] = 'query: {service="app"}\n10-01 01:29 TEST/app plugin request completed successfully'
+        self.assertEqual(self.validate(finding)["findings"][0]["status"], "recovered")
+
+    def test_different_active_unit_cannot_resolve_failed_unit(self):
+        self.previous(anchors=["sig:app", "unit:OTHER:app.service"])
+        report = self.validate(self.finding(status="recovered", refs=["sig:app", "tool:healthy"],
+                                            recovery_refs=["tool:healthy"]))
+        self.assertEqual(report["ongoing"][0]["status"], "unknown")
 
     def test_same_generic_title_does_not_merge_different_failed_units(self):
         self.pack["refs"].update({"unit:A:app.service": {"kind": "failed_unit"},
@@ -167,6 +337,7 @@ class ReportingTests(unittest.TestCase):
 
     def test_recent_success_log_can_support_recovery_but_filter_text_cannot(self):
         entry = dict(self.pack["refs"]["tool:impact"],
+                     arguments={"selector": '{service="app"}', "window": "1h", "contains": "request"},
                      result='query: {service="app"} |= "success"\nSAMPLE: latest 1 lines\n10-01 01:29 TEST/app request completed successfully')
         self.pack["refs"]["tool:recovery"] = entry
         finding = self.finding(status="recovered", refs=["tool:recovery"], recovery_refs=["tool:recovery"])
