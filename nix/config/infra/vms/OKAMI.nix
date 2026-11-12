@@ -20,6 +20,7 @@ in
       # 249 GB games profile). Cutover user-approved 2026-08-26 after a
       # verified stream on the WolfSteamNix validation profile.
       wolfImagePackages.wolfSteamApp
+      wolfImagePackages.wolfBattleNetApp
     ];
     # The upstream ghcr Steam app is superseded by wolfSteamApp, which takes
     # over its runner name (= profile dir); two apps must not share it.

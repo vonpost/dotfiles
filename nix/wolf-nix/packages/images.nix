@@ -1737,6 +1737,11 @@ EOF
     materialize_tree cfg
   '';
 
+  battleNet = import ./images/battlenet.nix {
+    inherit pkgs lib imageTag basePath mkWolfSessionAnchorService
+      sessionUserDirsPreStart mkWolfDesktopServiceConfig;
+  };
+
   desktopImages = import ./images/desktop-images.nix {
     inherit
       pkgs
@@ -1808,4 +1813,6 @@ in
 }
 // lib.optionalAttrs steamSupported {
   inherit (desktopImages) wolfSteamApp;
+  inherit (battleNet) wolfBattleNetApp wolfBattleNetSystem wolfBattleNetLauncher wolfBattleNetProton
+    wolfBattleNetSession wolfWowUpLauncher;
 })

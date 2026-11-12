@@ -1471,7 +1471,9 @@ rec {
           {
             echo "default_border none"
             echo "output * resolution ''${GAMESCOPE_WIDTH}x''${GAMESCOPE_HEIGHT} position 0,0"
-            echo "xwayland enable"
+            # Steam always needs X11. Start Xwayland alongside the FHS/runtime
+            # setup instead of making the first window wait for it to boot.
+            echo "xwayland force"
             echo "workspace main"
             # LD_PRELOAD scoped to steam only: with STEAM_RUNTIME=0 nothing
             # loads libXrandr before Valve's XRR workaround shim resolves the
