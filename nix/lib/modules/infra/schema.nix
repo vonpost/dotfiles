@@ -101,6 +101,15 @@ let
           this VM reads them; the rest of the service state keeps its cache.
         '';
       };
+      backupExcludedCacheDirectories = mkOption {
+        type = types.listOf (types.strMatching "[a-zA-Z0-9_-]+");
+        default = [ ];
+        description = ''
+          Immediate cache subdirectories created as nested Btrfs subvolumes,
+          so snapshots and sends of the parent service state exclude their
+          contents. Existing ordinary directories require an offline migration.
+        '';
+      };
       hasDownloadsDir = mkOption {
         type = types.bool;
         default = false;
@@ -359,6 +368,11 @@ in
         assertion = builtins.all (service: service.uncachedCacheDirectories == [ ]
           || (service.managedState && service.hasCacheDir)) (builtins.attrValues infraServices);
         message = "Uncached cache directories require managedState and hasCacheDir.";
+      }
+      {
+        assertion = builtins.all (service: service.backupExcludedCacheDirectories == [ ]
+          || (service.managedState && service.hasCacheDir)) (builtins.attrValues infraServices);
+        message = "Backup-excluded cache directories require managedState and hasCacheDir.";
       }
       {
         assertion = missingMountedServices == [ ];

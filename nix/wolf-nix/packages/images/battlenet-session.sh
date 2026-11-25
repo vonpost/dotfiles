@@ -14,7 +14,4 @@ fi
 state_dir="$HOME/.local/share/battlenet"
 mkdir -p "$state_dir"
 exec 8>"$state_dir/wowup.lock"
-if ! flock -n 8; then
-  swaymsg 'workspace addons' >/dev/null
-  flock 8
-fi
+flock 8

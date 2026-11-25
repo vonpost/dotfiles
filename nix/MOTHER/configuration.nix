@@ -16,6 +16,7 @@ in
     ./filesystems.nix
     ./hardware-configuration.nix
     ./boot-resilience.nix
+    ./observability.nix
     ./vfio.nix
     ./vm.nix
     ./wifi.nix

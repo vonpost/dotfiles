@@ -77,3 +77,26 @@ has already fired. Inspect active `infra-deadman-*` units before recovery work.
 
 `infra update terra` and `infra deploy terra` continue to use the separate
 laptop flake. No infrastructure milestone changes its source layout.
+
+## Cache backup exclusions
+
+Jellyfin's `backupExcludedCacheDirectories = [ "transcodes" ]` makes its
+transcode directory a nested Btrfs subvolume. Parent `@state` snapshots and
+sends exclude its contents; Jellyfin's database, settings and other state
+remain in the daily backup. Existing backups retain their original contents
+until normal retention removes them. See [Btrfs nested subvolumes](https://btrfs.readthedocs.io/en/latest/Subvolumes.html#nested-subvolumes).
+
+`service-cache-subvolumes` creates missing cache subvolumes before their VM
+exporters start. It refuses existing ordinary directories. The daily backup
+also checks the boundary on every run, including when the preparation service
+has already completed. This check runs as root; btrbk retains its own user.
+
+Before first activation, migrate the existing cache during a maintenance
+window with both SOTO and OKAMI, their VirtioFS exporters, and the daily backup
+timer stopped. Preserve cache files using a sibling `.new-subvolume` and
+`cp -a --reflink=always`, then rename the old directory to `.before-subvolume`
+and the new subvolume to the original path. Verify the copy before removing
+the old directory. Both reserved migration suffixes block backups until cleanup
+finishes. Do not edit old read-only snapshots to remove cache contents; that
+can invalidate incremental send assumptions. A restore recreates the empty
+cache through the preparation service.

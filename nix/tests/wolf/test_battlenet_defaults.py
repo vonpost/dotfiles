@@ -27,18 +27,21 @@ class BattleNetDefaultsTests(unittest.TestCase):
     def test_fresh_profile_gets_launcher_defaults(self):
         defaults.seed_defaults(self.prefix)
         settings = json.loads(self.config.read_text())
+        self.assertEqual(settings["Client"]["GameLaunchWindowBehavior"], "0")
         self.assertEqual(settings["Client"]["HardwareAcceleration"], "false")
         self.assertEqual(settings["Client"]["Sound"]["Enabled"], "false")
         self.assertEqual(settings["Client"]["Streaming"]["StreamingEnabled"], "false")
 
     def test_existing_preferences_and_unrelated_settings_survive(self):
         self.write_settings(json.dumps({
-            "Client": {"HardwareAcceleration": "true", "Sound": {"Enabled": "true", "Volume": 7}},
+            "Client": {"GameLaunchWindowBehavior": "2", "HardwareAcceleration": "true",
+                       "Sound": {"Enabled": "true", "Volume": 7}},
             "Other": {"setting": "preserved"},
         }))
         defaults.seed_defaults(self.prefix)
         settings = json.loads(self.config.read_text())
         self.assertEqual(settings["Client"]["HardwareAcceleration"], "true")
+        self.assertEqual(settings["Client"]["GameLaunchWindowBehavior"], "0")
         self.assertEqual(settings["Client"]["Sound"], {"Enabled": "true", "Volume": 7})
         self.assertEqual(settings["Other"], {"setting": "preserved"})
         self.assertEqual(settings["Client"]["Streaming"]["StreamingEnabled"], "false")

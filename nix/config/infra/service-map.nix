@@ -37,6 +37,7 @@
       mediaGroup = true;
       hasCacheDir = true;
       uncachedCacheDirectories = [ "transcodes" ];
+      backupExcludedCacheDirectories = [ "transcodes" ];
       logging.enable = true;
       secrets = {
         jellyfin_transcode_ssh_key = {

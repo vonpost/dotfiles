@@ -29,10 +29,15 @@ if [ ! -f "$setup_marker" ]; then
   # Use GE's bundled Winetricks inside the same UMU runtime as the game.
   # This also initializes new prefixes before seeding launcher preferences.
   umu-run winetricks arial
-  python3 "$WOLF_BATTLENET_DEFAULTS" "$WINEPREFIX"
   # Keep this inside the prefix so rebuilding a prefix reruns setup. Failed
   # setup leaves no marker and is retried next time, without reinstalling WoW.
   touch "$setup_marker"
+fi
+
+preferences_marker="$WINEPREFIX/.wolf-battlenet-preferences-v2"
+if [ ! -f "$preferences_marker" ]; then
+  python3 "$WOLF_BATTLENET_DEFAULTS" "$WINEPREFIX"
+  touch "$preferences_marker"
 fi
 
 battlenet="$WINEPREFIX/drive_c/Program Files (x86)/Battle.net/Battle.net.exe"

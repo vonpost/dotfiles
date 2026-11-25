@@ -1,5 +1,5 @@
 { pkgs, lib, imageTag, basePath, mkWolfSessionAnchorService
-, sessionUserDirsPreStart, mkWolfDesktopServiceConfig }:
+, sessionUserDirsPreStart, mkWolfDesktopServiceConfig, swaySessionConfig }:
 
 let
   # Official binaries: do not autoPatchelf them against host Nix libraries.
@@ -47,7 +47,7 @@ let
   wowupLauncher = pkgs.writeShellApplication {
     name = "wolf-wowup";
     derivationArgs.preferLocalBuild = true;
-    runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.python3 pkgs.sway pkgs.zenity wowup ];
+    runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.python3 pkgs.zenity wowup ];
     text = ''
       export WOLF_WOWUP_SETTINGS=${./wowup-settings.py}
     '' + builtins.readFile ./wowup-launcher.sh;
@@ -135,9 +135,9 @@ let
           workspace game
           for_window [class="(?i)battle.net.*"] floating enable
           assign [class="(?i)wowup.*"] workspace addons
+          include ${swaySessionConfig}
           # Leave Super to the client's XMonad and Ctrl+Alt+Shift to Moonlight.
           bindsym Ctrl+Shift+6 exec ${lib.getExe wowupLauncher}
-          bindsym Ctrl+Shift+7 workspace game
           bindsym Ctrl+Shift+8 [class="(?i)wowup.*"] kill
           bindsym Ctrl+Shift+9 exec ${pkgs.sway}/bin/swaymsg exit
           exec ${lib.getExe sessionApp}

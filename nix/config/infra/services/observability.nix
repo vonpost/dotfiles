@@ -12,7 +12,11 @@ let
       })
       (builtins.filter
         (vmName: builtins.elem "node_exporter" (topology.vms.${vmName}.provides or [ ]))
-        (builtins.attrNames topology.vms));
+        (builtins.attrNames topology.vms))
+    ++ [{
+      targets = [ "${topology.hostIp}:${toString (topo.getPort "node_exporter")}" ];
+      labels.vm = "MOTHER";
+    }];
 
   starterDashboard = pkgs.writeText "homelab-logs-dashboard.json" (builtins.toJSON (import ../dashboards/logs.nix));
 

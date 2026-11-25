@@ -31,6 +31,7 @@ in
 
     services.logDigest = {
       enable = true;
+      infrastructureHost = "MOTHER";
       url = llmUrl;
       model = "Qwen3.6-35B-A3B-UD-Q4_K_XL";
       port = svc.getPort "llama_server";

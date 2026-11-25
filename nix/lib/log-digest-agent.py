@@ -338,6 +338,20 @@ class Prometheus:
             raise QueryError(describe_http_error(exc)) from exc
         return parse_vector(data)
 
+    def samples(self, selector: str, start: datetime, end: datetime):
+        """Raw samples, without query_range's lookback/interpolation across gaps."""
+        seconds = math.ceil((end - start).total_seconds())
+        if not 0 < seconds <= 172800:
+            raise QueryError("raw sample window must be within 48 hours")
+        try:
+            data = http_get_json(
+                f"{self.base}/api/v1/query",
+                {"query": f"{selector}[{seconds}s]", "time": f"{end.timestamp():.3f}",
+                 "timeout": f"{max(1, int(self.timeout * 1000))}ms"}, timeout=self.timeout)
+        except Exception as exc:
+            raise QueryError(describe_http_error(exc)) from exc
+        return parse_matrix(data)
+
     def series(self, expr: str, start: datetime, end: datetime, step: int):
         try:
             data = http_get_json(
@@ -1236,6 +1250,7 @@ def build_evidence_pack(cfg, loki, prom, catalog, now: datetime):
     mem_rows = build_memory_rows(prom, now, refs, guard)
     reboot_rows = build_reboot_rows(prom, now, refs, guard, baseline)
     scrape_rows = build_scrape_rows(prom, now, refs, guard)
+    incidents = build_incident_rows(cfg, loki, prom, now, refs, guard)
 
     # -- noise, acknowledged but never narrated ---------------------------
     noise_rows = [(vm, service, count) for vm, service, count in volume_rows if is_noise(service)]
@@ -1299,6 +1314,8 @@ def build_evidence_pack(cfg, loki, prom, catalog, now: datetime):
         "memory": mem_rows,
         "reboots": reboot_rows,
         "scrape_problems": scrape_rows,
+        "incidents": incidents,
+        "infrastructure_host": cfg.get("infrastructureHost"),
         "suppressed_noise": [
             {"vm": vm, "service": service, "lines": count} for vm, service, count in noise_rows
         ],
@@ -1487,6 +1504,299 @@ def build_scrape_rows(prom, now, refs, guard):
     return rows
 
 
+def interruption_candidates(scrapes, boots, start, now):
+    """Find missing observations separately from explicit scrape failures.
+
+    Raw timestamps matter: query_range otherwise repeats samples for the lookback
+    interval. A stopped Prometheus produces no up=0, even for a fleet-wide outage.
+    The boundaries below bracket telemetry, not exact application downtime.
+    """
+    events = []
+    for labels, points in scrapes:
+        vm = labels.get("vm") or labels.get("instance", "-")
+        points = sorted((ts, value) for ts, value in points
+                        if ts is not None and value is not None
+                        and start.timestamp() < ts <= now.timestamp())
+        if not points:
+            continue
+        # Do not infer a leading outage: this may be a newly discovered target.
+        for (before, _), (after, next_value) in zip(points, points[1:] + [(now.timestamp(), None)]):
+            if after - before >= 180:
+                events.append(dict(kind="telemetry_gap", vm=vm, start=before, end=after,
+                                   open=next_value is None))
+        failed_at = None
+        previous = None
+        for ts, value in points + [(now.timestamp(), None)]:
+            # Missing data must not lengthen a measured up=0 episode.
+            if failed_at is not None and (value != 0 or ts - previous > 180):
+                end = previous if value is None or ts - previous > 180 else ts
+                if end - failed_at >= 120:
+                    events.append(dict(kind="scrape_failure", vm=vm, start=failed_at,
+                                       end=end, open=value is None))
+                failed_at = None
+            if value == 0 and failed_at is None:
+                failed_at = ts
+            previous = ts
+
+    # Group aligned boundaries, not arbitrary overlapping outages on unrelated
+    # machines. Repeated events on the same host remain separate.
+    groups = []
+    for event in sorted(events, key=lambda e: e["start"]):
+        group = next((g for g in groups if g["kind"] == event["kind"]
+                      and event["vm"] not in g["vms"]
+                      and abs(g["start"] - event["start"]) <= 180
+                      and abs(g["end"] - event["end"]) <= 180), None)
+        if group is None:
+            group = dict(kind=event["kind"], start=event["start"], end=event["end"],
+                         vms=[], boundaries=[], boots=[])
+            groups.append(group)
+        group["vms"].append(event["vm"])
+        group["boundaries"].append(event)
+        group["start"] = min(group["start"], event["start"])
+        group["end"] = max(group["end"], event["end"])
+
+    # Scan boot values across the whole window, so multiple boots between digest
+    # sessions are retained. The first observed value is only a boot if its epoch
+    # is actually within the window, not merely because the exporter appeared.
+    seen = set()
+    for labels, points in boots:
+        vm = labels.get("vm") or labels.get("instance", "-")
+        for observed_at, boot_at in points:
+            if (observed_at is None or boot_at is None or
+                not start.timestamp() < boot_at <= observed_at <= now.timestamp() or
+                (vm, boot_at) in seen):
+                continue
+            seen.add((vm, boot_at))
+            group = next((g for g in groups if vm in g["vms"]
+                          and g["start"] <= boot_at <= g["end"] + 180), None)
+            if group is None:
+                group = next((g for g in groups if g["kind"] == "boot"
+                              and abs(g["start"] - boot_at) <= 180), None)
+            if group is None:
+                group = dict(kind="boot", start=boot_at, end=boot_at,
+                             vms=[], boundaries=[], boots=[])
+                groups.append(group)
+            if vm not in group["vms"]:
+                group["vms"].append(vm)
+            group["boots"].append(dict(vm=vm, at=boot_at))
+            group["end"] = max(group["end"], boot_at)
+    # Look back 48h to recover the beginning of a long interruption, but only
+    # report events that extend into the current 24h report window.
+    groups = [g for g in groups if g["end"] >= now.timestamp() - 86400]
+    return sorted(groups, key=lambda g: (-len(g["vms"]), -g["end"]))
+
+
+INCIDENT_LOG_PATTERN = (
+    "(?i)panic|oops:|BUG:|lockup|blocked for more than|out of memory|oom-kill|"
+    "killed process|hardware error|machine check|I/O error|nvme.*(timeout|reset)|"
+    "thermal.*(critical|thrott)|watchdog|shutdown|shutting down|reboot|"
+    "Linux version|unclean|recovering journal|reset reason|reset cause"
+)
+
+
+def incident_log_message(message):
+    # Access logs can put credentials in URLs. Retain the operation/path but
+    # never publish those query strings in an automatically rendered report.
+    message = re.sub(r"""(\bhttps?://[^\s?"']+|/[^\s?"']*)\?[^\s"']+""",
+                     r"\1?[query redacted]", message)
+    return re.sub(r"""(?i)(\b(?:api[_-]?key|access_token|refresh_token|password|authorization)\b["']?\s*[:=]\s*["']?)[^&\s"']+""",
+                  r"\1[redacted]", message)
+
+
+def build_incident_rows(cfg, loki, prom, now, refs, guard):
+    """Bounded CPU-only incident investigation, including collector outages.
+
+    All evidence is saved in the pack; the model cannot discard the timeline by
+    returning an empty summary. No inference, shell, SSH or additional authority.
+    """
+    start = now - timedelta(hours=48)
+    deadline = time.monotonic() + 90
+
+    def read(label, fn):
+        def bounded():
+            if time.monotonic() >= deadline:
+                raise QueryError("incident collection deadline reached")
+            return fn()
+        return guard("incident_" + label, bounded, None)
+
+    scrapes = read("scrapes", lambda: prom.samples('up{job="node"}', start, now))
+    boots = read("boots", lambda: prom.samples("node_boot_time_seconds", start, now))
+    candidates = interruption_candidates(scrapes or [], boots or [], start, now)
+    rows = []
+    for event in candidates[:3]:
+        host = cfg.get("infrastructureHost")
+        names = sorted(set(event["vms"] + ([host] if host else [])))
+        selector = '{vm=~%s,source_type!="digest"}' % json.dumps("|".join(re.escape(v) for v in names))
+        ref = "incident:" + hashlib.sha256(
+            json.dumps([event["kind"], event["start"], sorted(event["vms"])]).encode()).hexdigest()[:12]
+        stamp = lambda ts: iso(datetime.fromtimestamp(ts, timezone.utc))
+        row = dict(ref=ref, kind=event["kind"], vms=sorted(event["vms"]),
+                   start=stamp(event["start"]), end=stamp(event["end"]),
+                   span_seconds=round(event["end"] - event["start"]),
+                   boundaries=[dict(vm=b["vm"], last_sample=stamp(b["start"]),
+                                    next_sample=None if b["open"] else stamp(b["end"]),
+                                    still_missing=b["open"]) for b in event["boundaries"]],
+                   boots=[dict(vm=b["vm"], at=stamp(b["at"])) for b in event["boots"]],
+                   cause="unknown", context=[], limitations=[])
+        if len(candidates) > 3:
+            row["limitations"].append(f"{len(candidates) - 3} additional interruption candidates omitted by cap")
+        if scrapes is None or boots is None:
+            row["limitations"].append("one or more timeline queries failed; see collection warnings")
+        if host and host not in {labels.get("vm") for labels, _ in (scrapes or [])}:
+            row["limitations"].append(f"{host} has no host scrape history in this window")
+        if cfg.get("digestVm") in event["vms"] and event["kind"] == "telemetry_gap":
+            row["limitations"].append(
+                "the monitoring VM also has a data gap; missing up samples are not up=0 or proof of host failure")
+        row["limitations"].append("boot clustering and telemetry gaps do not distinguish maintenance, lockup or power loss")
+        refs[ref] = dict(row, kind="infrastructure_interruption")
+
+        def capture(label, query, begin, end, fetch, log_sample=False):
+            result = read(label, fetch)
+            evidence_ref = ref + ":" + label
+            entry = dict(kind="incident_context", requested_vms=names,
+                         query=query, start=iso(begin), end=iso(end),
+                         success=result is not None, rows=[])
+            if result is None:
+                row["limitations"].append(f"{label} query failed or exceeded collection deadline")
+            elif log_sample:
+                entry["sample_cap"] = 40
+                entry["possibly_truncated"] = len(result) >= 40
+                entry["rows"] = [
+                    dict(at=stamp(ts / 1e9), vm=labels.get("vm"), service=labels.get("service"),
+                         message=clip(incident_log_message(message_of(payload, raw)), 700))
+                    for labels, ts, payload, raw in sorted(result, key=lambda x: x[1])[:40]]
+                if not result:
+                    row["limitations"].append(f"{label}: no matching retained logs; absence does not exclude a crash")
+            else:
+                # Preserve timestamps of extrema and coverage rather than
+                # claiming the current memory value describes the crash.
+                for labels, points in result:
+                    valid = [(ts, value) for ts, value in points if ts is not None and value is not None]
+                    if valid:
+                        low, high = min(valid, key=lambda p: p[1]), max(valid, key=lambda p: p[1])
+                        entry["rows"].append(dict(labels=labels, samples=len(valid),
+                            first=stamp(valid[0][0]), last=stamp(valid[-1][0]),
+                            minimum=low[1], minimum_at=stamp(low[0]),
+                            maximum=high[1], maximum_at=stamp(high[0])))
+                if not entry["rows"]:
+                    row["limitations"].append(f"{label}: no pre-event measurements")
+                elif host and not any(item["labels"].get("vm") == host for item in entry["rows"]):
+                    row["limitations"].append(f"{label}: {host} not measured; guest values cannot exclude host pressure")
+            refs[evidence_ref] = entry
+            row["context"].append(dict(ref=evidence_ref, **entry))
+
+        before = datetime.fromtimestamp(event["start"], timezone.utc)
+        pre_start = before - timedelta(minutes=30)
+        # Busy guest access logs must not crowd out the host's backup, shutdown
+        # or kernel messages. Host telemetry absence is itself a coverage limit.
+        pre_selector = ('{vm=%s,source_type!="digest"}' % json.dumps(host)) if host else selector
+        capture("pre_event_logs", pre_selector, pre_start, before,
+                lambda: loki.streams(pre_selector, pre_start, before, 40), True)
+        if host:
+            activity_end = min(now, before + timedelta(minutes=2))
+            capture("guest_activity", selector, pre_start, activity_end,
+                    lambda: loki.streams(selector, pre_start, activity_end, 40), True)
+        # Separate crash/shutdown signals from the last few busy application
+        # messages. Include recovery boot logs, with an explicit bounded window.
+        signal_query = (selector + " |~ " + json.dumps(INCIDENT_LOG_PATTERN)
+                        + ' !~ "(?i)(kernel )?command line:"')
+        capture("crash_signals", signal_query, pre_start, before + timedelta(minutes=2),
+                lambda: loki.streams(signal_query, pre_start, before + timedelta(minutes=2), 40), True)
+        if event["boots"]:
+            boot_start = datetime.fromtimestamp(min(b["at"] for b in event["boots"]), timezone.utc)
+            boot_end = min(now, datetime.fromtimestamp(max(b["at"] for b in event["boots"]), timezone.utc)
+                           + timedelta(minutes=10))
+            # The host may boot minutes before any guest, and host metrics may
+            # be absent even when its journal survives. Include that early boot.
+            capture("boot_signals", signal_query, boot_start - timedelta(minutes=10), boot_end,
+                    lambda: loki.streams(signal_query, boot_start - timedelta(minutes=10), boot_end, 40), True)
+        matcher = '{vm=~%s}' % json.dumps("|".join(re.escape(v) for v in names))
+        for label, expr in (
+            ("available_memory_ratio", f"node_memory_MemAvailable_bytes{matcher} / node_memory_MemTotal_bytes{matcher}"),
+            ("io_stall_ratio", f"rate(node_pressure_io_stalled_seconds_total{matcher}[2m])"),
+            ("oom_kills", f"increase(node_vmstat_oom_kill{matcher}[5m])"),
+        ):
+            capture(label, expr, pre_start, before,
+                    lambda expr=expr: prom.series(expr, pre_start, before, 60))
+        if host:
+            # A backup immediately before a freeze is only a lead. Retain past
+            # workload summaries so larger successful jobs can challenge it.
+            # Run this after the immediate evidence, within the same deadline.
+            history_start = before - timedelta(days=7)
+            history_query = (pre_selector + ' |~ "(?i)btrbk|btrfs|backup|scrub|fstrim|nix-gc"'
+                             + ' |= "Consumed"')
+            capture("maintenance_history", history_query, history_start, pre_start,
+                    lambda: loki.streams(history_query, history_start, pre_start, 40), True)
+        rows.append(row)
+    return rows
+
+
+def render_incidents(rows, *, evidence=False):
+    if not rows:
+        return ""
+    lines = ["## Infrastructure interruptions", ""]
+    for row in rows:
+        names = ", ".join(row["vms"])
+        if row["kind"] == "boot":
+            lines.append(f"- Boots observed on {names}, {row['start']} .. {row['end']}. [{row['ref']}]")
+        else:
+            description = "Missing telemetry" if row["kind"] == "telemetry_gap" else "Failed scrapes"
+            lines.append(f"- {description} on {names}: {row['start']} .. {row['end']} "
+                         f"({row['span_seconds'] / 60:.1f} minutes between observed boundaries). [{row['ref']}]")
+            if row["boots"]:
+                times = sorted(b["at"] for b in row["boots"])
+                lines.append(f"  {len(row['boots'])} boots observed between {times[0]} and {times[-1]}.")
+        lines.append("  Cause: unknown from the timeline alone. Application recovery requires separate checks.")
+        limits = list(row["limitations"])
+        if not evidence and any("not measured; guest values" in item for item in limits):
+            limits = [item for item in limits if "not measured; guest values" not in item]
+            limits.append("host resource coverage is incomplete; guest metrics cannot exclude host pressure")
+        lines.append("  Evidence limits: " + "; ".join(limits) + ".")
+        if evidence:
+            lines.append("  Event evidence (timestamps UTC; sampled logs are not exhaustive):")
+            for context in row["context"]:
+                # Don't hide an older, larger successful backup behind the
+                # latest few runs; the history query already caps this at 40.
+                limit = 40 if context["ref"].endswith(":maintenance_history") else 8
+                compact = dict(context, rows=context["rows"][-limit:],
+                               omitted_rows=max(0, len(context["rows"]) - limit))
+                lines.append(json.dumps(compact, ensure_ascii=False))
+        else:
+            for context in row["context"]:
+                if not context["success"] or not context["rows"]:
+                    continue
+                if "sample_cap" in context:
+                    # The raw sample remains in the pack; publish only the
+                    # discriminating crash/boot messages without a wall of logs.
+                    if context["ref"].endswith((":pre_event_logs", ":guest_activity", ":maintenance_history")):
+                        continue
+                    relevant = [item for item in context["rows"]
+                                if not re.search(r"(?i)(?:kernel )?command line:|Linux version|"
+                                                 r"watchdog.*(?:enabled|initialized|running)|"
+                                                 r"using hardware watchdog", item["message"])]
+                    for item in relevant[-3:]:
+                        lines.append(f"  Log {item['at']} {item['vm']}: {clip(squeeze(item['message']), 240)} "
+                                     f"[{context['ref']}]")
+                else:
+                    label = context["ref"].rsplit(":", 1)[-1]
+                    if label == "available_memory_ratio":
+                        item = min(context["rows"], key=lambda r: r["minimum"])
+                        value, at = f"{100 * item['minimum']:.1f}%", item["minimum_at"]
+                        description = "lowest sampled available memory"
+                    else:
+                        item = max(context["rows"], key=lambda r: r["maximum"])
+                        value, at = f"{item['maximum']:.3g}", item["maximum_at"]
+                        description = "largest sampled 5-minute OOM-kill increase"
+                        if label == "io_stall_ratio":
+                            value = f"{100 * item['maximum']:.2f}%"
+                            description = "highest sampled I/O full-stall ratio"
+                    metric_vm = item["labels"].get("vm", item["labels"].get("instance", "?"))
+                    lines.append(f"  Pre-event {description}: {value} ({metric_vm}, {at}; "
+                                 f"{len(context['rows'])} measured series). [{context['ref']}]")
+    lines.append("")
+    return "\n".join(lines)
+
+
 # --------------------------------------------------------------------------
 # pack rendering
 # --------------------------------------------------------------------------
@@ -1582,6 +1892,10 @@ def render_pack(pack, cfg) -> str:
         out.append("TOPOLOGY (for blast-radius reasoning: services sharing a VM share a failure domain)")
         for vm in sorted(topology):
             out.append(f"  {vm}: {', '.join(topology[vm]) or '-'}")
+    if pack.get("infrastructure_host"):
+        out.append(f"All listed VMs, including monitoring, run on host {pack['infrastructure_host']}.")
+    if pack.get("incidents"):
+        out.append(render_incidents(pack["incidents"], evidence=True))
 
     def section(title, body):
         out.append("")
@@ -3864,6 +4178,23 @@ WORKFLOW
    Reuse issue_id and task ids. Old reports identify already-covered topics; their
    diagnoses are fallible and their refs are NOT current evidence. Do not re-investigate
    every blocked task or repeat the same 24h counts in both nightly sessions.
+   Prioritize infrastructure interruptions over routine application warnings.
+   For correlated gaps/boots, investigate the shared host and monitoring VM first.
+   The supplied pre-event logs/resource measurements are anchored BEFORE the gap,
+   not before the later reboot. Explain the timeline, affected machines, evidence
+   for and against each plausible cause, and what evidence is unavailable.
+   Check planned shutdown/redeployment, OOM, I/O stalls, kernel/hardware errors
+   and network-only failure as competing explanations. Do not assert a cause
+   solely from temporal proximity. Missing up samples are not failed scrapes;
+   monitoring can go down with its host. A boot is not proof of a crash.
+   A reset reason recorded at recovery may describe the operator's recovery
+   action, not the initial interruption. Do not use it to rule out an earlier
+   power loss or infer an orderly shutdown.
+   Compare pre-event maintenance with maintenance_history when available:
+   prior larger successful jobs weaken a simple overload explanation, but cannot
+   rule out intermittent deadlocks. Service memory peaks include cache; block-I/O
+   counters are not backup stream sizes. Hardware-error text alone does not
+   identify a faulty component; retain the bank/identifier and decoding uncertainty.
 2. Read original messages around the event's last_captured_UTC, using the LOG
    INVESTIGATION SHORTLIST when available. Most failures happen during daytime;
    do not start every question with the last two quiet overnight hours. Use
@@ -3998,6 +4329,11 @@ or simply leave the cause unknown. Say which function failed; don't extrapolate
 thumbnail/plugin/indexer failures to the entire media service. No speculative config
 changes or restart suggestions. Save followups during investigation; do not reproduce
 the notebook or observation plans in this JSON. An empty findings array is valid.
+Infrastructure interruption timelines are rendered independently. Add an
+evidence-backed explanation or useful next diagnostic when possible; explicitly
+separate the last observed activity, telemetry return, boot time and application
+recovery. Absence of panic/OOM logs cannot exclude a crash when logging stopped.
+Current resource values cannot explain or exclude pressure before an interruption.
 """
 
 
@@ -4774,15 +5110,22 @@ def validate_digest(raw, pack):
     incomplete = not findings and (dropped or pack.get("warnings"))
     if incomplete:
         state = "notable"
+    interruptions = bool(pack.get("incidents"))
+    if interruptions and state == "quiet":
+        state = "notable"
     return {
-        "headline": ("Evidence or synthesis was incomplete; no new supported findings." if incomplete else
+        "headline": ("Infrastructure interruption evidence collected; cause and application recovery need verification."
+                     if interruptions and not findings else
+                     "Evidence or synthesis was incomplete; no new supported findings." if incomplete else
                      f"No material change in {len(ongoing)} previously reported issue(s)." if ongoing and not findings else
                      "No new issues established in the collected evidence." if not findings else
                      "Updates: " + "; ".join(f["title"] for f in findings[:2]) if adjustments else squeeze(raw.get("headline"))),
         "state": state,
         "findings": findings,
         "ongoing": ongoing[:10],
-        "quiet_note": "See collection warnings and discarded findings below." if incomplete else squeeze(raw.get("quiet_note")),
+        "quiet_note": ("See infrastructure interruption evidence below." if interruptions else
+                       "See collection warnings and discarded findings below." if incomplete else squeeze(raw.get("quiet_note"))),
+        "incidents": pack.get("incidents", []),
         "dropped_unsupported": dropped,
         "evidence_limits": adjustments,
     }
@@ -4855,6 +5198,8 @@ def render_digest(digest, pack, budget, tools, now) -> str:
 
     severity_marker = {"critical": "[!!]", "warning": "[! ]", "info": "[  ]"}
     refs_index = pack.get("refs") or {}
+    if pack.get("incidents"):
+        lines.extend([render_incidents(pack["incidents"]), ""])
 
     if digest["findings"]:
         for index, finding in enumerate(digest["findings"], start=1):
@@ -4886,7 +5231,7 @@ def render_digest(digest, pack, budget, tools, now) -> str:
                 for query in queries[:3]:
                     lines.append(f"    {query}")
             lines.append("")
-    elif not digest.get("ongoing"):
+    elif not digest.get("ongoing") and not pack.get("incidents"):
         lines.append(digest["quiet_note"] or "Nothing notable in this window.")
         lines.append("")
 
@@ -5167,6 +5512,9 @@ def main() -> int:
         "--build-pack", action="store_true", help="also write the daily evidence pack"
     )
     sub.add_parser("observe", help="execute bounded observation plans and capture incidents without inference")
+    incident_parser = sub.add_parser("incident", help="read-only interruption investigation, no GPU or state writes")
+    incident_parser.add_argument("--at", help="end of 48h evidence window, ISO timestamp with timezone (default: now)")
+    incident_parser.add_argument("--json", action="store_true", help="print evidence and refs as JSON")
 
     reason_parser = sub.add_parser("reason", help="agentic reasoning over an evidence pack")
     reason_parser.add_argument("--evidence", help="path to an evidence pack (default: stateDir/evidence.json)")
@@ -5180,6 +5528,29 @@ def main() -> int:
     if cfg is None:
         print(f"logDigest: cannot read config at {args.config}", file=sys.stderr)
         return 2
+    if args.phase == "incident":
+        at = parse_iso(args.at) if args.at else utcnow()
+        if at is None or at.tzinfo is None:
+            parser.error("incident --at requires an ISO timestamp with a timezone")
+        if at > utcnow():
+            parser.error("incident --at cannot be in the future")
+        refs, warnings = {}, []
+        def guard(label, fn, default):
+            try:
+                return fn()
+            except QueryError as exc:
+                warnings.append(f"{label}: {exc}")
+                return default
+        timeout = min(10, int(cfg["queryTimeoutSeconds"]))
+        rows = build_incident_rows(cfg, Loki(cfg["lokiUrl"], timeout),
+                                   Prometheus(cfg["prometheusUrl"], timeout), at, refs, guard)
+        if args.json:
+            print(json.dumps(dict(generated_at=iso(at), incidents=rows, refs=refs, warnings=warnings), indent=2))
+        else:
+            print(render_incidents(rows, evidence=True) or "No interruption established in the available evidence.")
+            for warning in warnings:
+                print("Collection warning: " + warning)
+        return 1 if warnings else 0
 
     if args.phase == "reason" and args.dry_run:
         return reason(cfg, args)

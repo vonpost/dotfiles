@@ -3,6 +3,7 @@
 , gnomeShellCompatLauncherScript
 , mkWolfSessionAnchorService
 , sessionUserDirsPreStart
+, swaySessionConfig
 , mkImportEnvironmentCommand
 , mkSyncDbusActivationCommand
 , mkWolfDesktopServiceConfig
@@ -452,6 +453,17 @@ let
           LockOnResume=false
           Timeout=0
           EOCFG
+          # Apply to existing persistent profiles as well as new ones. KWin
+          # reads kxkbrc, independently of the laptop's active keyboard layout.
+          # Update only the keyboard keys; preserve the rest of the profile.
+          keyboard_config=( ${pkgs.kdePackages.kconfig}/bin/kwriteconfig6 --file "$HOME/.config/kxkbrc" --group Layout )
+          "''${keyboard_config[@]}" --key Use --type bool true
+          "''${keyboard_config[@]}" --key LayoutList "us,se"
+          "''${keyboard_config[@]}" --key VariantList ","
+          "''${keyboard_config[@]}" --key DisplayNames "US,SE"
+          "''${keyboard_config[@]}" --key Options "grp:alt_shift_toggle"
+          "''${keyboard_config[@]}" --key ResetOldOptions --type bool true
+          "''${keyboard_config[@]}" --key SwitchMode "Global"
           export GAMESCOPE_WIDTH="''${GAMESCOPE_WIDTH:-1920}"
           export GAMESCOPE_HEIGHT="''${GAMESCOPE_HEIGHT:-1080}"
           export GAMESCOPE_REFRESH="''${GAMESCOPE_REFRESH:-60}"
@@ -1475,6 +1487,7 @@ rec {
             # setup instead of making the first window wait for it to boot.
             echo "xwayland force"
             echo "workspace main"
+            echo "include ${swaySessionConfig}"
             # LD_PRELOAD scoped to steam only: with STEAM_RUNTIME=0 nothing
             # loads libXrandr before Valve's XRR workaround shim resolves the
             # real symbols, so display enumeration fails and big picture

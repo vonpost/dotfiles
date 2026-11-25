@@ -84,6 +84,15 @@
     };
   };
 
+  # Fail visibly if a cache directory was restored as an ordinary directory,
+  # or its one-time migration has not finished. Never send transcodes again.
+  systemd.services."btrbk-daily_state" = {
+    after = [ "service-cache-subvolumes.service" ];
+    requires = [ "service-cache-subvolumes.service" ];
+    # btrbk itself runs as its own user; the read-only Btrfs check needs root.
+    serviceConfig.ExecStartPre = [ "+${config.system.build.checkServiceCacheSubvolumes}" ];
+  };
+
   # 3. Enable Maintenance (Crucial for Btrfs health)
   services.btrfs.autoScrub = {
     enable = true;

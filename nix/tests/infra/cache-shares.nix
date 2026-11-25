@@ -21,6 +21,7 @@ let
       uid = lib.mkForce 4210;
       gid = 4211;
       uncachedCacheDirectories = lib.mkForce [ "chunks" ];
+      backupExcludedCacheDirectories = lib.mkForce [ "chunks" ];
     });
   };
   changedHost = (nixosConfigurations.MOTHER.extendModules { modules = [ overrides ]; }).config;
@@ -66,8 +67,9 @@ let
     jellyfinRequiresTranscodeMount = builtins.elem target
       server.systemd.services.jellyfin.unitConfig.RequiresMountsFor;
     hostPreparesExports = builtins.all (name: hasMountDependency host name source) [ "SOTO" "OKAMI" ]
-      && builtins.filter (rule: rule == "d ${source} 0755 2104 2104 -") host.systemd.tmpfiles.rules
-        == [ "d ${source} 0755 2104 2104 -" ];
+      && builtins.filter (rule: rule == "z ${source} 0755 2104 2104 -") host.systemd.tmpfiles.rules
+        == [ "z ${source} 0755 2104 2104 -" ]
+      && !(builtins.elem "d ${source} 0755 2104 2104 -" host.systemd.tmpfiles.rules);
     overridesReachBothGuests = builtins.all (c:
       let s = builtins.head (shares c);
       in s.source == changedSource && s.mountPoint == changedTarget
@@ -76,7 +78,15 @@ let
     ) [ changedServer changedWorker ];
     overridesReachHost = builtins.all (name: hasMountDependency changedHost name changedSource)
       [ "SOTO" "OKAMI" ]
-      && builtins.elem "d ${changedSource} 0755 4210 4211 -" changedHost.systemd.tmpfiles.rules;
+      && builtins.elem "z ${changedSource} 0755 4210 4211 -" changedHost.systemd.tmpfiles.rules;
+    backupsCheckExclusions = host.systemd.services.btrbk-daily_state.serviceConfig.ExecStartPre
+      == [ "+${host.system.build.checkServiceCacheSubvolumes}" ]
+      && host.services.btrbk.instances.daily_state.settings.volume."/mnt/btr_pool".subvolume
+        == { "@state" = { }; };
+    exportersWaitForSubvolumes = builtins.all (vm:
+      builtins.elem "service-cache-subvolumes.service" host.systemd.services."microvm-virtiofsd@${vm}".requires
+      && builtins.elem "service-cache-subvolumes.service" host.systemd.services."microvm-virtiofsd@${vm}".after
+    ) [ "SOTO" "OKAMI" ];
     sharesFollowServiceAssignment = shares oldServer == [ ]
       && builtins.length (shares movedServer) == 1
       && (builtins.head (shares movedServer)).source == source
@@ -84,6 +94,10 @@ let
       && !(movedHost.systemd.services."microvm-virtiofsd@SOTO".unitConfig ? RequiresMountsFor);
     rejectsMissingParentCache = builtins.any (a:
       a.message == "Uncached cache directories require managedState and hasCacheDir."
+      && !a.assertion
+    ) invalid.assertions;
+    exclusionsRequireParentCache = builtins.any (a:
+      a.message == "Backup-excluded cache directories require managedState and hasCacheDir."
       && !a.assertion
     ) invalid.assertions;
   };

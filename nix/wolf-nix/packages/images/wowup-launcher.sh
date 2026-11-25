@@ -3,14 +3,11 @@ set -euo pipefail
 state_dir="$HOME/.local/share/battlenet"
 mkdir -p "$state_dir" "$HOME/Games"
 # WoWUp may run alongside the game. Serialize only its own startup/settings
-# writes, and focus the existing window when the shortcut is pressed again.
-swaymsg 'workspace addons' >/dev/null
+# writes. Alt+Tab handles switching to an open instance.
 exec 9>"$state_dir/wowup.lock"
 if ! flock -n 9; then
-  swaymsg '[class="(?i)wowup.*"] focus' >/dev/null || true
   exit 0
 fi
-trap 'swaymsg "workspace game" >/dev/null || true' EXIT
 report_error() {
   local status=$?
   zenity --error --title="WoWUp" \

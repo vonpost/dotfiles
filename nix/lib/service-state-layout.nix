@@ -22,9 +22,12 @@ let
   sharedMount = kind:
     mkMount state.paths.${kind} state.paths."${kind}Root" "/data/${kind}";
 
+  cacheDirectory = service: directory:
+    "${state.paths.base}/${state.paths.cache}/${service.name}/${directory}";
+
   uncachedCacheShares = service: map (directory: {
     tag = "${service.name}-${directory}";
-    source = "${state.paths.base}/${state.paths.cache}/${service.name}/${directory}";
+    source = cacheDirectory service directory;
     mountPoint = "/var/cache/${service.bindTarget}/${directory}";
     proto = "virtiofs";
     cache = "never";
@@ -46,5 +49,5 @@ in
       cacheShares = lib.unique (lib.concatMap uncachedCacheShares services);
     };
 
-  inherit serviceMounts sharedMount uncachedCacheShares;
+  inherit serviceMounts sharedMount uncachedCacheShares cacheDirectory;
 }

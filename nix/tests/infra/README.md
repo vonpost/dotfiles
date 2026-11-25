@@ -20,6 +20,14 @@ predictions saved before reads, numerical verdicts, bounded case history, interr
 tests, historical query timestamps and useful results surviving failed synthesis.
 Use discovery as above so these separate regression files also run locally.
 
+The interruption suite covers a stopped monitoring VM with no failed-scrape
+samples, aligned fleet boots, missing-data versus failed-scrape boundaries,
+new targets, query failures/deadlines, maintenance history that can challenge a
+backup hypothesis, and timelines surviving empty synthesis.
+It includes sanitized raw timestamps from the November 14 MOTHER interruption.
+The CPU-only read-only replay command is `log-digest incident --at TIMESTAMP --json`;
+the timestamp must include a timezone and ends a 48-hour scan.
+
 Keep binary-cache access enabled when building the packaged checks. Carrying
 `--offline` from an evaluation command into `nix build` can force a full compiler
 bootstrap when the build environment is not already in the local store.
@@ -58,9 +66,9 @@ The fixtures extend actual configurations. They are never deployment targets.
 
 ## Transcode share regression
 
-The ten `infra-cache-shares` contracts check the dedicated uncached exports,
+The `infra-cache-shares` contracts check the dedicated uncached exports,
 cached database storage, mount ordering, host provisioning, service/path/owner
-overrides, and moving the Jellyfin role to another VM.
+overrides, moving the Jellyfin role to another VM, and backup exclusion guards.
 
 The runtime check boots a disposable VM with the real SOTO mount definitions
 and four independent VirtioFS connections to scratch data. It first reproduces
@@ -76,6 +84,20 @@ nix --extra-experimental-features 'nix-command flakes' build \
 
 This uses local resources and supports QEMU TCG when KVM is unavailable. It does
 not contact MOTHER or test the production GPU, HTTP server, or affected browser.
+
+`infra-cache-backup-runtime` uses two disposable Btrfs disks and the actual
+host cache preparation and backup pre-start scripts. It verifies that existing
+ordinary directories and incomplete migrations block backups, reflink migration
+preserves cache contents and ownership, and full/incremental sends exclude
+transcodes while retaining database state and older backups. It also checks
+empty-cache recreation on an ext4-root system and runs the backup unit as the
+real unprivileged btrbk user with the privileged read-only pre-start check.
+
+```sh
+nix --extra-experimental-features 'nix-command flakes' build \
+  --no-link --no-write-lock-file --option builders '' --max-jobs 2 --cores 2 \
+  "path:$(pwd)#checks.x86_64-linux.infra-cache-backup-runtime"
+```
 
 ## Deployment and packet tests
 

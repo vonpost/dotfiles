@@ -9,6 +9,27 @@ let
   llm = nixosConfigurations.OKAMI.config;
   window = import ../../config/infra/services/llama-cpp-config.nix;
   checks = {
+    physicalHostIsObserved =
+      host.services.prometheus.exporters.node.enable
+      && host.services.prometheus.exporters.node.listenAddress == host.my.infra.topology.hostIp
+      && !host.services.prometheus.exporters.node.openFirewall
+      && builtins.any (target: (target.labels.vm or "") == "MOTHER")
+        (builtins.head digest.services.prometheus.scrapeConfigs).static_configs
+      && digest.services.logDigest.infrastructureHost == "MOTHER";
+    hostScrapeFirewallUsesActiveBackend =
+      host.networking.firewall.backend == "nftables"
+      && host.networking.firewall.extraCommands == ""
+      && lib.hasInfix ''iifname "br-mgmt" ip saddr 10.10.10.35 ip daddr 10.10.10.99 tcp dport 9100 accept''
+        host.networking.firewall.extraInputRules;
+    hostJournalSurvivesMonitoringOutage =
+      !host.services.vector.settings.sources.host_journal.current_boot_only
+      && host.services.vector.settings.sinks.loki.buffer.type == "disk"
+      && lib.hasInfix "Storage=persistent" host.services.journald.extraConfig
+      && lib.hasInfix ''._TRANSPORT == "kernel"'' host.services.vector.settings.transforms.host_events.condition;
+    hostLocalResourceHistory =
+      host.services.sysstat.enable
+      && host.services.sysstat.collect-frequency == "*:*:00"
+      && host.services.sysstat.collect-args == "-S DISK 1 1";
     grafanaCredentialDelivered =
       digest.microvm.credentialFiles.grafana_secret_key == host.sops.secrets."grafana/secret_key".path
       && host.sops.secrets."grafana/secret_key".key == "grafana/secret_key"

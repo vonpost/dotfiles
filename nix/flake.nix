@@ -127,6 +127,8 @@
           infra-cache-shares = infraCheck "cache-shares";
           infra-cache-shares-runtime = pkgs.testers.runNixOSTest
             (import ./tests/infra/cache-shares-runtime.nix { inherit (self) nixosConfigurations; });
+          infra-cache-backup-runtime = pkgs.testers.runNixOSTest
+            (import ./tests/infra/cache-backup-runtime.nix { inherit (self) nixosConfigurations; });
           infra-inventory = infraCheck "inventory";
           infra-roles = infraCheck "roles";
           infra-observability = infraCheck "observability";

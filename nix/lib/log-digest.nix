@@ -21,6 +21,7 @@ let
 
   configData = {
     inherit digestVm;
+    infrastructureHost = cfg.infrastructureHost;
     topology = vmTopology;
 
     lokiUrl = cfg.lokiUrl;
@@ -113,6 +114,12 @@ in
 {
   options.services.logDigest = {
     enable = lib.mkEnableOption "Loki/Prometheus-backed homelab digest via llama-server";
+
+    infrastructureHost = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Shared physical host's vm label; included in interruption investigations.";
+    };
 
     lokiUrl = lib.mkOption {
       type = lib.types.str;

@@ -1,0 +1,70 @@
+{
+  "description": "Actual retained raw up samples bracketing the 2026-11-14 MOTHER interruption. All values are 1; Prometheus was unavailable too. No logs or credentials.",
+  "gaps": [
+    {
+      "vm": "MAMORU",
+      "last_sample": 1794611805.156,
+      "next_sample": 1794658815.155
+    },
+    {
+      "vm": "NIKKI",
+      "last_sample": 1794611799.482,
+      "next_sample": 1794658824.481
+    },
+    {
+      "vm": "KAIZOKU",
+      "last_sample": 1794611800.866,
+      "next_sample": 1794658825.866
+    },
+    {
+      "vm": "UCHI",
+      "last_sample": 1794611793.141,
+      "next_sample": 1794658818.141
+    },
+    {
+      "vm": "OKAMI",
+      "last_sample": 1794611797.474,
+      "next_sample": 1794658822.474
+    },
+    {
+      "vm": "DARE",
+      "last_sample": 1794611796.032,
+      "next_sample": 1794658821.034
+    },
+    {
+      "vm": "SOTO",
+      "last_sample": 1794611792.084,
+      "next_sample": 1794658817.085
+    }
+  ],
+  "boots": [
+    {
+      "vm": "MAMORU",
+      "at": "2026-11-14T12:19:54+00:00"
+    },
+    {
+      "vm": "NIKKI",
+      "at": "2026-11-14T12:19:54+00:00"
+    },
+    {
+      "vm": "KAIZOKU",
+      "at": "2026-11-14T12:19:54+00:00"
+    },
+    {
+      "vm": "UCHI",
+      "at": "2026-11-14T12:19:54+00:00"
+    },
+    {
+      "vm": "OKAMI",
+      "at": "2026-11-14T12:20:03+00:00"
+    },
+    {
+      "vm": "DARE",
+      "at": "2026-11-14T12:19:54+00:00"
+    },
+    {
+      "vm": "SOTO",
+      "at": "2026-11-14T12:19:54+00:00"
+    }
+  ]
+}

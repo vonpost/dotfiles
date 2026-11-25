@@ -3,6 +3,60 @@
 let
   imageTag = "edge";
   imageSource = "https://github.com/games-on-whales/gow";
+  swayAltTab = pkgs.rustPlatform.buildRustPackage (finalAttrs: {
+    pname = "wayland-alttab";
+    version = "0.1.0";
+
+    src = pkgs.fetchCrate {
+      pname = "alttab";
+      inherit (finalAttrs) version;
+      hash = "sha256-0/g5JphHFPd3nTUnoRV775zoYwXnp83ijXl2E2G0CYo=";
+    };
+    cargoHash = "sha256-ZqO7uGnq1PUBjB7vVZr+NXnnbh8og/aOCh43eG8F1KE=";
+
+    postPatch = ''
+      # Select the most recent window from an empty workspace, even if it is
+      # the only one left after WoWUp closes.
+      substituteInPlace src/main.rs \
+        --replace-fail 'if windows.len() < 2 {' \
+                       'if windows.is_empty() || (windows.len() == 1 && windows[0].1.is_activated) {' \
+        --replace-fail '// Start with the second window selected (the one to switch to)' \
+                       '// Skip the most recent window if it is already active.' \
+        --replace-fail '.get(1)' '.get(usize::from(windows[0].1.is_activated))'
+
+      # Wayland sends the modifier state on keyboard enter. Confirm even when
+      # Alt was released before the overlay acquired keyboard focus.
+      substituteInPlace src/main.rs \
+        --replace-fail 'if !modifiers.alt && self.alt_held && self.overlay_visible {' \
+                       'if !modifiers.alt && self.overlay_visible {'
+    '';
+
+    nativeBuildInputs = [ pkgs.pkg-config ];
+    buildInputs = [ pkgs.libxkbcommon pkgs.wayland ];
+    meta.mainProgram = "alttab";
+  });
+  swayAltTabConfig = pkgs.writeText "wolf-sway-alttab.conf" ''
+    exec env RUST_LOG=warn ${lib.getExe swayAltTab}
+    bindsym --inhibited --no-repeat Mod1+Tab exec ${lib.getExe swayAltTab} --show
+  '';
+  swayToggleKeyboardLayout = pkgs.writeShellApplication {
+    name = "wolf-sway-toggle-keyboard-layout";
+    runtimeInputs = [ pkgs.sway pkgs.jq ];
+    text = ''
+      inputs=$(swaymsg -t get_inputs)
+      layout=$(jq -r 'if any(.[]; .type == "keyboard" and .xkb_active_layout_name == "Swedish") then "us" else "se" end' <<< "$inputs")
+      swaymsg "input type:keyboard xkb_layout $layout" >/dev/null
+    '';
+  };
+  swaySessionConfig = pkgs.writeText "wolf-sway-session.conf" ''
+    # Wolf's parent compositor sends group 0 with modifier updates. Keep one
+    # layout loaded so those updates cannot reset the selected layout.
+    input type:keyboard xkb_layout us
+    bindsym --inhibited --release Mod1+Shift_L exec ${lib.getExe swayToggleKeyboardLayout}
+    bindsym --inhibited --release Shift+Alt_L exec ${lib.getExe swayToggleKeyboardLayout}
+
+    include ${swayAltTabConfig}
+  '';
   # Pin Noctalia to 4.5.0 until this repo's nixpkgs catches up from 4.3.0.
   noctaliaShell = pkgs.noctalia-shell.overrideAttrs (_: rec {
     version = "4.5.0";
@@ -1168,6 +1222,7 @@ EOF
     default_border pixel 2
     gaps inner 4
 
+    include ${swayAltTabConfig}
     bindsym $mod+Return exec kitty
     bindsym Alt+F4 kill
     bindsym $mod+Shift+q kill
@@ -1402,6 +1457,7 @@ EOF
     dbus
     gamescope
     sway
+    swayAltTab
     waybar
     xwayland
     xdpyinfo
@@ -1542,6 +1598,7 @@ EOF
       gnomeShellCompatLauncherScript
       mkWolfSessionAnchorService
       sessionUserDirsPreStart
+      swaySessionConfig
       mkImportEnvironmentCommand
       mkSyncDbusActivationCommand
       mkWolfDesktopServiceConfig
@@ -1739,7 +1796,7 @@ EOF
 
   battleNet = import ./images/battlenet.nix {
     inherit pkgs lib imageTag basePath mkWolfSessionAnchorService
-      sessionUserDirsPreStart mkWolfDesktopServiceConfig;
+      sessionUserDirsPreStart mkWolfDesktopServiceConfig swaySessionConfig;
   };
 
   desktopImages = import ./images/desktop-images.nix {

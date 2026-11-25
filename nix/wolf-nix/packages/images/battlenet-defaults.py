@@ -11,7 +11,6 @@ import tempfile
 # Keep Wine/renderer behavior with GE's own defaults.
 DEFAULTS = {
     "Client": {
-        "GameLaunchWindowBehavior": "2",
         "GameSearch": {"BackgroundSearch": "true"},
         "HardwareAcceleration": "false",
         "Sound": {"Enabled": "false"},
@@ -36,6 +35,9 @@ def seed_defaults(prefix):
     config = Path(prefix) / "drive_c/users/steamuser/AppData/Roaming/Battle.net/Battle.net.config"
     settings = json.loads(config.read_text(encoding="utf-8-sig")) if config.exists() else {}
     merge_defaults(settings, DEFAULTS)
+    # Keep the launcher window open when WoW starts, including in prefixes
+    # previously seeded with the old "2" setting.
+    settings["Client"]["GameLaunchWindowBehavior"] = "0"
     config.parent.mkdir(parents=True, exist_ok=True)
     # An interrupted write or invalid input must not corrupt saved settings.
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=config.parent, delete=False) as stream:

@@ -28,6 +28,7 @@ class EvidenceTests(unittest.TestCase):
         self.prom = Mock(spec=agent.Prometheus)
         self.loki.instant.return_value = [({"vm": "TEST", "service": "app"}, 2400)]
         self.prom.instant.return_value = []
+        self.prom.samples.return_value = []
         self.catalog = agent.Catalog({"started_at": agent.iso(NOW - timedelta(days=10)), "signatures": {
             "sig:test": {"vm": "TEST", "service": "app", "unit": "app.service",
                          "severity": "error", "signature": "request failed", "example": "request failed",
